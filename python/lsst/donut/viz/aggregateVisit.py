@@ -1,10 +1,12 @@
 import galsim
 import numpy as np
+import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.pipe.base import connectionTypes as ct
 from astropy.table import Table, vstack
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.geom import Point2D, radians
+from lsst.ts.wep.task.donutStamps import DonutStamps
 
 
 __all__ = [
@@ -17,6 +19,9 @@ __all__ = [
     "AggregateAOSVisitTableTaskConnections",
     "AggregateAOSVisitTableTaskConfig",
     "AggregateAOSVisitTableTask",
+    "AggregateDonutStampsTaskConnections",
+    "AggregateDonutStampsTaskConfig",
+    "AggregateDonutStampsTask",
 ]
 
 
@@ -400,3 +405,73 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
 
         butlerQC.put(avg_table, outputRefs.aggregateAOSAvg[0])
         butlerQC.put(raw_table, outputRefs.aggregateAOSRaw[0])
+
+
+class AggregateDonutStampsTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("instrument",),
+):
+    donutStampsIntra = ct.Input(
+        doc="Intrafocal Donut Stamps",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsIntra",
+        multiple=True
+    )
+    donutStampsExtra = ct.Input(
+        doc="Extrafocal Donut Stamps",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsExtra",
+        multiple=True
+    )
+    donutStampsIntraVisit = ct.Output(
+        doc="Intrafocal Donut Stamps",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsIntraVisit",
+        multiple=True
+    )
+    donutStampsExtraVisit = ct.Output(
+        doc="Extrafocal Donut Stamps",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsExtraVisit",
+        multiple=True
+    )
+
+
+class AggregateDonutStampsTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=AggregateDonutStampsTaskConnections,
+):
+    maxDonutsPerDetector = pexConfig.Field[int](
+        doc="Maximum number of donuts to use per detector",
+        default=1,
+    )
+
+    def validate(self):
+        if self.maxDonutsPerDetector < 1:
+            raise pexConfig.FieldValidationError("maxDonutsPerDetector must be at least 1")
+
+
+class AggregateDonutStampsTask(pipeBase.PipelineTask):
+    ConfigClass = AggregateDonutStampsTaskConfig
+    _DefaultName = "AggregateDonutStamps"
+
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection
+    ) -> None:
+        intraStamps = DonutStamps([])
+        extraStamps = DonutStamps([])
+        for intraRef, extraRef in zip(inputRefs.donutStampsIntra, inputRefs.donutStampsExtra):
+            intra = butlerQC.get(intraRef)
+            extra = butlerQC.get(extraRef)
+            intraStamps.extend(intra[:self.config.maxDonutsPerDetector])
+            extraStamps.extend(extra[:self.config.maxDonutsPerDetector])
+
+        butlerQC.put(intraStamps, outputRefs.donutStampsIntraVisit[0])
+        butlerQC.put(extraStamps, outputRefs.donutStampsExtraVisit[0])
