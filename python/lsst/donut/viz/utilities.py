@@ -2,6 +2,9 @@ from functools import lru_cache
 
 from astropy.table import Table, vstack
 from matplotlib.patches import FancyArrowPatch
+from matplotlib.transforms import Affine2D
+import mpl_toolkits.axisartist.floating_axes as floating_axes
+from mpl_toolkits.axisartist.grid_finder import FixedLocator
 from tqdm import trange
 import galsim
 import numpy as np
@@ -77,3 +80,47 @@ def rose(fig, vecs, p0=(0.105, 0.105), length=0.05):
         dp = 1.2 * length * vecs[k][0], 1.2 * length*ratio * vecs[k][1]
         p1 = p1 = p0[0]+dp[0], p0[1]+dp[1]
         fig.text(p1[0], p1[1], k, color=color, ha='center', va='center')
+
+
+def add_rotated_axis(fig, xy, wh, th):
+    """
+    Parameters
+    ----------
+
+    fig : matplotlib figure
+        The figure to add the rotated axis to.
+    xy : (float, float)
+        The center of the rotated axis.
+    wh : (float, float)
+        The width and height of the rotated axis.
+    th : float
+        The angle of the rotated axis in degrees.
+
+    Returns
+    -------
+    ax : matplotlib axes
+        The rotated axis.
+    aux_ax : matplotlib axes
+        The original axis.
+    """
+    x, y = xy
+    w, h = wh
+    s1 = w * np.abs(np.cos(np.deg2rad(th))) + h * np.abs(np.sin(np.deg2rad(th)))
+    s2 = w * np.abs(np.sin(np.deg2rad(th))) + h * np.abs(np.cos(np.deg2rad(th)))
+    tr = Affine2D().rotate_deg(th)
+
+    grid_helper = floating_axes.GridHelperCurveLinear(
+        tr,
+        extremes=(0, w, 0, h),
+        grid_locator1=FixedLocator([]),
+        grid_locator2=FixedLocator([]),
+    )
+
+    ax = fig.add_axes(
+        [x-s1/2, y-s2/2, s1, s2],
+        axes_class=floating_axes.FloatingAxes,
+        grid_helper=grid_helper
+    )
+    aux_ax = ax.get_aux_axes(tr)
+
+    return ax, aux_ax
