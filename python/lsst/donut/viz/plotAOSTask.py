@@ -22,42 +22,37 @@ __all__ = [
 
 class PlotAOSTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument",),
+    dimensions=("visit", "instrument"),
 ):
     aggregateAOSRaw = ct.Input(
         doc="AOS raw catalog",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateAOSVisitTableRaw",
-        multiple=True
     )
     aggregateAOSAvg = ct.Input(
         doc="AOS average catalog",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateAOSVisitTableAvg",
-        multiple=True
     )
     measuredZernikePyramid = ct.Output(
         doc="Measurement AOS Zernike pyramid",
         dimensions=("visit", "instrument"),
         storageClass="Plot",
         name="measuredZernikePyramid",
-        multiple=True
     )
     intrinsicZernikePyramid = ct.Output(
         doc="Intrinsic AOS Zernike pyramid",
         dimensions=("visit", "instrument"),
         storageClass="Plot",
         name="intrinsicZernikePyramid",
-        multiple=True
     )
     residualZernikePyramid = ct.Output(
         doc="Residual AOS Zernike pyramid",
         dimensions=("visit", "instrument"),
         storageClass="Plot",
         name="residualZernikePyramid",
-        multiple=True
     )
 
 
@@ -78,21 +73,21 @@ class PlotAOSTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection
     ) -> None:
-        aos_raw = butlerQC.get(inputRefs.aggregateAOSRaw[0])
+        aos_raw = butlerQC.get(inputRefs.aggregateAOSRaw)
         # aos_avg = butlerQC.get(inputRefs.aggregateAOSAvg)
 
         zkPyramid, residPyramid, intrinsicPyramid = self.plotZernikePyramids(aos_raw)
 
-        butlerQC.put(zkPyramid, outputRefs.measuredZernikePyramid[0])
-        butlerQC.put(residPyramid, outputRefs.residualZernikePyramid[0])
-        butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid[0])
+        butlerQC.put(zkPyramid, outputRefs.measuredZernikePyramid)
+        butlerQC.put(residPyramid, outputRefs.residualZernikePyramid)
+        butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid)
 
     def doPyramid(
         self,
         x, y, zk,
         rtp, q,
     ):
-        fig = zernikePyramid(x, y,  zk, cmap='seismic', s=2)
+        fig = zernikePyramid(x, y, zk, cmap='seismic', s=2)
         vecs_xy = {
             '$x_\mathrm{Opt}$':(1,0),
             '$y_\mathrm{Opt}$':(0,-1),
@@ -111,14 +106,15 @@ class PlotAOSTask(pipeBase.PipelineTask):
 
         return fig
 
-
     def plotZernikePyramids(
         self,
         aos_raw,
     ) -> plt.Figure:
         # Cut out R30 for coordinate system check
-        wR30 = np.isin(aos_raw['detector'], range(117, 126))
-        aos_raw = aos_raw[~wR30]
+        # wbad = np.isin(aos_raw['detector'], range(117, 126))
+        # Cut out ComCam 'S21' and 'S22'
+        # wbad = np.isin(aos_raw['detector'], [7, 8])
+        # aos_raw = aos_raw[~wbad]
 
         x = aos_raw['thx_OCS']
         y = -aos_raw['thy_OCS']  # +y is down on plot
@@ -150,7 +146,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
 
 class PlotDonutTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument",),
+    dimensions=("visit", "instrument"),
 ):
     visitInfos = ct.Input(
         doc="Input exposure to make measurements on",
@@ -164,21 +160,18 @@ class PlotDonutTaskConnections(
         dimensions=("visit", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntraVisit",
-        multiple=True
     )
     donutStampsExtraVisit = ct.Input(
         doc="Extrafocal Donut Stamps",
         dimensions=("visit", "instrument"),
         storageClass="StampsBase",
         name="donutStampsExtraVisit",
-        multiple=True
     )
     donutPlot = ct.Output(
         doc="Donut Plot",
         dimensions=("visit", "instrument"),
         storageClass="Plot",
         name="donutPlot",
-        multiple=True
     )
 
 class PlotDonutTaskConfig(
@@ -197,15 +190,16 @@ class PlotDonutTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection
     ) -> None:
+        visit = inputRefs.donutStampsIntraVisit.dataId['visit']
         for visitInfoRef in inputRefs.visitInfos:
-            if visitInfoRef.dataId['exposure'] == inputRefs.donutStampsIntraVisit[0].dataId['visit']:
+            if visitInfoRef.dataId['exposure'] == visit:
                 visitInfo = butlerQC.get(visitInfoRef)
                 break
         else:
             raise ValueError(f"Expected to find a visitInfo with exposure {visit}")
 
-        donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit[0])
-        donutStampsExtra = butlerQC.get(inputRefs.donutStampsExtraVisit[0])
+        donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
+        donutStampsExtra = butlerQC.get(inputRefs.donutStampsExtraVisit)
 
         fig = plt.figure(figsize=(11, 8.5))
         aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
@@ -214,14 +208,26 @@ class PlotDonutTask(pipeBase.PipelineTask):
         q = visitInfo.boresightParAngle.asRadians()
         rotAngle = visitInfo.boresightRotAngle.asRadians()
         rtp = q - rotAngle - np.pi/2
-        fp_size = 0.55  # 55% of horizontal space
-        det_size = fp_size/15
+        match inst:=visitInfo.getInstrumentLabel():
+            case 'LSSTCam' | 'LSSTCamSim':
+                nacross = 15
+                fp_size = 0.55  # 55% of horizontal space
+            case 'LSSTComCam' | 'LSSTComCamSim':
+                nacross = 3
+                fp_size = 0.50  # 50% of horizontal space
+            case _:
+                raise ValueError(f"Unknown instrument {inst}")
+        det_size = fp_size/nacross
         fp_center = 0.5, 0.475
 
         for donut in donutStampsIntra:
             det_name = donut.detector_name
-            if 'R30' in det_name:
-                continue
+            # if 'R30' in det_name:
+            #     continue
+            # if 'S21' in det_name:
+            #     continue
+            # if 'S22' in det_name:
+            #     continue
             i = 3*int(det_name[1]) + int(det_name[5])
             j = 3*int(det_name[2]) + int(det_name[6])
             x = i-7
@@ -259,4 +265,4 @@ class PlotDonutTask(pipeBase.PipelineTask):
         }
         rose(fig, vecs_NE, p0=(0.85, 0.8))
 
-        butlerQC.put(fig, outputRefs.donutPlot[0])
+        butlerQC.put(fig, outputRefs.donutPlot)

@@ -7,6 +7,7 @@ from astropy.table import Table, vstack
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.geom import Point2D, radians
 from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.task.pairTask import ExposurePairer
 
 
 __all__ = [
@@ -27,7 +28,7 @@ __all__ = [
 
 class AggregateZernikesTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument",),
+    dimensions=("instrument", "visit"),
 ):
     visitInfos = ct.Input(
         doc="Input exposure to make measurements on",
@@ -38,39 +39,36 @@ class AggregateZernikesTaskConnections(
     )
     zernikesRaw = ct.Input(
         doc="Zernike Coefficients from all donuts",
-        dimensions=(
-            "visit",
-            "detector",
-            "instrument"
-        ),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="NumpyArray",
         name="zernikeEstimateRaw",
         multiple=True,
     )
     zernikesAvg = ct.Input(
         doc="Zernike Coefficients averaged over donuts",
-        dimensions=(
-            "visit",
-            "detector",
-            "instrument"
-        ),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="NumpyArray",
         name="zernikeEstimateAvg",
         multiple=True,
+    )
+    camera = ct.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
     )
     aggregateZernikesRaw = ct.Output(
         doc="Visit-level catalog of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesRaw",
-        multiple=True
     )
     aggregateZernikesAvg = ct.Output(
         doc="Visit-level catalog of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesAvg",
-        multiple=True
     )
 
 
@@ -91,40 +89,38 @@ class AggregateZernikesTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection
     ):
+        visit = outputRefs.aggregateZernikesRaw.dataId['visit']
+        camera = butlerQC.get(inputRefs.camera)
+
         raw_tables = []
         avg_tables = []
-        visit = None
         for zernikeRawRef, zernikeAvgRef in zip(inputRefs.zernikesRaw, inputRefs.zernikesAvg):
-            if visit is None:
-                visit = zernikeRawRef.dataId['visit']
-            if visit != zernikeRawRef.dataId['visit']:
-                raise ValueError(f"Expected all zernikeRaw dataIds to have the same visit, got {visit} and {zernikeRawRef.dataId['visit']}")
             zernikeRaw = butlerQC.get(zernikeRawRef)
             zernikeAvg = butlerQC.get(zernikeAvgRef)
             raw_table = Table()
             raw_table['zk_CCS'] = zernikeRaw
-            raw_table['detector'] = zernikeRawRef.dataId['detector']
+            raw_table['detector'] = camera[zernikeRawRef.dataId['detector']].getName()
             raw_tables.append(raw_table)
             avg_table = Table()
             avg_table['zk_CCS'] = zernikeAvg.reshape(1, -1)
-            avg_table['detector'] = zernikeAvgRef.dataId['detector']
+            avg_table['detector'] = camera[zernikeAvgRef.dataId['detector']].getName()
             avg_tables.append(avg_table)
-
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
 
-        for visitInfoRef in inputRefs.visitInfos:
-            if visitInfoRef.dataId['exposure'] == visit:
-                visitInfo = butlerQC.get(visitInfoRef)
-                break
-        else:
-            raise ValueError(f"Expected to find a visitInfo with exposure {visit}")
+        # just get the first one, they're all the same
+        visitInfo = butlerQC.get(inputRefs.visitInfos[0])
 
         meta = {}
         meta['visit'] = visit
         meta['parallacticAngle'] = visitInfo.boresightParAngle.asRadians()
         meta['rotAngle'] = visitInfo.boresightRotAngle.asRadians()
-        meta['rotTelPos'] = visitInfo.boresightParAngle.asRadians() - visitInfo.boresightRotAngle.asRadians() - np.pi / 2
+        rtp = (
+            visitInfo.boresightParAngle
+            - visitInfo.boresightRotAngle
+            - (np.pi / 2 * radians)
+        ).asRadians()
+        meta['rotTelPos'] = rtp
         meta['ra'] = visitInfo.boresightRaDec.getRa().asRadians()
         meta['dec'] = visitInfo.boresightRaDec.getDec().asRadians()
         meta['az'] = visitInfo.boresightAzAlt.getLongitude().asRadians()
@@ -135,17 +131,19 @@ class AggregateZernikesTask(pipeBase.PipelineTask):
         rtp = meta['rotTelPos']
 
         jmax = out_raw['zk_CCS'].shape[1] + 3
-        rot_OCS = galsim.zernike.zernikeRotMatrix(jmax, rtp)[4:,4:]
-        rot_NE = galsim.zernike.zernikeRotMatrix(jmax, q)[4:,4:]
+        rot_OCS = galsim.zernike.zernikeRotMatrix(jmax, -rtp)[4:,4:]
+        rot_NW = galsim.zernike.zernikeRotMatrix(jmax, -q)[4:,4:]
         for cat in (out_raw, out_avg):
             cat.meta = meta
             cat['zk_OCS'] = cat['zk_CCS'] @ rot_OCS
-            cat['zk_NE'] = cat['zk_CCS'] @ rot_NE
+            cat['zk_NW'] = cat['zk_CCS'] @ rot_NW
 
-        butlerQC.put(out_raw, outputRefs.aggregateZernikesRaw[0])
-        butlerQC.put(out_avg, outputRefs.aggregateZernikesAvg[0])
+        # Find the right output references
+        butlerQC.put(out_raw, outputRefs.aggregateZernikesRaw)
+        butlerQC.put(out_avg, outputRefs.aggregateZernikesAvg)
 
 
+# Note: cannot make visit a dimension because we have not yet paired visits.
 class AggregateDonutCatalogsTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument",),
@@ -157,13 +155,15 @@ class AggregateDonutCatalogsTaskConnections(
         name="raw.visitInfo",
         multiple=True,
     )
+    donut_visit_pair_table = ct.Input(
+        doc="Visit pair table",
+        dimensions=("instrument",),
+        storageClass="AstropyTable",
+        name="donut_visit_pair_table",
+    )
     donutCatalogs = ct.Input(
         doc="Donut catalogs",
-        dimensions=(
-            "visit",
-            "detector",
-            "instrument"
-        ),
+        dimensions=("visit", "detector","instrument"),
         storageClass="DataFrame",
         name="donutCatalog",
         multiple=True,
@@ -183,17 +183,29 @@ class AggregateDonutCatalogsTaskConnections(
         multiple=True
     )
 
+    def __init__(self, *, config=None):
+        super().__init__(config=config)
+        if not config.pairer.target._needsPairTable:
+            del self.donut_visit_pair_table
+
 
 class AggregateDonutCatalogsTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=AggregateDonutCatalogsTaskConnections,
 ):
-    pass
+    pairer = pexConfig.ConfigurableField(
+        target=ExposurePairer,
+        doc="Task to pair up intra- and extra-focal exposures",
+    )
 
 
 class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
     ConfigClass = AggregateDonutCatalogsTaskConfig
     _DefaultName = "AggregateDonutCatalogs"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.makeSubtask("pairer")
 
     def runQuantum(
         self,
@@ -204,137 +216,131 @@ class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
         camera = butlerQC.get(inputRefs.camera)
 
         # Only need one visitInfo per exposure.
-        visitInfos = {}
-        focusZs = {}
+        # And the pairer only works with uniquified visitInfos.
+        visitInfoDict = {}
         for visitInfoRef in inputRefs.visitInfos:
-            dataId = visitInfoRef.dataId
-            if dataId['exposure'] not in visitInfos:
-                visitInfo = butlerQC.get(visitInfoRef)
-                visitInfos[dataId['exposure']] = visitInfo
-                focusZs[dataId['exposure']] = visitInfo.focusZ
+            exposure = visitInfoRef.dataId['exposure']
+            if exposure in visitInfoDict:
+                continue
+            visitInfoDict[exposure] = butlerQC.get(visitInfoRef)
 
-        if len(focusZs) == 1:
-            extraIdx = focusZs.keys()[0]
-            intraIdx = None
-        elif len(focusZs) == 2:
-            largestFocus = max(focusZs.values())
-            extraIdx = [idx for idx, value in focusZs.items() if value == largestFocus][0]
-            intraIdx = [idx for idx, value in focusZs.items() if value != largestFocus][0]
+        if hasattr(inputRefs, "donut_visit_pair_table"):
+            pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donut_visit_pair_table))
         else:
-            raise ValueError(f"Expected 1 or 2 exposures, got {len(focusZs)}")
+            pairs = self.pairer.run(visitInfoDict)
 
-        tables = []
-        for donutCatalogRef in inputRefs.donutCatalogs:
-            dataId = donutCatalogRef.dataId
-            det = camera[dataId['detector']]
-            tform = det.getTransform(PIXELS, FIELD_ANGLE)
+        for pair in pairs:
+            intraVisitInfo = visitInfoDict[pair.intra]
+            extraVisitInfo = visitInfoDict[pair.extra]
 
-            visitInfo = visitInfos[dataId['visit']]
-            donutCatalog = butlerQC.get(donutCatalogRef)
-            table = Table.from_pandas(donutCatalog)
-            table['detector'] = dataId['detector']
-            table['focusZ'] = focusZs[dataId['visit']]
-            pts = tform.applyForward(
-                [Point2D(x, y) for x, y in zip(table['centroid_x'], table['centroid_y'])]
-            )
-            table['thx_CCS'] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
-            table['thy_CCS'] = [pt.x for pt in pts]
+            tables = []
+            # Find all detectors...
+            for donutCatalogRef in inputRefs.donutCatalogs:
+                dataId = donutCatalogRef.dataId
+                if dataId['visit'] not in (pair.intra, pair.extra):
+                    continue
 
-            tables.append(table)
-        out = vstack(tables)
+                det = camera[dataId['detector']]
+                tform = det.getTransform(PIXELS, FIELD_ANGLE)
 
-        out.meta['extra'] = {
-            'visit': extraIdx,
-            'focusZ': focusZs[extraIdx],
-            'parallacticAngle': visitInfos[extraIdx].boresightParAngle.asRadians(),
-            'rotAngle': visitInfos[extraIdx].boresightRotAngle.asRadians(),
-            'rotTelPos': visitInfos[extraIdx].boresightParAngle.asRadians() - visitInfos[extraIdx].boresightRotAngle.asRadians() - np.pi / 2,
-            'ra': visitInfos[extraIdx].boresightRaDec.getRa().asRadians(),
-            'dec': visitInfos[extraIdx].boresightRaDec.getDec().asRadians(),
-            'az': visitInfos[extraIdx].boresightAzAlt.getLongitude().asRadians(),
-            'alt': visitInfos[extraIdx].boresightAzAlt.getLatitude().asRadians(),
-            'mjd': visitInfos[extraIdx].date.toAstropy().mjd
-        }
-        if intraIdx is not None:
+                donutCatalog = butlerQC.get(donutCatalogRef)
+                table = Table.from_pandas(donutCatalog)
+                table['focusZ'] = intraVisitInfo.focusZ if dataId['visit'] == pair.intra else extraVisitInfo.focusZ
+                pts = tform.applyForward(
+                    [Point2D(x, y) for x, y in zip(table['centroid_x'], table['centroid_y'])]
+                )
+                table['thx_CCS'] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
+                table['thy_CCS'] = [pt.x for pt in pts]
+                table['detector'] = det.getName()
+
+                tables.append(table)
+            out = vstack(tables)
+
+            out.meta['extra'] = {
+                'visit': pair.extra,
+                'focusZ': extraVisitInfo.focusZ,
+                'parallacticAngle': extraVisitInfo.boresightParAngle.asRadians(),
+                'rotAngle': extraVisitInfo.boresightRotAngle.asRadians(),
+                'rotTelPos': extraVisitInfo.boresightParAngle.asRadians() - extraVisitInfo.boresightRotAngle.asRadians() - np.pi / 2,
+                'ra': extraVisitInfo.boresightRaDec.getRa().asRadians(),
+                'dec': extraVisitInfo.boresightRaDec.getDec().asRadians(),
+                'az': extraVisitInfo.boresightAzAlt.getLongitude().asRadians(),
+                'alt': extraVisitInfo.boresightAzAlt.getLatitude().asRadians(),
+                'mjd': extraVisitInfo.date.toAstropy().mjd
+            }
             out.meta['intra'] = {
-                'visit': intraIdx,
-                'focusZ': focusZs[intraIdx],
-                'parallacticAngle': visitInfos[intraIdx].boresightParAngle.asRadians(),
-                'rotAngle': visitInfos[intraIdx].boresightRotAngle.asRadians(),
-                'rotTelPos': visitInfos[intraIdx].boresightParAngle.asRadians() - visitInfos[intraIdx].boresightRotAngle.asRadians() - np.pi / 2,
-                'ra': visitInfos[intraIdx].boresightRaDec.getRa().asRadians(),
-                'dec': visitInfos[intraIdx].boresightRaDec.getDec().asRadians(),
-                'az': visitInfos[intraIdx].boresightAzAlt.getLongitude().asRadians(),
-                'alt': visitInfos[intraIdx].boresightAzAlt.getLatitude().asRadians(),
-                'mjd': visitInfos[intraIdx].date.toAstropy().mjd
+                'visit': pair.intra,
+                'focusZ': intraVisitInfo.focusZ,
+                'parallacticAngle': intraVisitInfo.boresightParAngle.asRadians(),
+                'rotAngle': intraVisitInfo.boresightRotAngle.asRadians(),
+                'rotTelPos': intraVisitInfo.boresightParAngle.asRadians() - intraVisitInfo.boresightRotAngle.asRadians() - np.pi / 2,
+                'ra': intraVisitInfo.boresightRaDec.getRa().asRadians(),
+                'dec': intraVisitInfo.boresightRaDec.getDec().asRadians(),
+                'az': intraVisitInfo.boresightAzAlt.getLongitude().asRadians(),
+                'alt': intraVisitInfo.boresightAzAlt.getLatitude().asRadians(),
+                'mjd': intraVisitInfo.date.toAstropy().mjd
             }
 
-        # Carefully average angles in meta
-        out.meta['average'] = {}
-        for k in ('parallacticAngle', 'rotAngle', 'rotTelPos', 'ra', 'dec', 'az', 'alt'):
-            a1 = out.meta['extra'][k] * radians
-            a2 = out.meta['intra'][k] * radians
-            a2 = a2.wrapNear(a1)
-            out.meta['average'][k] = ((a1 + a2) / 2).wrapCtr().asRadians()
+            # Carefully average angles in meta
+            out.meta['average'] = {}
+            for k in ('parallacticAngle', 'rotAngle', 'rotTelPos', 'ra', 'dec', 'az', 'alt'):
+                a1 = out.meta['extra'][k] * radians
+                a2 = out.meta['intra'][k] * radians
+                a2 = a2.wrapNear(a1)
+                out.meta['average'][k] = ((a1 + a2) / 2).wrapCtr().asRadians()
 
-        # Easier to average the MJDs
-        if intraIdx is not None:
-            out.meta['average']['mjd'] = np.mean([out.meta['extra']['mjd'], out.meta['intra']['mjd']])
-        else:
-            out.meta['average']['mjd'] = out.meta['extra']['mjd']
+            # Easier to average the MJDs
+            out.meta['average']['mjd'] = 0.5*(out.meta['extra']['mjd'] + out.meta['intra']['mjd'])
 
-        q = out.meta['average']['parallacticAngle']
-        rtp = out.meta['average']['rotTelPos']
-        out['thx_OCS'] = np.cos(rtp) * out['thx_CCS'] + np.sin(rtp) * out['thy_CCS']
-        out['thy_OCS'] = -np.sin(rtp) * out['thx_CCS'] + np.cos(rtp) * out['thy_CCS']
-        out['th_N'] = np.cos(q) * out['thx_CCS'] + np.sin(q) * out['thy_CCS']
-        out['th_E'] = -np.sin(q) * out['thx_CCS'] + np.cos(q) * out['thy_CCS']
+            q = out.meta['average']['parallacticAngle']
+            rtp = out.meta['average']['rotTelPos']
+            out['thx_OCS'] = np.cos(rtp) * out['thx_CCS'] - np.sin(rtp) * out['thy_CCS']
+            out['thy_OCS'] = np.sin(rtp) * out['thx_CCS'] + np.cos(rtp) * out['thy_CCS']
+            out['th_N'] = np.cos(q) * out['thx_CCS'] - np.sin(q) * out['thy_CCS']
+            out['th_W'] = np.sin(q) * out['thx_CCS'] + np.cos(q) * out['thy_CCS']
 
-        for outRef in outputRefs.aggregateDonutCatalog:
-            if outRef.dataId['visit'] == extraIdx:
-                butlerQC.put(out, outRef)
-                return
-        raise ValueError(f"Expected to find an output reference with visit {extraIdx}")
+        # Find the right output references
+            for outRef in outputRefs.aggregateDonutCatalog:
+                if outRef.dataId['visit'] == pair.extra:
+                    butlerQC.put(out, outRef)
+                    break
+            else:
+                raise ValueError(f"Expected to find an output reference with visit {pair.extra}")
 
 
 class AggregateAOSVisitTableTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument",),
+    dimensions=("visit", "instrument",),
 ):
     aggregateDonutCatalog = ct.Input(
         doc="Visit-level catalog of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateDonutCatalog",
-        multiple=True
     )
     aggregateZernikesRaw = ct.Input(
         doc="Visit-level catalog of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesRaw",
-        multiple=True
     )
     aggregateZernikesAvg = ct.Input(
         doc="Visit-level catalog of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesAvg",
-        multiple=True
     )
     aggregateAOSRaw = ct.Output(
         doc="Visit-level catalog of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateAOSVisitTableRaw",
-        multiple=True
     )
     aggregateAOSAvg = ct.Output(
         doc="Visit-level catalog of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateAOSVisitTableAvg",
-        multiple=True
     )
 
 class AggregateAOSVisitTableTaskConfig(
@@ -354,9 +360,9 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection
     ) -> None:
-        adc = butlerQC.get(inputRefs.aggregateDonutCatalog[0])
-        azr = butlerQC.get(inputRefs.aggregateZernikesRaw[0])
-        aza = butlerQC.get(inputRefs.aggregateZernikesAvg[0])
+        adc = butlerQC.get(inputRefs.aggregateDonutCatalog)
+        azr = butlerQC.get(inputRefs.aggregateZernikesRaw)
+        aza = butlerQC.get(inputRefs.aggregateZernikesAvg)
 
         dets = np.unique(adc['detector'])
         avg_table = aza.copy()
@@ -365,7 +371,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
             'centroid_x', 'centroid_y',
             'thx_CCS', 'thy_CCS',
             'thx_OCS', 'thy_OCS',
-            'th_N', 'th_E'
+            'th_N', 'th_W'
         ]
         for k in avg_keys:
             avg_table[k] = np.nan  # Allocate
@@ -403,41 +409,39 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                     raw_table[k+'_intra'][w] = adc[k][wadc][wintra]
                     raw_table[k+'_extra'][w] = adc[k][wadc][wextra]
 
-        butlerQC.put(avg_table, outputRefs.aggregateAOSAvg[0])
-        butlerQC.put(raw_table, outputRefs.aggregateAOSRaw[0])
+        butlerQC.put(avg_table, outputRefs.aggregateAOSAvg)
+        butlerQC.put(raw_table, outputRefs.aggregateAOSRaw)
 
 
 class AggregateDonutStampsTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument",),
+    dimensions=("instrument", "visit"),
 ):
     donutStampsIntra = ct.Input(
         doc="Intrafocal Donut Stamps",
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntra",
-        multiple=True
+        multiple=True,
     )
     donutStampsExtra = ct.Input(
         doc="Extrafocal Donut Stamps",
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsExtra",
-        multiple=True
+        multiple=True,
     )
     donutStampsIntraVisit = ct.Output(
         doc="Intrafocal Donut Stamps",
         dimensions=("visit", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntraVisit",
-        multiple=True
     )
     donutStampsExtraVisit = ct.Output(
         doc="Extrafocal Donut Stamps",
         dimensions=("visit", "instrument"),
         storageClass="StampsBase",
         name="donutStampsExtraVisit",
-        multiple=True
     )
 
 
@@ -473,5 +477,5 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             intraStamps.extend(intra[:self.config.maxDonutsPerDetector])
             extraStamps.extend(extra[:self.config.maxDonutsPerDetector])
 
-        butlerQC.put(intraStamps, outputRefs.donutStampsIntraVisit[0])
-        butlerQC.put(extraStamps, outputRefs.donutStampsExtraVisit[0])
+        butlerQC.put(intraStamps, outputRefs.donutStampsIntraVisit)
+        butlerQC.put(extraStamps, outputRefs.donutStampsExtraVisit)

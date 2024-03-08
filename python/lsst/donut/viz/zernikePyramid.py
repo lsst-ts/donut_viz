@@ -115,6 +115,7 @@ def zernikePyramid(
         cbar[j] = colorbar(scat)
         ax.set_xticks([])
         ax.set_yticks([])
+        ax.set_aspect('equal')
 
     if title is not None:
         raise DeprecationWarning(
