@@ -1,6 +1,8 @@
 import lsst.pipe.base.connectionTypes as ct
 import lsst.pipe.base as pipeBase
+import lsst.pex.config as pexConfig
 import galsim
+import tempfile
 import yaml
 
 import matplotlib.pyplot as plt
@@ -9,6 +11,10 @@ from pathlib import Path
 from .zernikePyramid import zernikePyramid
 from .utilities import rose, add_rotated_axis
 
+try:
+    from lsst.rubintv.production.uploaders import MultiUploader
+except ImportError:
+    MultiUploader = None
 
 __all__ = [
     "PlotAOSTaskConnections",
@@ -60,12 +66,24 @@ class PlotAOSTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=PlotAOSTaskConnections,
 ):
-    pass
+    doRubinTVUpload = pexConfig.Field(
+        dtype=bool,
+        doc="Upload to RubinTV",
+        default=False,
+    )
 
 
 class PlotAOSTask(pipeBase.PipelineTask):
     ConfigClass = PlotAOSTaskConfig
     _DefaultName = "plotAOSTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
 
     def runQuantum(
         self,
@@ -81,6 +99,32 @@ class PlotAOSTask(pipeBase.PipelineTask):
         butlerQC.put(zkPyramid, outputRefs.measuredZernikePyramid)
         butlerQC.put(residPyramid, outputRefs.residualZernikePyramid)
         butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid)
+
+        if self.config.doRubinTVUpload:
+            instrument = inputRefs.aggregateAOSRaw.dataId['instrument']
+            visit = inputRefs.aggregateAOSRaw.dataId['visit']
+            day_obs = visit // 100_000 % 1_000_000 + 20_000_000
+            seq_num = visit % 100_000
+            with tempfile.TemporaryDirectory() as tmpdir:
+                zk_meas_fn = tmpdir / 'zk_measurement_pyramid.png'
+                zkPyramid.savefig(zk_meas_fn)
+                zk_resid_fn = tmpdir / 'zk_residual_pyramid.png'
+                residPyramid.savefig(zk_resid_fn)
+
+                self.uploader.uploadPerSeqNumPlot(
+                    instrument=instrument,
+                    plotName='zk_measurement_pyramid',
+                    dayObs=day_obs,
+                    seqNum=seq_num,
+                    filename=zk_meas_fn
+                )
+                self.uploader.uploadPerSeqNumPlot(
+                    instrument=instrument,
+                    plotName='zk_residual_pyramid',
+                    dayObs=day_obs,
+                    seqNum=seq_num,
+                    filename=zk_resid_fn
+                )
 
     def doPyramid(
         self,
