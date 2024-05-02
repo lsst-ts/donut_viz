@@ -124,3 +124,51 @@ def add_rotated_axis(fig, xy, wh, th):
     aux_ax = ax.get_aux_axes(tr)
 
     return ax, aux_ax
+
+def get_instrument_channel_name(instrument):
+    """Get the instrument channel name for the current instrument.
+
+    This is the RubinTV channel required to upload.
+
+    Parameters
+    ----------
+    instrument : `str`
+        The instrument name, e.g. 'LSSTCam'.
+
+    Returns
+    -------
+    channel : `str`
+        The channel prefix name.
+    """
+    match instrument:
+        case 'LSSTCam':
+            return 'lsstcam_aos'
+        case 'LSSTCamSim':
+            return 'lsstcam_sim_aos'
+        case 'LSSTComCam':
+            return 'comcam_aos'
+        case 'LSSTComCamSim':
+            return 'comcam_sim_aos'
+        case _:
+            raise ValueError(f'Unknown instrument {instrument}')
+
+def get_day_obs_seq_num_from_visitid(visit):
+    """Get the dayObs and seqNum from a visit ID.
+
+    Parameters
+    ----------
+    visit : `int`
+        The visit ID.
+
+    Returns
+    -------
+    day_obs : `int`
+        The day_obs.
+    seq_num : `int`
+        The seq_num.
+    """
+
+    day_obs = visit // 100_000 % 1_000_000 + 20_000_000
+    seq_num = visit % 100_000
+
+    return day_obs, seq_num

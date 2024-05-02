@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 from .zernikePyramid import zernikePyramid
-from .utilities import rose, add_rotated_axis
+from .utilities import rose, add_rotated_axis, get_instrument_channel_name
+from pathlib import Path
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
@@ -103,23 +104,22 @@ class PlotAOSTask(pipeBase.PipelineTask):
         if self.config.doRubinTVUpload:
             instrument = inputRefs.aggregateAOSRaw.dataId['instrument']
             visit = inputRefs.aggregateAOSRaw.dataId['visit']
-            day_obs = visit // 100_000 % 1_000_000 + 20_000_000
-            seq_num = visit % 100_000
+            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
             with tempfile.TemporaryDirectory() as tmpdir:
-                zk_meas_fn = tmpdir / 'zk_measurement_pyramid.png'
+                zk_meas_fn = Path(tmpdir) / 'zk_measurement_pyramid.png'
                 zkPyramid.savefig(zk_meas_fn)
-                zk_resid_fn = tmpdir / 'zk_residual_pyramid.png'
+                zk_resid_fn = Path(tmpdir) / 'zk_residual_pyramid.png'
                 residPyramid.savefig(zk_resid_fn)
 
                 self.uploader.uploadPerSeqNumPlot(
-                    instrument=instrument,
+                    instrument=get_instrument_channel_name(instrument),
                     plotName='zk_measurement_pyramid',
                     dayObs=day_obs,
                     seqNum=seq_num,
                     filename=zk_meas_fn
                 )
                 self.uploader.uploadPerSeqNumPlot(
-                    instrument=instrument,
+                    instrument=get_instrument_channel_name(instrument),
                     plotName='zk_residual_pyramid',
                     dayObs=day_obs,
                     seqNum=seq_num,
@@ -222,11 +222,23 @@ class PlotDonutTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=PlotDonutTaskConnections,
 ):
-    pass
+    doRubinTVUpload = pexConfig.Field(
+        dtype=bool,
+        doc="Upload to RubinTV",
+        default=False,
+    )
 
 class PlotDonutTask(pipeBase.PipelineTask):
     ConfigClass = PlotDonutTaskConfig
     _DefaultName = "plotDonutTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
 
     def runQuantum(
         self,
@@ -310,3 +322,19 @@ class PlotDonutTask(pipeBase.PipelineTask):
         rose(fig, vecs_NE, p0=(0.85, 0.8))
 
         butlerQC.put(fig, outputRefs.donutPlot)
+
+        if self.config.doRubinTVUpload:
+            instrument = inputRefs.donutStampsIntraVisit.dataId['instrument']
+            visit = inputRefs.donutStampsIntraVisit.dataId['visit']
+            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                donut_gallery_fn = Path(tmpdir) / 'fp_donut_gallery.png'
+                fig.savefig(donut_gallery_fn)
+
+                self.uploader.uploadPerSeqNumPlot(
+                    instrument=get_instrument_channel_name(instrument),
+                    plotName='fp_donut_gallery',
+                    dayObs=day_obs,
+                    seqNum=seq_num,
+                    filename=donut_gallery_fn
+                )
