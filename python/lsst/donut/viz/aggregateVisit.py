@@ -8,6 +8,7 @@ from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.geom import Point2D, radians
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.pairTask import ExposurePairer
+from lsst.utils.timer import timeMethod
 
 
 __all__ = [
@@ -83,6 +84,7 @@ class AggregateZernikesTask(pipeBase.PipelineTask):
     ConfigClass = AggregateZernikesTaskConfig
     _DefaultName = "AggregateZernikes"
 
+    @timeMethod
     def runQuantum(
         self,
         butlerQC: pipeBase.QuantumContext,
@@ -111,6 +113,8 @@ class AggregateZernikesTask(pipeBase.PipelineTask):
         # just get the first one, they're all the same
         visitInfo = butlerQC.get(inputRefs.visitInfos[0])
 
+        # TODO: Swap parallactic angle for pseudo parallactic angle.
+        #       See SMTN-019 for details.
         meta = {}
         meta['visit'] = visit
         meta['parallacticAngle'] = visitInfo.boresightParAngle.asRadians()
@@ -207,6 +211,7 @@ class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
         super().__init__(**kwargs)
         self.makeSubtask("pairer")
 
+    @timeMethod
     def runQuantum(
         self,
         butlerQC: pipeBase.QuantumContext,
@@ -255,6 +260,9 @@ class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
 
                 tables.append(table)
             out = vstack(tables)
+
+            # TODO: Swap parallactic angle for pseudo parallactic angle.
+            #       See SMTN-019 for details.
 
             out.meta['extra'] = {
                 'visit': pair.extra,
@@ -354,6 +362,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
     ConfigClass = AggregateAOSVisitTableTaskConfig
     _DefaultName = "AggregateAOSVisitTable"
 
+    @timeMethod
     def runQuantum(
         self,
         butlerQC: pipeBase.QuantumContext,
@@ -463,6 +472,7 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
     ConfigClass = AggregateDonutStampsTaskConfig
     _DefaultName = "AggregateDonutStamps"
 
+    @timeMethod
     def runQuantum(
         self,
         butlerQC: pipeBase.QuantumContext,

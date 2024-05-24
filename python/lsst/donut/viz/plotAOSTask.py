@@ -11,6 +11,7 @@ from pathlib import Path
 from .zernikePyramid import zernikePyramid
 from .utilities import rose, add_rotated_axis, get_instrument_channel_name
 from pathlib import Path
+from lsst.utils.timer import timeMethod
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
@@ -86,6 +87,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
+    @timeMethod
     def runQuantum(
         self,
         butlerQC: pipeBase.QuantumContext,
@@ -240,6 +242,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
+    @timeMethod
     def runQuantum(
         self,
         butlerQC: pipeBase.QuantumContext,
