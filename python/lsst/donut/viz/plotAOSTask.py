@@ -133,7 +133,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
         x, y, zk,
         rtp, q,
     ):
-        fig = zernikePyramid(x, y, zk, cmap='seismic', s=2)
+        fig = zernikePyramid(x, y, zk, cmap='seismic', s=10)
         vecs_xy = {
             '$x_\mathrm{Opt}$':(1,0),
             '$y_\mathrm{Opt}$':(0,-1),
@@ -283,9 +283,9 @@ class PlotDonutTask(pipeBase.PipelineTask):
             det_name = donut.detector_name
             # if 'R30' in det_name:
             #     continue
-            # if 'S21' in det_name:
+            # if 'S00' in det_name:
             #     continue
-            # if 'S22' in det_name:
+            # if 'S01' in det_name:
             #     continue
             i = 3*int(det_name[1]) + int(det_name[5])
             j = 3*int(det_name[2]) + int(det_name[6])
@@ -306,6 +306,18 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 vmin=vmin, vmax=vmax,
                 extent=[0, det_size*1.25, 0, det_size*1.25],
                 origin='upper'  # +y is down
+            )
+            xlim = aux_ax.get_xlim()
+            ylim = aux_ax.get_ylim()
+            aux_ax.text(
+                xlim[0] + 0.03 * (xlim[1] - xlim[0]),
+                ylim[1] - 0.03 * (ylim[1] - ylim[0]),
+                det_name,
+                color='w',
+                rotation=-np.rad2deg(rtp),
+                rotation_mode='anchor',
+                ha='left',
+                va='top'
             )
 
         vecs_xy = {
