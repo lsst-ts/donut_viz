@@ -9,7 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 from .zernikePyramid import zernikePyramid
-from .utilities import rose, add_rotated_axis, get_instrument_channel_name
+from .utilities import (
+    rose, add_rotated_axis, get_instrument_channel_name,
+    get_day_obs_seq_num_from_visitid
+)
 from pathlib import Path
 from lsst.utils.timer import timeMethod
 
