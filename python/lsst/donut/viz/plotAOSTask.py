@@ -367,13 +367,13 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
                 with tempfile.TemporaryDirectory() as tmpdir:
                     donut_gallery_fn = (
-                        Path(tmpdir) / f"fp_donut_gallery_{defocalPosition}.png"
+                        Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
                     )
                     fig.savefig(donut_gallery_fn)
 
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(instrument),
-                        plotName=f"fp_donut_gallery_{defocalPosition}",
+                        plotName=f"fp_donut_gallery_{visit}",
                         dayObs=day_obs,
                         seqNum=seq_num,
                         filename=donut_gallery_fn,
