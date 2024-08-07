@@ -269,8 +269,12 @@ class PlotDonutTask(pipeBase.PipelineTask):
 
         donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
         donutStampsExtra = butlerQC.get(inputRefs.donutStampsExtraVisit)
-        visitIntra = inputRefs.donutStampsIntraVisit.dataId["visit"]
-        visitExtra = inputRefs.donutStampsExtraVisit.dataId["visit"]
+        # We take visitId corresponding to each donut sets from
+        # donutStamps metadata as the
+        # visitId above under which donutStamps were saved
+        # is only the extra-focal visitId
+        visitIntra = donutStampsIntra.metadata.getArray('VISIT')[0]
+        visitExtra = donutStampsExtra.metadata.getArray('VISIT')[0]
 
         # LSST detector layout
         q = visitInfo.boresightParAngle.asRadians()
@@ -289,10 +293,9 @@ class PlotDonutTask(pipeBase.PipelineTask):
         fp_center = 0.5, 0.475
 
 
-        for donutStampSet, visit, defocalPosition in zip(
+        for donutStampSet, visit in zip(
             [donutStampsIntra, donutStampsExtra],
-            [visitIntra, visitExtra],
-            ["Intra", "Extra"]
+            [visitIntra, visitExtra]
             ):
 
             fig = plt.figure(figsize=(11, 8.5))
@@ -353,16 +356,17 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 'E':(np.sin(q-np.pi/2), np.cos(q-np.pi/2))
             }
             rose(fig, vecs_NE, p0=(0.85, 0.8))
-            fig.text(0.5, 0.9, defocalPosition)
+            fig.text(0.47, 0.93, f'{donut.defocal_type}: {visit}')
 
-            if defocalPosition.lower() == "intra":
-                butlerQC.put(fig, outputRefs.donutPlotIntra)
-            elif defocalPosition.lower() == "extra":
+            if donut.defocal_type == 'extra':
                 butlerQC.put(fig, outputRefs.donutPlotExtra)
+            elif donut.defocal_type == 'intra':
+                butlerQC.put(fig, outputRefs.donutPlotIntra)
 
             if self.config.doRubinTVUpload:
                 # that's the same for intra and extra-focal
                 instrument = inputRefs.donutStampsIntraVisit.dataId["instrument"]
+
                 # seq_num is sometimes different for intra vs extra-focal if pistoning
                 day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -373,7 +377,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
 
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(instrument),
-                        plotName=f"fp_donut_gallery_{visit}",
+                        plotName=f"fp_donut_gallery",
                         dayObs=day_obs,
                         seqNum=seq_num,
                         filename=donut_gallery_fn,
