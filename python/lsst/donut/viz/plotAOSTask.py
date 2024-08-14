@@ -28,6 +28,9 @@ __all__ = [
     "PlotDonutTaskConnections",
     "PlotDonutTaskConfig",
     "PlotDonutTask",
+    "PlotStarTaskConnections",
+    "PlotStarTaskConfig",
+    "PlotStarTask"
 ]
 
 
@@ -382,3 +385,165 @@ class PlotDonutTask(pipeBase.PipelineTask):
                         seqNum=seq_num,
                         filename=donut_gallery_fn,
                     )
+
+
+class PlotStarTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "instrument"),
+):
+    visitInfos = ct.Input(
+        doc="Input exposure to make measurements on",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="VisitInfo",
+        name="raw.visitInfo",
+        multiple=True,
+    )
+    starStamps = ct.Input(
+        doc="In-focus Star Stamps",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="starStamps",
+    )
+    starPlot = ct.Output(
+        doc="Star Plot In-Focus",
+        dimensions=("visit", "instrument"),
+        storageClass="Plot",
+        name="starPlot",
+    )
+
+
+
+class PlotStarTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=PlotStarTaskConnections,
+):
+    doRubinTVUpload = pexConfig.Field(
+        dtype=bool,
+        doc="Upload to RubinTV",
+        default=False,
+    )
+
+class PlotStarTask(pipeBase.PipelineTask):
+    ConfigClass = PlotStarTaskConfig
+    _DefaultName = "plotStarTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection
+    ) -> None:
+        visit = inputRefs.starStampsVisit.dataId['visit']
+        for visitInfoRef in inputRefs.visitInfos:
+            if visitInfoRef.dataId['exposure'] == visit:
+                visitInfo = butlerQC.get(visitInfoRef)
+                break
+        else:
+            raise ValueError(f"Expected to find a visitInfo with exposure {visit}")
+
+        starStamps = butlerQC.get(inputRefs.starStampsVisit)
+
+        # LSST detector layout
+        q = visitInfo.boresightParAngle.asRadians()
+        rotAngle = visitInfo.boresightRotAngle.asRadians()
+        rtp = q - rotAngle - np.pi/2
+        match inst:=visitInfo.getInstrumentLabel():
+            case 'LSSTCam' | 'LSSTCamSim':
+                nacross = 15
+                fp_size = 0.55  # 55% of horizontal space
+            case 'LSSTComCam' | 'LSSTComCamSim':
+                nacross = 3
+                fp_size = 0.50  # 50% of horizontal space
+            case _:
+                raise ValueError(f"Unknown instrument {inst}")
+        det_size = fp_size/nacross
+        fp_center = 0.5, 0.475
+
+
+        # make a star plot 
+        fig = plt.figure(figsize=(11, 8.5))
+        aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
+        for stamp in starStamps:
+            det_name = stamp.detector_name
+            # if 'R30' in det_name:
+            #     continue
+            # if 'S00' in det_name:
+            #     continue
+            i = 3*int(det_name[1]) + int(det_name[5])
+            j = 3*int(det_name[2]) + int(det_name[6])
+            x = i-7
+            y = 7-j
+            xp = np.cos(rtp)*x + np.sin(rtp)*y
+            yp = -np.sin(rtp)*x + np.cos(rtp)*y
+            ax, aux_ax = add_rotated_axis(
+                fig,
+                (xp*det_size + fp_center[0], yp*det_size*aspect + fp_center[1]),
+                (det_size*1.25, det_size*1.25),
+                -np.rad2deg(rtp)
+            )
+            arr = stamp.stamp_im.image.array
+            vmin, vmax = np.quantile(arr, (0.01, 0.99))
+            aux_ax.imshow(
+                stamp.stamp_im.image.array.T,
+                vmin=vmin, vmax=vmax,
+                extent=[0, det_size*1.25, 0, det_size*1.25],
+                origin='upper'  # +y is down
+            )
+            xlim = aux_ax.get_xlim()
+            ylim = aux_ax.get_ylim()
+            aux_ax.text(
+                xlim[0] + 0.03 * (xlim[1] - xlim[0]),
+                ylim[1] - 0.03 * (ylim[1] - ylim[0]),
+                det_name,
+                color='w',
+                rotation=-np.rad2deg(rtp),
+                rotation_mode='anchor',
+                ha='left',
+                va='top'
+            )
+
+            vecs_xy = {
+                '$x_\mathrm{Opt}$':(1,0),
+                '$y_\mathrm{Opt}$':(0,-1),
+                '$x_\mathrm{Cam}$':(np.cos(rtp), -np.sin(rtp)),
+                '$y_\mathrm{Cam}$':(-np.sin(rtp), -np.cos(rtp)),
+            }
+            rose(fig, vecs_xy, p0=(0.15, 0.8))
+
+            vecs_NE = {
+                'az':(1,0),
+                'alt':(0,+1),
+                'N':(np.sin(q), np.cos(q)),
+                'E':(np.sin(q-np.pi/2), np.cos(q-np.pi/2))
+            }
+            rose(fig, vecs_NE, p0=(0.85, 0.8))
+            fig.text(0.47, 0.93, f'{stamp.defocal_type}: {visit}')
+
+            butlerQC.put(fig, outputRefs.starPlot)
+           
+            if self.config.doRubinTVUpload:
+                instrument = inputRefs.donutStampsIntraVisit.dataId["instrument"]
+                day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    star_gallery_fn = (
+                        Path(tmpdir) / f"fp_star_gallery_{visit}.png"
+                    )
+                    fig.savefig(star_gallery_fn)
+
+                    self.uploader.uploadPerSeqNumPlot(
+                        instrument=get_instrument_channel_name(instrument),
+                        plotName=f"fp_star_gallery",
+                        dayObs=day_obs,
+                        seqNum=seq_num,
+                        filename=star_gallery_fn,
+                    )
+
