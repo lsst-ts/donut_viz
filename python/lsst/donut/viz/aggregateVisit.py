@@ -479,13 +479,18 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection
     ) -> None:
-        intraStamps = DonutStamps([])
-        extraStamps = DonutStamps([])
+        intraStampsList = []
+        extraStampsList = []
         for intraRef, extraRef in zip(inputRefs.donutStampsIntra, inputRefs.donutStampsExtra):
             intra = butlerQC.get(intraRef)
             extra = butlerQC.get(extraRef)
-            intraStamps.extend(intra[:self.config.maxDonutsPerDetector])
-            extraStamps.extend(extra[:self.config.maxDonutsPerDetector])
+            intraStampsList.append(intra[:self.config.maxDonutsPerDetector])
+            extraStampsList.append(extra[:self.config.maxDonutsPerDetector])
+        intraStampsListRavel = np.ravel(intraStampsList)
+        extraStampsListRavel = np.ravel(extraStampsList)
 
-        butlerQC.put(intraStamps, outputRefs.donutStampsIntraVisit)
-        butlerQC.put(extraStamps, outputRefs.donutStampsExtraVisit)
+        butlerQC.put(DonutStamps(intraStampsListRavel, metadata=intra.metadata),
+                     outputRefs.donutStampsIntraVisit)
+
+        butlerQC.put(DonutStamps(extraStampsListRavel, metadata=extra.metadata),
+                     outputRefs.donutStampsExtraVisit)
