@@ -26,11 +26,10 @@ def get_cat(butler, extra_exposure_id, intra_exposure_id=None, instrument='LSSTC
         # if det.getName().startswith("R01"):
         #     continue
         tform = det.getTransform(PIXELS, FIELD_ANGLE)
-        cat = butler.get("donutCatalog", visit=extra_exposure_id, detector=detnum)
-        cat2 = butler.get("donutCatalog", visit=intra_exposure_id, detector=detnum)
+        cat = butler.get("donutTable", visit=extra_exposure_id, detector=detnum)
+        cat2 = butler.get("donutTable", visit=intra_exposure_id, detector=detnum)
         if len(cat) != len(cat2):
             continue
-        cat = Table.from_pandas(cat)  # kill the pandas!
 
         pts = tform.applyForward([Point2D(x, y) for x, y in zip(cat['centroid_x'], cat['centroid_y'])])
         cat['thx_CCS'] = [pt.y for pt in pts]  # Note x,y => y,x

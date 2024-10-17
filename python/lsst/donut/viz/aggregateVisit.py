@@ -168,8 +168,8 @@ class AggregateDonutCatalogsTaskConnections(
     donutCatalogs = ct.Input(
         doc="Donut catalogs",
         dimensions=("visit", "detector","instrument"),
-        storageClass="DataFrame",
-        name="donutCatalog",
+        storageClass="AstropyQTable",
+        name="donutTable",
         multiple=True,
     )
     camera = ct.PrerequisiteInput(
@@ -248,8 +248,7 @@ class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
                 det = camera[dataId['detector']]
                 tform = det.getTransform(PIXELS, FIELD_ANGLE)
 
-                donutCatalog = butlerQC.get(donutCatalogRef)
-                table = Table.from_pandas(donutCatalog)
+                table = butlerQC.get(donutCatalogRef)
                 table['focusZ'] = intraVisitInfo.focusZ if dataId['visit'] == pair.intra else extraVisitInfo.focusZ
                 pts = tform.applyForward(
                     [Point2D(x, y) for x, y in zip(table['centroid_x'], table['centroid_y'])]
