@@ -8,6 +8,7 @@ from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.geom import Point2D, radians
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.pairTask import ExposurePairer
+from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 from lsst.utils.timer import timeMethod
 
 
@@ -15,12 +16,15 @@ __all__ = [
     "AggregateZernikesTaskConnections",
     "AggregateZernikesTaskConfig",
     "AggregateZernikesTask",
-    "AggregateDonutCatalogsTaskConnections",
-    "AggregateDonutCatalogsTaskConfig",
-    "AggregateDonutCatalogsTask",
+
+    "AggregateDonutTablesTaskConnections",
+    "AggregateDonutTablesTaskConfig",
+    "AggregateDonutTablesTask",
+
     "AggregateAOSVisitTableTaskConnections",
     "AggregateAOSVisitTableTaskConfig",
     "AggregateAOSVisitTableTask",
+
     "AggregateDonutStampsTaskConnections",
     "AggregateDonutStampsTaskConfig",
     "AggregateDonutStampsTask",
@@ -148,28 +152,21 @@ class AggregateZernikesTask(pipeBase.PipelineTask):
 
 
 # Note: cannot make visit a dimension because we have not yet paired visits.
-class AggregateDonutCatalogsTaskConnections(
+class AggregateDonutTablesTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument",),
 ):
-    visitInfos = ct.Input(
-        doc="Input exposure to make measurements on",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="VisitInfo",
-        name="raw.visitInfo",
-        multiple=True,
-    )
     donut_visit_pair_table = ct.Input(
         doc="Visit pair table",
         dimensions=("instrument",),
         storageClass="AstropyTable",
         name="donut_visit_pair_table",
     )
-    donutCatalogs = ct.Input(
-        doc="Donut catalogs",
+    donutTables = ct.Input(
+        doc="Donut tables",
         dimensions=("visit", "detector","instrument"),
-        storageClass="DataFrame",
-        name="donutCatalog",
+        storageClass="AstropyQTable",
+        name="donutTable",
         multiple=True,
     )
     camera = ct.PrerequisiteInput(
@@ -179,11 +176,11 @@ class AggregateDonutCatalogsTaskConnections(
         dimensions=["instrument"],
         isCalibration=True,
     )
-    aggregateDonutCatalog = ct.Output(
-        doc="Visit-level catalog of donuts and Zernikes",
+    aggregateDonutTable = ct.Output(
+        doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
-        storageClass="AstropyTable",
-        name="aggregateDonutCatalog",
+        storageClass="AstropyQTable",
+        name="aggregateDonutTable",
         multiple=True
     )
 
@@ -191,11 +188,13 @@ class AggregateDonutCatalogsTaskConnections(
         super().__init__(config=config)
         if not config.pairer.target._needsPairTable:
             del self.donut_visit_pair_table
+        if config.pairer.target._needsGroupDimension:
+            self.dimensions.add("group")
 
 
-class AggregateDonutCatalogsTaskConfig(
+class AggregateDonutTablesTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=AggregateDonutCatalogsTaskConnections,
+    pipelineConnections=AggregateDonutTablesTaskConnections,
 ):
     pairer = pexConfig.ConfigurableField(
         target=ExposurePairer,
@@ -203,9 +202,9 @@ class AggregateDonutCatalogsTaskConfig(
     )
 
 
-class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
-    ConfigClass = AggregateDonutCatalogsTaskConfig
-    _DefaultName = "AggregateDonutCatalogs"
+class AggregateDonutTablesTask(pipeBase.PipelineTask):
+    ConfigClass = AggregateDonutTablesTaskConfig
+    _DefaultName = "AggregateDonutTables"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -223,11 +222,12 @@ class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
         # Only need one visitInfo per exposure.
         # And the pairer only works with uniquified visitInfos.
         visitInfoDict = {}
-        for visitInfoRef in inputRefs.visitInfos:
-            exposure = visitInfoRef.dataId['exposure']
-            if exposure in visitInfoDict:
+        for donutTableRef in inputRefs.donutTables:
+            table = butlerQC.get(donutTableRef)
+            visit_id = table.meta['visit_info']['visit_id']
+            if visit_id in visitInfoDict:
                 continue
-            visitInfoDict[exposure] = butlerQC.get(visitInfoRef)
+            visitInfoDict[visit_id] = convertDictToVisitInfo(table.meta['visit_info'])
 
         if hasattr(inputRefs, "donut_visit_pair_table"):
             pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donut_visit_pair_table))
@@ -240,16 +240,15 @@ class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
 
             tables = []
             # Find all detectors...
-            for donutCatalogRef in inputRefs.donutCatalogs:
-                dataId = donutCatalogRef.dataId
+            for donutTableRef in inputRefs.donutTables:
+                dataId = donutTableRef.dataId
                 if dataId['visit'] not in (pair.intra, pair.extra):
                     continue
 
                 det = camera[dataId['detector']]
                 tform = det.getTransform(PIXELS, FIELD_ANGLE)
 
-                donutCatalog = butlerQC.get(donutCatalogRef)
-                table = Table.from_pandas(donutCatalog)
+                table = butlerQC.get(donutTableRef)
                 table['focusZ'] = intraVisitInfo.focusZ if dataId['visit'] == pair.intra else extraVisitInfo.focusZ
                 pts = tform.applyForward(
                     [Point2D(x, y) for x, y in zip(table['centroid_x'], table['centroid_y'])]
@@ -259,6 +258,11 @@ class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
                 table['detector'] = det.getName()
 
                 tables.append(table)
+
+            # Don't attempt to stack metadata
+            for table in tables:
+                table.meta = {}
+
             out = vstack(tables)
 
             # TODO: Swap parallactic angle for pseudo parallactic angle.
@@ -308,7 +312,7 @@ class AggregateDonutCatalogsTask(pipeBase.PipelineTask):
             out['th_W'] = np.sin(q) * out['thx_CCS'] + np.cos(q) * out['thy_CCS']
 
         # Find the right output references
-            for outRef in outputRefs.aggregateDonutCatalog:
+            for outRef in outputRefs.aggregateDonutTable:
                 if outRef.dataId['visit'] == pair.extra:
                     butlerQC.put(out, outRef)
                     break
@@ -350,6 +354,7 @@ class AggregateAOSVisitTableTaskConnections(
         storageClass="AstropyTable",
         name="aggregateAOSVisitTableAvg",
     )
+
 
 class AggregateAOSVisitTableTaskConfig(
     pipeBase.PipelineTaskConfig,
