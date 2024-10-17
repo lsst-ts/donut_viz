@@ -64,13 +64,13 @@ class AggregateZernikesTaskConnections(
         isCalibration=True,
     )
     aggregateZernikesRaw = ct.Output(
-        doc="Visit-level catalog of donuts and Zernikes",
+        doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesRaw",
     )
     aggregateZernikesAvg = ct.Output(
-        doc="Visit-level catalog of donuts and Zernikes",
+        doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesAvg",
@@ -324,32 +324,32 @@ class AggregateAOSVisitTableTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("visit", "instrument",),
 ):
-    aggregateDonutCatalog = ct.Input(
-        doc="Visit-level catalog of donuts and Zernikes",
+    aggregateDonutTable = ct.Input(
+        doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
-        storageClass="AstropyTable",
-        name="aggregateDonutCatalog",
+        storageClass="AstropyQTable",
+        name="aggregateDonutTable",
     )
     aggregateZernikesRaw = ct.Input(
-        doc="Visit-level catalog of donuts and Zernikes",
+        doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesRaw",
     )
     aggregateZernikesAvg = ct.Input(
-        doc="Visit-level catalog of donuts and Zernikes",
+        doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesAvg",
     )
     aggregateAOSRaw = ct.Output(
-        doc="Visit-level catalog of donuts and Zernikes",
+        doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateAOSVisitTableRaw",
     )
     aggregateAOSAvg = ct.Output(
-        doc="Visit-level catalog of donuts and Zernikes",
+        doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateAOSVisitTableAvg",
@@ -374,7 +374,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection
     ) -> None:
-        adc = butlerQC.get(inputRefs.aggregateDonutCatalog)
+        adc = butlerQC.get(inputRefs.aggregateDonutTable)
         azr = butlerQC.get(inputRefs.aggregateZernikesRaw)
         aza = butlerQC.get(inputRefs.aggregateZernikesAvg)
 
@@ -410,7 +410,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                 wintra = adc[wadc]['focusZ'] == fzmin
                 wextra = adc[wadc]['focusZ'] == fzmax
                 for k in avg_keys:
-                    # If one catalog has more rows than the other, trim the longer one
+                    # If one table has more rows than the other, trim the longer one
                     if wintra.sum() > wextra.sum():
                         wintra[wintra] = [True]*wextra.sum() + [False]*(wintra.sum() - wextra.sum())
                     elif wextra.sum() > wintra.sum():
