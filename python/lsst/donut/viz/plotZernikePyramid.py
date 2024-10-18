@@ -54,7 +54,7 @@ def plotZernikePyramid(
         xy_inner=4.18*0.612,
     )
     intrinsic = np.array([z.coef for z in dzs(cat['thx_OCS'], cat['thy_OCS'])])
-    resid = zs - intrinsic[:, 4:23]
+    resid = zs - intrinsic[:, 4:29]
 
     fig2 = zernikePyramid(
         cat['thx_OCS'], cat['thy_OCS'],
@@ -68,7 +68,7 @@ def plotZernikePyramid(
     # Plot the actual intrinsic too.
     fig3 = zernikePyramid(
         cat['thx_OCS'], cat['thy_OCS'],
-        intrinsic[:, 4:23].T, cmap='seismic', s=2,
+        intrinsic[:, 4:29].T, cmap='seismic', s=2,
     )
     rose(fig3, vecs_xy, p0=(0.15, 0.8))
     rose(fig3, vecs_NE, p0=(0.85, 0.8))
