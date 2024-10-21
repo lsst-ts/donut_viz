@@ -197,13 +197,6 @@ class PlotDonutTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("visit", "instrument"),
 ):
-    visitInfos = ct.Input(
-        doc="Input exposure to make measurements on",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="VisitInfo",
-        name="raw.visitInfo",
-        multiple=True,
-    )
     donutStampsIntraVisit = ct.Input(
         doc="Intrafocal Donut Stamps",
         dimensions=("visit", "instrument"),
@@ -260,12 +253,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
         outputRefs: pipeBase.OutputQuantizedConnection
     ) -> None:
         visit = inputRefs.donutStampsIntraVisit.dataId['visit']
-        for visitInfoRef in inputRefs.visitInfos:
-            if visitInfoRef.dataId['exposure'] == visit:
-                visitInfo = butlerQC.get(visitInfoRef)
-                break
-        else:
-            raise ValueError(f"Expected to find a visitInfo with exposure {visit}")
+        inst = inputRefs.donutStampsIntraVisit.dataId['instrument']
 
         donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
         donutStampsExtra = butlerQC.get(inputRefs.donutStampsExtraVisit)
@@ -277,10 +265,10 @@ class PlotDonutTask(pipeBase.PipelineTask):
         visitExtra = donutStampsExtra.metadata.getArray('VISIT')[0]
 
         # LSST detector layout
-        q = visitInfo.boresightParAngle.asRadians()
-        rotAngle = visitInfo.boresightRotAngle.asRadians()
+        q = donutStampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
+        rotAngle = donutStampsExtra.metadata["BORESIGHT_ROT_ANGLE_RAD"]
         rtp = q - rotAngle - np.pi/2
-        match inst:=visitInfo.getInstrumentLabel():
+        match inst:
             case 'LSSTCam' | 'LSSTCamSim':
                 nacross = 15
                 fp_size = 0.55  # 55% of horizontal space

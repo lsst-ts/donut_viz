@@ -134,7 +134,6 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         rot_NW = galsim.zernike.zernikeRotMatrix(jmax, -q)[4:,4:]
         for cat in (out_raw, out_avg):
             cat.meta = meta
-            print(np.shape(cat['zk_CCS']), np.shape(rot_OCS))
             cat['zk_OCS'] = cat['zk_CCS'] @ rot_OCS
             cat['zk_NW'] = cat['zk_CCS'] @ rot_NW
 
