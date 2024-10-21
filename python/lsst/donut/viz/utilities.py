@@ -11,6 +11,7 @@ import numpy as np
 
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.geom import Point2D
+from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 
 
 @lru_cache()
@@ -19,18 +20,17 @@ def get_cat(butler, extra_exposure_id, intra_exposure_id=None, instrument='LSSTC
         intra_exposure_id = extra_exposure_id+1
     camera = butler.get("camera", instrument=instrument)
     band = butler.registry.expandDataId(visit=extra_exposure_id)["band"]
-    refdet = camera['R22_S11'].getId()  # Works for both LsstCam and LsstComCam
+
     cats = []
     for detnum in trange(189):
         det = camera[detnum]
         # if det.getName().startswith("R01"):
         #     continue
         tform = det.getTransform(PIXELS, FIELD_ANGLE)
-        cat = butler.get("donutCatalog", visit=extra_exposure_id, detector=detnum)
-        cat2 = butler.get("donutCatalog", visit=intra_exposure_id, detector=detnum)
+        cat = butler.get("donutTable", visit=extra_exposure_id, detector=detnum)
+        cat2 = butler.get("donutTable", visit=intra_exposure_id, detector=detnum)
         if len(cat) != len(cat2):
             continue
-        cat = Table.from_pandas(cat)  # kill the pandas!
 
         pts = tform.applyForward([Point2D(x, y) for x, y in zip(cat['centroid_x'], cat['centroid_y'])])
         cat['thx_CCS'] = [pt.y for pt in pts]  # Note x,y => y,x
@@ -40,7 +40,7 @@ def get_cat(butler, extra_exposure_id, intra_exposure_id=None, instrument='LSSTC
         cat['zs_CCS'] = zs
         cats.append(cat)
     cat = vstack(cats)
-    visitInfo = butler.get("postISRCCD.visitInfo", exposure=extra_exposure_id, detector=refdet)
+    visitInfo = convertDictToVisitInfo(cats[0].meta['visit_info'])
     q = visitInfo.boresightParAngle.asRadians()
     rot = visitInfo.boresightRotAngle.asRadians()
     rtp = q-rot-np.pi/2

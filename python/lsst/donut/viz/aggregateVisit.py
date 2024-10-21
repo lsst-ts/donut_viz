@@ -3,6 +3,7 @@ import numpy as np
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.pipe.base import connectionTypes as ct
+from astropy import units as u
 from astropy.table import Table, vstack
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.geom import Point2D, radians
@@ -13,9 +14,9 @@ from lsst.utils.timer import timeMethod
 
 
 __all__ = [
-    "AggregateZernikesTaskConnections",
-    "AggregateZernikesTaskConfig",
-    "AggregateZernikesTask",
+    "AggregateZernikeTablesTaskConnections",
+    "AggregateZernikeTablesTaskConfig",
+    "AggregateZernikeTablesTask",
 
     "AggregateDonutTablesTaskConnections",
     "AggregateDonutTablesTaskConfig",
@@ -31,29 +32,15 @@ __all__ = [
 ]
 
 
-class AggregateZernikesTaskConnections(
+class AggregateZernikeTablesTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "visit"),
 ):
-    visitInfos = ct.Input(
-        doc="Input exposure to make measurements on",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="VisitInfo",
-        name="raw.visitInfo",
-        multiple=True,
-    )
-    zernikesRaw = ct.Input(
+    zernikeTable = ct.Input(
         doc="Zernike Coefficients from all donuts",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="NumpyArray",
-        name="zernikeEstimateRaw",
-        multiple=True,
-    )
-    zernikesAvg = ct.Input(
-        doc="Zernike Coefficients averaged over donuts",
-        dimensions=("visit", "detector", "instrument"),
-        storageClass="NumpyArray",
-        name="zernikeEstimateAvg",
+        storageClass="AstropyQTable",
+        name="zernikes",
         multiple=True,
     )
     camera = ct.PrerequisiteInput(
@@ -77,16 +64,16 @@ class AggregateZernikesTaskConnections(
     )
 
 
-class AggregateZernikesTaskConfig(
+class AggregateZernikeTablesTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=AggregateZernikesTaskConnections,
+    pipelineConnections=AggregateZernikeTablesTaskConnections,
 ):
     pass
 
 
-class AggregateZernikesTask(pipeBase.PipelineTask):
-    ConfigClass = AggregateZernikesTaskConfig
-    _DefaultName = "AggregateZernikes"
+class AggregateZernikeTablesTask(pipeBase.PipelineTask):
+    ConfigClass = AggregateZernikeTablesTaskConfig
+    _DefaultName = "AggregateZernikeTables"
 
     @timeMethod
     def runQuantum(
@@ -95,45 +82,49 @@ class AggregateZernikesTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection
     ):
-        visit = outputRefs.aggregateZernikesRaw.dataId['visit']
         camera = butlerQC.get(inputRefs.camera)
 
         raw_tables = []
         avg_tables = []
-        for zernikeRawRef, zernikeAvgRef in zip(inputRefs.zernikesRaw, inputRefs.zernikesAvg):
-            zernikeRaw = butlerQC.get(zernikeRawRef)
-            zernikeAvg = butlerQC.get(zernikeAvgRef)
+        for zernikesRef in inputRefs.zernikeTable:
+            zernike_table = butlerQC.get(zernikesRef)
             raw_table = Table()
-            raw_table['zk_CCS'] = zernikeRaw
-            raw_table['detector'] = camera[zernikeRawRef.dataId['detector']].getName()
+            zernikes_merged = []
+            for col_name in zernike_table.colnames:
+                # Grab zernike output columns
+                if col_name.startswith('Z'):
+                    zernikes_merged.append(zernike_table[col_name].to(u.um).value)
+            zernikes_merged = np.array(zernikes_merged).T
+            raw_table['zk_CCS'] = np.atleast_2d(zernikes_merged[1:])
+            raw_table['detector'] = camera[zernikesRef.dataId['detector']].getName()
             raw_tables.append(raw_table)
             avg_table = Table()
-            avg_table['zk_CCS'] = zernikeAvg.reshape(1, -1)
-            avg_table['detector'] = camera[zernikeAvgRef.dataId['detector']].getName()
+            avg_table['zk_CCS'] = np.atleast_2d(zernikes_merged[0])
+            avg_table['detector'] = camera[zernikesRef.dataId['detector']].getName()
             avg_tables.append(avg_table)
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
 
-        # just get the first one, they're all the same
-        visitInfo = butlerQC.get(inputRefs.visitInfos[0])
+        # just get the last one, they're all the same
+        table_meta = zernike_table.meta
 
         # TODO: Swap parallactic angle for pseudo parallactic angle.
         #       See SMTN-019 for details.
         meta = {}
-        meta['visit'] = visit
-        meta['parallacticAngle'] = visitInfo.boresightParAngle.asRadians()
-        meta['rotAngle'] = visitInfo.boresightRotAngle.asRadians()
+        meta['visit'] = table_meta['extra']['visit']
+        meta['parallacticAngle'] = table_meta['extra']['boresight_par_angle_rad']
+        meta['rotAngle'] = table_meta['extra']['boresight_rot_angle_rad']
         rtp = (
-            visitInfo.boresightParAngle
-            - visitInfo.boresightRotAngle
+            meta['parallacticAngle'] * radians
+            - meta['rotAngle'] * radians
             - (np.pi / 2 * radians)
         ).asRadians()
         meta['rotTelPos'] = rtp
-        meta['ra'] = visitInfo.boresightRaDec.getRa().asRadians()
-        meta['dec'] = visitInfo.boresightRaDec.getDec().asRadians()
-        meta['az'] = visitInfo.boresightAzAlt.getLongitude().asRadians()
-        meta['alt'] = visitInfo.boresightAzAlt.getLatitude().asRadians()
-        meta['mjd'] = visitInfo.date.toAstropy().mjd
+        meta['ra'] = table_meta['extra']['boresight_ra_rad']
+        meta['dec'] = table_meta['extra']['boresight_dec_rad']
+        meta['az'] = table_meta['extra']['boresight_az_rad']
+        meta['alt'] = table_meta['extra']['boresight_alt_rad']
+        meta['mjd'] = table_meta['mjd']
 
         q = meta['parallacticAngle']
         rtp = meta['rotTelPos']
@@ -143,6 +134,7 @@ class AggregateZernikesTask(pipeBase.PipelineTask):
         rot_NW = galsim.zernike.zernikeRotMatrix(jmax, -q)[4:,4:]
         for cat in (out_raw, out_avg):
             cat.meta = meta
+            print(np.shape(cat['zk_CCS']), np.shape(rot_OCS))
             cat['zk_OCS'] = cat['zk_CCS'] @ rot_OCS
             cat['zk_NW'] = cat['zk_CCS'] @ rot_NW
 

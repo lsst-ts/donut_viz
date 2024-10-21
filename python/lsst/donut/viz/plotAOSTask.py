@@ -187,7 +187,6 @@ class PlotAOSTask(pipeBase.PipelineTask):
         intrinsic = np.array([z.coef for z in dzs(aos_raw['thx_OCS'], aos_raw['thy_OCS'])]).T[4:29]
         intrinsicPyramid = self.doPyramid(x, y, intrinsic, rtp, q)
 
-        import ipdb; ipdb.set_trace()
         resid = zk - intrinsic
         residPyramid = self.doPyramid(x, y, resid, rtp, q)
 
