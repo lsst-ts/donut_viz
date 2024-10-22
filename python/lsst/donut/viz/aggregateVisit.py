@@ -124,7 +124,8 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         meta['dec'] = table_meta['extra']['boresight_dec_rad']
         meta['az'] = table_meta['extra']['boresight_az_rad']
         meta['alt'] = table_meta['extra']['boresight_alt_rad']
-        meta['mjd'] = table_meta['mjd']
+        # Average mjds
+        meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
 
         q = meta['parallacticAngle']
         rtp = meta['rotTelPos']
