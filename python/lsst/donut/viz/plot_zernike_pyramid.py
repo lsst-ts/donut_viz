@@ -4,7 +4,7 @@ import galsim
 import numpy as np
 import yaml
 from utilities import get_cat, rose
-from zernikePyramid import zernikePyramid
+from zernike_pyramid import zernikePyramid
 
 
 def plotZernikePyramid(

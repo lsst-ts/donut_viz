@@ -4,7 +4,7 @@ import numpy as np
 import yaml
 from scipy.optimize import minimize_scalar
 from tqdm import tqdm
-from zernikePyramid import zernikePyramid
+from zernike_pyramid import zernikePyramid
 
 
 def spotSize(optic, wavelength, nrad=5, naz=30, outer_field=1.75):
