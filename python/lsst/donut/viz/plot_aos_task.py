@@ -16,7 +16,7 @@ from .utilities import (
     get_instrument_channel_name,
     rose,
 )
-from .zernikePyramid import zernikePyramid
+from .zernike_pyramid import zernikePyramid
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
