@@ -1,20 +1,22 @@
-import lsst.pipe.base.connectionTypes as ct
-import lsst.pipe.base as pipeBase
-import lsst.pex.config as pexConfig
-import galsim
 import tempfile
-import yaml
+from pathlib import Path
 
+import galsim
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+import lsst.pipe.base.connectionTypes as ct
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
-from .zernikePyramid import zernikePyramid
-from .utilities import (
-    rose, add_rotated_axis, get_instrument_channel_name,
-    get_day_obs_seq_num_from_visitid
-)
-from pathlib import Path
+import yaml
 from lsst.utils.timer import timeMethod
+
+from .utilities import (
+    add_rotated_axis,
+    get_day_obs_seq_num_from_visitid,
+    get_instrument_channel_name,
+    rose,
+)
+from .zernikePyramid import zernikePyramid
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
@@ -95,7 +97,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
         self,
         butlerQC: pipeBase.QuantumContext,
         inputRefs: pipeBase.InputQuantizedConnection,
-        outputRefs: pipeBase.OutputQuantizedConnection
+        outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
         aos_raw = butlerQC.get(inputRefs.aggregateAOSRaw)
         # aos_avg = butlerQC.get(inputRefs.aggregateAOSAvg)
@@ -107,49 +109,52 @@ class PlotAOSTask(pipeBase.PipelineTask):
         butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid)
 
         if self.config.doRubinTVUpload:
-            instrument = inputRefs.aggregateAOSRaw.dataId['instrument']
-            visit = inputRefs.aggregateAOSRaw.dataId['visit']
+            instrument = inputRefs.aggregateAOSRaw.dataId["instrument"]
+            visit = inputRefs.aggregateAOSRaw.dataId["visit"]
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
             with tempfile.TemporaryDirectory() as tmpdir:
-                zk_meas_fn = Path(tmpdir) / 'zk_measurement_pyramid.png'
+                zk_meas_fn = Path(tmpdir) / "zk_measurement_pyramid.png"
                 zkPyramid.savefig(zk_meas_fn)
-                zk_resid_fn = Path(tmpdir) / 'zk_residual_pyramid.png'
+                zk_resid_fn = Path(tmpdir) / "zk_residual_pyramid.png"
                 residPyramid.savefig(zk_resid_fn)
 
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
-                    plotName='zk_measurement_pyramid',
+                    plotName="zk_measurement_pyramid",
                     dayObs=day_obs,
                     seqNum=seq_num,
-                    filename=zk_meas_fn
+                    filename=zk_meas_fn,
                 )
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
-                    plotName='zk_residual_pyramid',
+                    plotName="zk_residual_pyramid",
                     dayObs=day_obs,
                     seqNum=seq_num,
-                    filename=zk_resid_fn
+                    filename=zk_resid_fn,
                 )
 
     def doPyramid(
         self,
-        x, y, zk,
-        rtp, q,
+        x,
+        y,
+        zk,
+        rtp,
+        q,
     ):
-        fig = zernikePyramid(x, y, zk, cmap='seismic', s=10)
+        fig = zernikePyramid(x, y, zk, cmap="seismic", s=10)
         vecs_xy = {
-            '$x_\mathrm{Opt}$':(1,0),
-            '$y_\mathrm{Opt}$':(0,-1),
-            '$x_\mathrm{Cam}$':(np.cos(rtp), -np.sin(rtp)),
-            '$y_\mathrm{Cam}$':(-np.sin(rtp), -np.cos(rtp)),
+            r"$x_\mathrm{Opt}$": (1, 0),
+            r"$y_\mathrm{Opt}$": (0, -1),
+            r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
+            r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
         }
         rose(fig, vecs_xy, p0=(0.15, 0.8))
 
         vecs_NE = {
-            'az':(1,0),
-            'alt':(0,+1),
-            'N':(np.sin(q), np.cos(q)),
-            'E':(np.sin(q-np.pi/2), np.cos(q-np.pi/2))
+            "az": (1, 0),
+            "alt": (0, +1),
+            "N": (np.sin(q), np.cos(q)),
+            "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
         }
         rose(fig, vecs_NE, p0=(0.85, 0.8))
 
@@ -165,26 +170,28 @@ class PlotAOSTask(pipeBase.PipelineTask):
         # wbad = np.isin(aos_raw['detector'], [7, 8])
         # aos_raw = aos_raw[~wbad]
 
-        x = aos_raw['thx_OCS']
-        y = -aos_raw['thy_OCS']  # +y is down on plot
-        zk = aos_raw['zk_OCS'].T
-        rtp = aos_raw.meta['rotTelPos']
-        q = aos_raw.meta['parallacticAngle']
+        x = aos_raw["thx_OCS"]
+        y = -aos_raw["thy_OCS"]  # +y is down on plot
+        zk = aos_raw["zk_OCS"].T
+        rtp = aos_raw.meta["rotTelPos"]
+        q = aos_raw.meta["parallacticAngle"]
 
         zkPyramid = self.doPyramid(x, y, zk, rtp, q)
 
         # We want residuals from the intrinsic design too.
-        path = Path(__file__).parent.parent.parent.parent.parent / 'data'
-        band = 'r'  # for a minute
-        path /= f'intrinsic_dz_{band}.yaml'
-        coefs = np.array(yaml.safe_load(open(path, 'r')))
+        path = Path(__file__).parent.parent.parent.parent.parent / "data"
+        band = "r"  # for a minute
+        path /= f"intrinsic_dz_{band}.yaml"
+        coefs = np.array(yaml.safe_load(open(path, "r")))
         dzs = galsim.zernike.DoubleZernike(
             coefs,
             uv_outer=np.deg2rad(1.82),
             xy_outer=4.18,
-            xy_inner=4.18*0.612,
+            xy_inner=4.18 * 0.612,
         )
-        intrinsic = np.array([z.coef for z in dzs(aos_raw['thx_OCS'], aos_raw['thy_OCS'])]).T[4:29]
+        intrinsic = np.array(
+            [z.coef for z in dzs(aos_raw["thx_OCS"], aos_raw["thy_OCS"])]
+        ).T[4:29]
         intrinsicPyramid = self.doPyramid(x, y, intrinsic, rtp, q)
 
         resid = zk - intrinsic
@@ -233,6 +240,7 @@ class PlotDonutTaskConfig(
         default=False,
     )
 
+
 class PlotDonutTask(pipeBase.PipelineTask):
     ConfigClass = PlotDonutTaskConfig
     _DefaultName = "plotDonutTask"
@@ -250,10 +258,10 @@ class PlotDonutTask(pipeBase.PipelineTask):
         self,
         butlerQC: pipeBase.QuantumContext,
         inputRefs: pipeBase.InputQuantizedConnection,
-        outputRefs: pipeBase.OutputQuantizedConnection
+        outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        visit = inputRefs.donutStampsIntraVisit.dataId['visit']
-        inst = inputRefs.donutStampsIntraVisit.dataId['instrument']
+        visit = inputRefs.donutStampsIntraVisit.dataId["visit"]
+        inst = inputRefs.donutStampsIntraVisit.dataId["instrument"]
 
         donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
         donutStampsExtra = butlerQC.get(inputRefs.donutStampsExtraVisit)
@@ -261,30 +269,28 @@ class PlotDonutTask(pipeBase.PipelineTask):
         # donutStamps metadata as the
         # visitId above under which donutStamps were saved
         # is only the extra-focal visitId
-        visitIntra = donutStampsIntra.metadata.getArray('VISIT')[0]
-        visitExtra = donutStampsExtra.metadata.getArray('VISIT')[0]
+        visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
+        visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
 
         # LSST detector layout
         q = donutStampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
         rotAngle = donutStampsExtra.metadata["BORESIGHT_ROT_ANGLE_RAD"]
-        rtp = q - rotAngle - np.pi/2
+        rtp = q - rotAngle - np.pi / 2
         match inst:
-            case 'LSSTCam' | 'LSSTCamSim':
+            case "LSSTCam" | "LSSTCamSim":
                 nacross = 15
                 fp_size = 0.55  # 55% of horizontal space
-            case 'LSSTComCam' | 'LSSTComCamSim':
+            case "LSSTComCam" | "LSSTComCamSim":
                 nacross = 3
                 fp_size = 0.50  # 50% of horizontal space
             case _:
                 raise ValueError(f"Unknown instrument {inst}")
-        det_size = fp_size/nacross
+        det_size = fp_size / nacross
         fp_center = 0.5, 0.475
 
-
         for donutStampSet, visit in zip(
-            [donutStampsIntra, donutStampsExtra],
-            [visitIntra, visitExtra]
-            ):
+            [donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]
+        ):
 
             fig = plt.figure(figsize=(11, 8.5))
             aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
@@ -296,25 +302,29 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 #     continue
                 # if 'S01' in det_name:
                 #     continue
-                i = 3*int(det_name[1]) + int(det_name[5])
-                j = 3*int(det_name[2]) + int(det_name[6])
-                x = i-7
-                y = 7-j
-                xp = np.cos(rtp)*x + np.sin(rtp)*y
-                yp = -np.sin(rtp)*x + np.cos(rtp)*y
+                i = 3 * int(det_name[1]) + int(det_name[5])
+                j = 3 * int(det_name[2]) + int(det_name[6])
+                x = i - 7
+                y = 7 - j
+                xp = np.cos(rtp) * x + np.sin(rtp) * y
+                yp = -np.sin(rtp) * x + np.cos(rtp) * y
                 ax, aux_ax = add_rotated_axis(
                     fig,
-                    (xp*det_size + fp_center[0], yp*det_size*aspect + fp_center[1]),
-                    (det_size*1.25, det_size*1.25),
-                    -np.rad2deg(rtp)
+                    (
+                        xp * det_size + fp_center[0],
+                        yp * det_size * aspect + fp_center[1],
+                    ),
+                    (det_size * 1.25, det_size * 1.25),
+                    -np.rad2deg(rtp),
                 )
                 arr = donut.stamp_im.image.array
                 vmin, vmax = np.quantile(arr, (0.01, 0.99))
                 aux_ax.imshow(
                     donut.stamp_im.image.array.T,
-                    vmin=vmin, vmax=vmax,
-                    extent=[0, det_size*1.25, 0, det_size*1.25],
-                    origin='upper'  # +y is down
+                    vmin=vmin,
+                    vmax=vmax,
+                    extent=[0, det_size * 1.25, 0, det_size * 1.25],
+                    origin="upper",  # +y is down
                 )
                 xlim = aux_ax.get_xlim()
                 ylim = aux_ax.get_ylim()
@@ -322,50 +332,49 @@ class PlotDonutTask(pipeBase.PipelineTask):
                     xlim[0] + 0.03 * (xlim[1] - xlim[0]),
                     ylim[1] - 0.03 * (ylim[1] - ylim[0]),
                     det_name,
-                    color='w',
+                    color="w",
                     rotation=-np.rad2deg(rtp),
-                    rotation_mode='anchor',
-                    ha='left',
-                    va='top'
+                    rotation_mode="anchor",
+                    ha="left",
+                    va="top",
                 )
 
             vecs_xy = {
-                '$x_\mathrm{Opt}$':(1,0),
-                '$y_\mathrm{Opt}$':(0,-1),
-                '$x_\mathrm{Cam}$':(np.cos(rtp), -np.sin(rtp)),
-                '$y_\mathrm{Cam}$':(-np.sin(rtp), -np.cos(rtp)),
+                r"$x_\mathrm{Opt}$": (1, 0),
+                r"$y_\mathrm{Opt}$": (0, -1),
+                r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
+                r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
             }
             rose(fig, vecs_xy, p0=(0.15, 0.8))
 
             vecs_NE = {
-                'az':(1,0),
-                'alt':(0,+1),
-                'N':(np.sin(q), np.cos(q)),
-                'E':(np.sin(q-np.pi/2), np.cos(q-np.pi/2))
+                "az": (1, 0),
+                "alt": (0, +1),
+                "N": (np.sin(q), np.cos(q)),
+                "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
             }
             rose(fig, vecs_NE, p0=(0.85, 0.8))
-            fig.text(0.47, 0.93, f'{donut.defocal_type}: {visit}')
+            fig.text(0.47, 0.93, f"{donut.defocal_type}: {visit}")
 
-            if donut.defocal_type == 'extra':
+            if donut.defocal_type == "extra":
                 butlerQC.put(fig, outputRefs.donutPlotExtra)
-            elif donut.defocal_type == 'intra':
+            elif donut.defocal_type == "intra":
                 butlerQC.put(fig, outputRefs.donutPlotIntra)
 
             if self.config.doRubinTVUpload:
                 # that's the same for intra and extra-focal
                 instrument = inputRefs.donutStampsIntraVisit.dataId["instrument"]
 
-                # seq_num is sometimes different for intra vs extra-focal if pistoning
+                # seq_num is sometimes different for
+                # intra vs extra-focal if pistoning
                 day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    donut_gallery_fn = (
-                        Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
-                    )
+                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
                     fig.savefig(donut_gallery_fn)
 
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(instrument),
-                        plotName=f"fp_donut_gallery",
+                        plotName="fp_donut_gallery",
                         dayObs=day_obs,
                         seqNum=seq_num,
                         filename=donut_gallery_fn,
