@@ -107,3 +107,30 @@ class TestAggregateZernikeTablesTask(TestCase):
         donut_meta_keys = self.meta_keys + ["focusZ"]
         for key in ["extra", "intra"]:
             self.assertCountEqual(agg_donut_table.meta[key].keys(), donut_meta_keys)
+        donut_meta_keys.remove("focusZ")
+        donut_meta_keys.remove("visit")
+        self.assertCountEqual(agg_donut_table.meta["average"], donut_meta_keys)
+
+    def testAggregateDonutStamps(self):
+        intra_dataset_list = list(
+            self.butler.query_datasets(
+                "donutStampsIntraVisit", collections=self.test_run_name
+            )
+        )
+        extra_dataset_list = list(
+            self.butler.query_datasets(
+                "donutStampsExtraVisit", collections=self.test_run_name
+            )
+        )
+        self.assertEqual(len(intra_dataset_list), 1)
+        self.assertEqual(len(extra_dataset_list), 1)
+        intra_donuts = self.butler.get(intra_dataset_list[0])
+        extra_donuts = self.butler.get(extra_dataset_list[0])
+        self.assertEqual(len(intra_donuts), 2)
+        self.assertEqual(len(extra_donuts), 2)
+        intra_meta = intra_donuts.metadata.toDict()
+        extra_meta = extra_donuts.metadata.toDict()
+        self.assertCountEqual(intra_meta["DET_NAME"], ["R22_S10", "R22_S11"])
+        self.assertCountEqual(intra_meta["DFC_TYPE"], ["intra"] * 2)
+        self.assertCountEqual(extra_meta["DET_NAME"], ["R22_S10", "R22_S11"])
+        self.assertCountEqual(extra_meta["DFC_TYPE"], ["extra"] * 2)

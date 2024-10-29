@@ -45,3 +45,5 @@ tasks:
     class: lsst.donut.viz.AggregateZernikeTablesTask
   aggregateDonutTablesTask:
     class: lsst.donut.viz.AggregateDonutTablesTask
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
