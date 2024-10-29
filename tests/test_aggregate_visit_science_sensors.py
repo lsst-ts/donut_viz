@@ -16,6 +16,17 @@ class TestAggregateZernikeTablesTask(TestCase):
         wep_module_dir = getModulePath()
         cls.test_data_dir = os.path.join(wep_module_dir, "tests", "testData")
         cls.test_repo_dir = os.path.join(cls.test_data_dir, "gen3TestRepo")
+        cls.meta_keys = [
+            "alt",
+            "az",
+            "dec",
+            "mjd",
+            "parallacticAngle",
+            "ra",
+            "rotAngle",
+            "rotTelPos",
+            "visit",
+        ]
 
         cls.butler = Butler(cls.test_repo_dir)
         cls.test_run_name = "test_run_1"
@@ -51,18 +62,23 @@ class TestAggregateZernikeTablesTask(TestCase):
         clean_up_cmd = writeCleanUpRepoCmd(cls.test_repo_dir, cls.test_run_name)
         runProgram(clean_up_cmd)
 
-    def testZernikesAvg(self):
+    def testAggregateZernikesAvg(self):
         average_dataset_list = list(
-            self.butler.query_datasets("aggregateZernikesAvg", collections="test_run_1")
+            self.butler.query_datasets(
+                "aggregateZernikesAvg", collections=self.test_run_name
+            )
         )
         self.assertEqual(len(average_dataset_list), 1)
         agg_zern_avg = self.butler.get(average_dataset_list[0])
         self.assertEqual(len(agg_zern_avg), 2)
         self.assertCountEqual(agg_zern_avg["detector"], ["R22_S10", "R22_S11"])
+        self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys)
 
-    def testZernikesRaw(self):
+    def testAggregateZernikesRaw(self):
         raw_dataset_list = list(
-            self.butler.query_datasets("aggregateZernikesRaw", collections="test_run_1")
+            self.butler.query_datasets(
+                "aggregateZernikesRaw", collections=self.test_run_name
+            )
         )
         self.assertEqual(len(raw_dataset_list), 1)
         agg_zern_raw = self.butler.get(raw_dataset_list[0])
@@ -70,3 +86,24 @@ class TestAggregateZernikeTablesTask(TestCase):
         self.assertCountEqual(
             agg_zern_raw["detector"], ["R22_S10"] * 3 + ["R22_S11"] * 3
         )
+        self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys)
+
+    def testAggregateDonuts(self):
+        donut_table_list = list(
+            self.butler.query_datasets(
+                "aggregateDonutTable", collections=self.test_run_name
+            )
+        )
+        self.assertEqual(len(donut_table_list), 1)
+        agg_donut_table = self.butler.get(donut_table_list[0])
+        self.assertEqual(len(agg_donut_table), 12)
+        self.assertCountEqual(
+            agg_donut_table["detector"], ["R22_S10"] * 6 + ["R22_S11"] * 6
+        )
+        self.assertCountEqual(agg_donut_table["focusZ"], [1.5] * 6 + [-1.5] * 6)
+        self.assertCountEqual(
+            agg_donut_table.meta.keys(), ["extra", "intra", "average"]
+        )
+        donut_meta_keys = self.meta_keys + ["focusZ"]
+        for key in ["extra", "intra"]:
+            self.assertCountEqual(agg_donut_table.meta[key].keys(), donut_meta_keys)

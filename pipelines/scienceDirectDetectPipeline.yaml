@@ -29,10 +29,10 @@ tasks:
       doFringe: False
       doOverscan: True
       python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
-  generateDonutDirectDetectTask:
-    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+  generateDonutCatalogWcsTask:
+    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
-      donutSelector.useCustomMagLimit: True
+      donutSelector.unblendedSeparation: 1
   cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask
   calcZernikesTask:
@@ -43,4 +43,5 @@ tasks:
       estimateZernikes.maskKwargs: {'doMaskBlends': False}
   aggregateZernikeTablesTask:
     class: lsst.donut.viz.AggregateZernikeTablesTask
-    
+  aggregateDonutTablesTask:
+    class: lsst.donut.viz.AggregateDonutTablesTask
