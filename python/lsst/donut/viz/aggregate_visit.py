@@ -281,9 +281,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
                 # Add focusZ to donut table
                 table["focusZ"] = (
-                    intraVisitInfo.focusZ
-                    if intra
-                    else extraVisitInfo.focusZ
+                    intraVisitInfo.focusZ if intra else extraVisitInfo.focusZ
                 )
 
                 # Add field angle in CCS to the table
