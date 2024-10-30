@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 from lsst.daf.butler import Butler
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -10,7 +11,7 @@ from lsst.ts.wep.utils import (
 from lsst.utils.tests import TestCase
 
 
-class TestAggregateZernikeTablesTask(TestCase):
+class TestAggregateTasks(TestCase):
     @classmethod
     def setUpClass(cls):
         wep_module_dir = getModulePath()
@@ -134,3 +135,60 @@ class TestAggregateZernikeTablesTask(TestCase):
         self.assertCountEqual(intra_meta["DFC_TYPE"], ["intra"] * 2)
         self.assertCountEqual(extra_meta["DET_NAME"], ["R22_S10", "R22_S11"])
         self.assertCountEqual(extra_meta["DFC_TYPE"], ["extra"] * 2)
+
+    def testAggregateAOSVisitTableRaw(self):
+        raw_visit_table_list = list(
+            self.butler.query_datasets(
+                "aggregateAOSVisitTableRaw", collections=self.test_run_name
+            )
+        )
+        self.assertEqual(len(raw_visit_table_list), 1)
+        raw_visit_table = self.butler.get(raw_visit_table_list[0])
+        self.assertCountEqual(raw_visit_table.meta.keys(), self.meta_keys)
+        raw_zern_table = self.butler.get(
+            "aggregateZernikesRaw",
+            dataId=raw_visit_table_list[0].dataId,
+            collections=self.test_run_name,
+        )
+        self.assertEqual(len(raw_zern_table), len(raw_visit_table))
+        np.testing.assert_array_equal(
+            raw_zern_table["zk_CCS"], raw_visit_table["zk_CCS"]
+        )
+        donut_table = self.butler.get(
+            "aggregateDonutTable",
+            dataId=raw_visit_table_list[0].dataId,
+            collections=self.test_run_name,
+        )
+        self.assertEqual(len(donut_table) / 2, len(raw_visit_table))
+        np.testing.assert_array_equal(
+            donut_table["coord_ra"][donut_table["focusZ"] == -1.5].value,
+            raw_visit_table["coord_ra_intra"],
+        )
+
+    def testAggregateAOSVisitTableAvg(self):
+        avg_visit_table_list = list(
+            self.butler.query_datasets(
+                "aggregateAOSVisitTableAvg", collections=self.test_run_name
+            )
+        )
+        self.assertEqual(len(avg_visit_table_list), 1)
+        avg_visit_table = self.butler.get(avg_visit_table_list[0])
+        self.assertCountEqual(avg_visit_table.meta.keys(), self.meta_keys)
+        avg_zern_table = self.butler.get(
+            "aggregateZernikesAvg",
+            dataId=avg_visit_table_list[0].dataId,
+            collections=self.test_run_name,
+        )
+        self.assertEqual(len(avg_zern_table), len(avg_visit_table))
+        np.testing.assert_array_equal(
+            avg_zern_table["zk_CCS"], avg_visit_table["zk_CCS"]
+        )
+        donut_table = self.butler.get(
+            "aggregateDonutTable",
+            dataId=avg_visit_table_list[0].dataId,
+            collections=self.test_run_name,
+        )
+        np.testing.assert_array_equal(
+            np.mean(donut_table["thx_CCS"][donut_table["detector"] == "R22_S11"]),
+            avg_visit_table["thx_CCS"][avg_visit_table["detector"] == "R22_S11"],
+        )

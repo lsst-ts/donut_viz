@@ -47,3 +47,5 @@ tasks:
     class: lsst.donut.viz.AggregateDonutTablesTask
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
+  aggregateAOSVisitTableTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableTask
