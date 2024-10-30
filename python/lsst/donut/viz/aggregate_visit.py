@@ -157,6 +157,13 @@ class AggregateDonutTablesTaskConnections(
         name="donutTable",
         multiple=True,
     )
+    qualityTables = ct.Input(
+        doc="Donut quality tables",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutQualityTable",
+        multiple=True,
+    )
     camera = ct.PrerequisiteInput(
         name="camera",
         storageClass="Camera",
@@ -224,26 +231,62 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         else:
             pairs = self.pairer.run(visitInfoDict)
 
+        # Make dictionaries to match visits and detectors
+        donutRefDict = {
+            (ref.dataId["visit"], ref.dataId["detector"]): ref
+            for ref in inputRefs.donutTables
+        }
+        qualityRefDict = {
+            (ref.dataId["visit"], ref.dataId["detector"]): ref
+            for ref in inputRefs.qualityTables
+        }
+
+        # Find common (visit, detector) pairs
+        keys = set(donutRefDict) & set(qualityRefDict)
+
         for pair in pairs:
             intraVisitInfo = visitInfoDict[pair.intra]
             extraVisitInfo = visitInfoDict[pair.extra]
 
             tables = []
-            # Find all detectors...
-            for donutTableRef in inputRefs.donutTables:
-                dataId = donutTableRef.dataId
-                if dataId["visit"] not in (pair.intra, pair.extra):
+
+            # Iterate over the common (visit, detector) pairs
+            for visit, detector in keys:
+                # Determine if intra or extra
+                if visit == pair.intra:
+                    intra = True
+                elif visit == pair.extra:
+                    intra = False
+                else:
+                    # This visit isn't in this pair
+                    # so we will skip for now
                     continue
 
-                det = camera[dataId["detector"]]
+                # Get pixels -> field angle transform for this detector
+                det = camera[detector]
                 tform = det.getTransform(PIXELS, FIELD_ANGLE)
 
-                table = butlerQC.get(donutTableRef)
+                # Load the donut catalog table, and the donut quality table
+                donutTable = butlerQC.get(donutRefDict[(visit, detector)])
+                qualityTable = butlerQC.get(qualityRefDict[(visit, detector)])
+
+                # Get rows of quality table for this exposure
+                if intra:
+                    qualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
+                else:
+                    qualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
+
+                # Select donuts used in Zernike estimation
+                table = donutTable[qualityTable["FINAL_SELECT"]]
+
+                # Add focusZ to donut table
                 table["focusZ"] = (
                     intraVisitInfo.focusZ
-                    if dataId["visit"] == pair.intra
+                    if intra
                     else extraVisitInfo.focusZ
                 )
+
+                # Add field angle in CCS to the table
                 pts = tform.applyForward(
                     [
                         Point2D(x, y)
