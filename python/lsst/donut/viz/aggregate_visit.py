@@ -514,6 +514,13 @@ class AggregateDonutStampsTaskConnections(
         name="donutStampsExtra",
         multiple=True,
     )
+    qualityTables = ct.Input(
+        doc="Donut quality tables",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutQualityTable",
+        multiple=True,
+    )
     donutStampsIntraVisit = ct.Output(
         doc="Intrafocal Donut Stamps",
         dimensions=("visit", "instrument"),
@@ -557,13 +564,52 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
     ) -> None:
         intraStampsList = []
         extraStampsList = []
-        for intraRef, extraRef in zip(
-            inputRefs.donutStampsIntra, inputRefs.donutStampsExtra
+        for intraRef, extraRef, qualityRef in zip(
+            inputRefs.donutStampsIntra,
+            inputRefs.donutStampsExtra,
+            inputRefs.qualityTables,
         ):
+            # Load the donuts
             intra = butlerQC.get(intraRef)
             extra = butlerQC.get(extraRef)
+
+            # Load the quality table and determine which donuts were selected
+            quality = butlerQC.get(qualityRef)
+            intraSelect = quality[quality["DEFOCAL_TYPE"] == "intra"]["FINAL_SELECT"]
+            extraSelect = quality[quality["DEFOCAL_TYPE"] == "extra"]["FINAL_SELECT"]
+
+            # Extract metadata dictionaries
+            intraMeta = intra.metadata.toDict().copy()
+            extraMeta = extra.metadata.toDict().copy()
+
+            # Select donuts used in Zernike estimation
+            intra = DonutStamps([intra[i] for i in range(len(intra)) if intraSelect[i]])
+            extra = DonutStamps([extra[i] for i in range(len(extra)) if extraSelect[i]])
+
+            # Copy over metadata
+            intraMeta = {
+                key: (
+                    val
+                    if (not isinstance(val, list) or key == "COMMENT")
+                    else np.array(val)[intraSelect].tolist()
+                )
+                for key, val in intraMeta.items()
+            }
+            intra._metadata = intra.metadata.from_mapping(intraMeta)
+            extraMeta = {
+                key: (
+                    val
+                    if (not isinstance(val, list) or key == "COMMENT")
+                    else np.array(val)[extraSelect].tolist()
+                )
+                for key, val in extraMeta.items()
+            }
+            extra._metadata = extra.metadata.from_mapping(extraMeta)
+
+            # Append the requested number of donuts
             intraStampsList.append(intra[: self.config.maxDonutsPerDetector])
             extraStampsList.append(extra[: self.config.maxDonutsPerDetector])
+
         intraStampsListRavel = np.ravel(intraStampsList)
         extraStampsListRavel = np.ravel(extraStampsList)
 
