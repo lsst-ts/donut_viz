@@ -244,6 +244,13 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         # Find common (visit, detector) pairs
         keys = set(donutRefDict) & set(qualityRefDict)
 
+        # Raise error if there's no matches
+        if len(keys) == 0:
+            raise RuntimeError(
+                "No (visit, detector) matches found between "
+                "the donut and quality tables"
+            )
+
         for pair in pairs:
             intraVisitInfo = visitInfoDict[pair.intra]
             extraVisitInfo = visitInfoDict[pair.extra]
