@@ -209,12 +209,12 @@ class TestDonutVizPipeline(TestCase):
         )
         self.assertEqual(len(intrinsic_dataset_list), 1)
 
-        raw_dataset_list = list(
+        residual_dataset_list = list(
             self.butler.query_datasets(
-                "rawZernikePyramid", collections=self.test_run_name
+                "residualZernikePyramid", collections=self.test_run_name
             )
         )
-        self.assertEqual(len(raw_dataset_list), 1)
+        self.assertEqual(len(residual_dataset_list), 1)
 
     def testDonutPlotTask(self):
         # Test that plots exist in butler

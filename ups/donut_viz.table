@@ -5,6 +5,7 @@
 setupRequired(afw)
 setupRequired(daf_butler)
 setupRequired(geom)
+setupRequired(ts_wep)
 
 # The following is boilerplate for all packages.
 # See https://dmtn-001.lsst.io for details on LSST_LIBRARY_PATH.
