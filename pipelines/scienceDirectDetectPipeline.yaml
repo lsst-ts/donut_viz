@@ -49,3 +49,11 @@ tasks:
     class: lsst.donut.viz.AggregateDonutStampsTask
   aggregateAOSVisitTableTask:
     class: lsst.donut.viz.AggregateAOSVisitTableTask
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: false
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: false

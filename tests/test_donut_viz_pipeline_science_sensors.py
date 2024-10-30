@@ -11,7 +11,7 @@ from lsst.ts.wep.utils import (
 from lsst.utils.tests import TestCase
 
 
-class TestAggregateTasks(TestCase):
+class TestDonutVizPipeline(TestCase):
     @classmethod
     def setUpClass(cls):
         wep_module_dir = getModulePath()
@@ -192,3 +192,38 @@ class TestAggregateTasks(TestCase):
             np.mean(donut_table["thx_CCS"][donut_table["detector"] == "R22_S11"]),
             avg_visit_table["thx_CCS"][avg_visit_table["detector"] == "R22_S11"],
         )
+
+    def testPlotAOSTasks(self):
+        # Test that plots exist in butler
+        measured_dataset_list = list(
+            self.butler.query_datasets(
+                "measuredZernikePyramid", collections=self.test_run_name
+            )
+        )
+        self.assertEqual(len(measured_dataset_list), 1)
+
+        intrinsic_dataset_list = list(
+            self.butler.query_datasets(
+                "intrinsicZernikePyramid", collections=self.test_run_name
+            )
+        )
+        self.assertEqual(len(intrinsic_dataset_list), 1)
+
+        raw_dataset_list = list(
+            self.butler.query_datasets(
+                "rawZernikePyramid", collections=self.test_run_name
+            )
+        )
+        self.assertEqual(len(raw_dataset_list), 1)
+
+    def testDonutPlotTask(self):
+        # Test that plots exist in butler
+        intra_dataset_list = list(
+            self.butler.query_datasets("donutPlotIntra", collections=self.test_run_name)
+        )
+        self.assertEqual(len(intra_dataset_list), 1)
+
+        extra_dataset_list = list(
+            self.butler.query_datasets("donutPlotExtra", collections=self.test_run_name)
+        )
+        self.assertEqual(len(extra_dataset_list), 1)
