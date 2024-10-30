@@ -101,7 +101,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertCountEqual(
             agg_donut_table["detector"], ["R22_S10"] * 6 + ["R22_S11"] * 6
         )
-        self.assertCountEqual(agg_donut_table["focusZ"], [1.5] * 6 + [-1.5] * 6)
+        self.assertCountEqual(agg_donut_table["focusZ"].value, [1.5] * 6 + [-1.5] * 6)
         self.assertCountEqual(
             agg_donut_table.meta.keys(), ["extra", "intra", "average"]
         )
@@ -160,9 +160,9 @@ class TestDonutVizPipeline(TestCase):
             collections=self.test_run_name,
         )
         self.assertEqual(len(donut_table) / 2, len(raw_visit_table))
-        np.testing.assert_array_equal(
-            donut_table["coord_ra"][donut_table["focusZ"] == -1.5].value,
-            raw_visit_table["coord_ra_intra"],
+        self.assertCountEqual(
+            donut_table["coord_ra"][donut_table["focusZ"].value == -1.5].value,
+            raw_visit_table["coord_ra_intra"].value,
         )
 
     def testAggregateAOSVisitTableAvg(self):
