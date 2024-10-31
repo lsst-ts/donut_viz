@@ -241,11 +241,12 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             for ref in inputRefs.qualityTables
         }
 
-        # Find common (visit, detector) pairs
-        keys = set(donutRefDict) & set(qualityRefDict)
+        # Find common (visit, detector) extra-focal pairs
+        # DonutQualityTables only saved under extra-focal ids
+        extra_keys = set(donutRefDict) & set(qualityRefDict)
 
         # Raise error if there's no matches
-        if len(keys) == 0:
+        if len(extra_keys) == 0:
             raise RuntimeError(
                 "No (visit, detector) matches found between "
                 "the donut and quality tables"
@@ -258,15 +259,10 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             tables = []
 
             # Iterate over the common (visit, detector) pairs
-            for visit, detector in keys:
-                # Determine if intra or extra
-                if visit == pair.intra:
-                    intra = True
-                elif visit == pair.extra:
-                    intra = False
-                else:
-                    # This visit isn't in this pair
-                    # so we will skip for now
+            for visit, detector in extra_keys:
+                # Check if this extra-focal visit is in this pair.
+                if visit != pair.extra:
+                    # This visit isn't in this pair so we will skip for now
                     continue
 
                 # Get pixels -> field angle transform for this detector
@@ -274,35 +270,42 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 tform = det.getTransform(PIXELS, FIELD_ANGLE)
 
                 # Load the donut catalog table, and the donut quality table
-                donutTable = butlerQC.get(donutRefDict[(visit, detector)])
-                qualityTable = butlerQC.get(qualityRefDict[(visit, detector)])
+                intraDonutTable = butlerQC.get(donutRefDict[(pair.intra, detector)])
+                extraDonutTable = butlerQC.get(donutRefDict[(pair.extra, detector)])
+                qualityTable = butlerQC.get(qualityRefDict[(pair.extra, detector)])
 
                 # Get rows of quality table for this exposure
-                if intra:
-                    qualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
-                else:
-                    qualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
+                intraQualityTable = qualityTable[
+                    qualityTable["DEFOCAL_TYPE"] == "intra"
+                ]
+                extraQualityTable = qualityTable[
+                    qualityTable["DEFOCAL_TYPE"] == "extra"
+                ]
 
-                # Select donuts used in Zernike estimation
-                table = donutTable[qualityTable["FINAL_SELECT"]]
+                for donutTable, qualityTable in zip(
+                    [intraDonutTable, extraDonutTable],
+                    [intraQualityTable, extraQualityTable],
+                ):
+                    # Select donuts used in Zernike estimation
+                    table = donutTable[qualityTable["FINAL_SELECT"]]
 
-                # Add focusZ to donut table
-                table["focusZ"] = (
-                    intraVisitInfo.focusZ if intra else extraVisitInfo.focusZ
-                )
+                    # Add focusZ to donut table
+                    table["focusZ"] = table.meta["visit_info"]["focus_z"]
 
-                # Add field angle in CCS to the table
-                pts = tform.applyForward(
-                    [
-                        Point2D(x, y)
-                        for x, y in zip(table["centroid_x"], table["centroid_y"])
-                    ]
-                )
-                table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
-                table["thy_CCS"] = [pt.x for pt in pts]
-                table["detector"] = det.getName()
+                    # Add field angle in CCS to the table
+                    pts = tform.applyForward(
+                        [
+                            Point2D(x, y)
+                            for x, y in zip(table["centroid_x"], table["centroid_y"])
+                        ]
+                    )
+                    table["thx_CCS"] = [
+                        pt.y for pt in pts
+                    ]  # Transpose from DVCS to CCS
+                    table["thy_CCS"] = [pt.x for pt in pts]
+                    table["detector"] = det.getName()
 
-                tables.append(table)
+                    tables.append(table)
 
             # Don't attempt to stack metadata
             for table in tables:
