@@ -260,10 +260,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
             # Iterate over the common (visit, detector) pairs
             for visit, detector in extra_keys:
-                # Determine if intra or extra
-                if visit not in (pair.intra, pair.extra):
-                    # This visit isn't in this pair
-                    # so we will skip for now
+                # Check if this extra-focal visit is in this pair.
+                if visit != pair.extra:
+                    # This visit isn't in this pair so we will skip for now
                     continue
 
                 # Get pixels -> field angle transform for this detector
