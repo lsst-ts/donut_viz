@@ -181,16 +181,16 @@ class AggregateDonutTablesTaskConnections(
         multiple=True,
     )
     dummyExposureJoiner = ct.Input(
-        name="dummy_exposure_joiner",
+        name="raw",
         doc=(
-            "A dummy connections (datasets never actually need to exist) "
+            "A dummy connection (datasets are never actually loaded) "
             "that adds the 'exposure' dimension to the QG generation query "
             "in order to relate 'visit' and 'group'."
         ),
-        dimensions=("exposure",),
-        storageClass="AstropyTable",
+        dimensions=("exposure", "detector"),
+        storageClass="Exposure",
+        deferLoad=True,
         multiple=True,
-        minimum=0,
     )
 
     def __init__(self, *, config=None):
