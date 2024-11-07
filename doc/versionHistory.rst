@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.. _lsst.ts.donut.viz-1.1.1:
+
+-------------
+1.1.1
+-------------
+
+* Add deferQueryConstraint=True to input connections that have no incoming data from an intrafocal DataID
+
 .. _lsst.ts.donut.viz-1.1.0:
 
 -------------
