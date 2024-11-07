@@ -38,7 +38,7 @@ class AggregateZernikeTablesTaskConnections(
         storageClass="AstropyQTable",
         name="zernikes",
         multiple=True,
-        deferQueryConstraint=True,
+        deferGraphConstraint=True,
     )
     camera = ct.PrerequisiteInput(
         name="camera",
@@ -164,7 +164,7 @@ class AggregateDonutTablesTaskConnections(
         storageClass="AstropyQTable",
         name="donutQualityTable",
         multiple=True,
-        deferQueryConstraint=True,
+        deferGraphConstraint=True,
     )
     camera = ct.PrerequisiteInput(
         name="camera",
@@ -398,21 +398,21 @@ class AggregateAOSVisitTableTaskConnections(
         dimensions=("visit", "instrument"),
         storageClass="AstropyQTable",
         name="aggregateDonutTable",
-        deferQueryConstraint=True,
+        deferGraphConstraint=True,
     )
     aggregateZernikesRaw = ct.Input(
         doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesRaw",
-        deferQueryConstraint=True,
+        deferGraphConstraint=True,
     )
     aggregateZernikesAvg = ct.Input(
         doc="Visit-level table of donuts and Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesAvg",
-        deferQueryConstraint=True,
+        deferGraphConstraint=True,
     )
     aggregateAOSRaw = ct.Output(
         doc="Visit-level table of donuts and Zernikes",
@@ -521,7 +521,7 @@ class AggregateDonutStampsTaskConnections(
         storageClass="StampsBase",
         name="donutStampsIntra",
         multiple=True,
-        deferQueryConstraint=True,
+        deferGraphConstraint=True,
     )
     donutStampsExtra = ct.Input(
         doc="Extrafocal Donut Stamps",
@@ -529,7 +529,7 @@ class AggregateDonutStampsTaskConnections(
         storageClass="StampsBase",
         name="donutStampsExtra",
         multiple=True,
-        deferQueryConstraint=True,
+        deferGraphConstraint=True,
     )
     qualityTables = ct.Input(
         doc="Donut quality tables",
@@ -537,7 +537,7 @@ class AggregateDonutStampsTaskConnections(
         storageClass="AstropyQTable",
         name="donutQualityTable",
         multiple=True,
-        deferQueryConstraint=True,
+        deferGraphConstraint=True,
     )
     donutStampsIntraVisit = ct.Output(
         doc="Intrafocal Donut Stamps",
