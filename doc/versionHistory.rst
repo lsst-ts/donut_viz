@@ -4,6 +4,15 @@
 Version History
 ##################
 
+.. _lsst.ts.donut.viz-1.1.1:
+
+-------------
+1.1.1
+-------------
+
+* Add deferQueryConstraint=True to input connections that have no incoming data from an intrafocal DataId.
+* Add dummyExposureJoiner to get ``exposure`` dimension into quantum graph generation to relate visit and group.
+
 .. _lsst.ts.donut.viz-1.1.0:
 
 -------------
