@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.. _lsst.ts.donut.viz-1.1.2:
+
+-------------
+1.1.2
+-------------
+
+* Enabled Zernike pyramids to work with lower jmax.
+
 .. _lsst.ts.donut.viz-1.1.1:
 
 -------------
