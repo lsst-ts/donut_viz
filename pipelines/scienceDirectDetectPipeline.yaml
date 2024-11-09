@@ -26,6 +26,8 @@ tasks:
       doLinearize: False
       doDeferredCharge: False
       doDefect: False
+      doSaturation: False
+      doSuspect: False
   generateDonutCatalogWcsTask:
     class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
