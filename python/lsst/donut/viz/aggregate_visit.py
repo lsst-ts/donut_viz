@@ -87,11 +87,14 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             zernike_table = butlerQC.get(zernikesRef)
             raw_table = Table()
             zernikes_merged = []
+            noll_indices = []
             for col_name in zernike_table.colnames:
                 # Grab zernike output columns
                 if col_name.startswith("Z"):
                     zernikes_merged.append(zernike_table[col_name].to(u.um).value)
+                    noll_indices.append(int(col_name[1:]))
             zernikes_merged = np.array(zernikes_merged).T
+            noll_indices = np.array(noll_indices)
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
             raw_table["detector"] = camera[zernikesRef.dataId["detector"]].getName()
             raw_tables.append(raw_table)
@@ -123,17 +126,23 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         meta["alt"] = table_meta["extra"]["boresight_alt_rad"]
         # Average mjds
         meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
+        meta["nollIndices"] = noll_indices
 
         q = meta["parallacticAngle"]
         rtp = meta["rotTelPos"]
 
-        jmax = out_raw["zk_CCS"].shape[1] + 3
+        jmin = np.min(noll_indices)
+        jmax = np.max(noll_indices)
         rot_OCS = galsim.zernike.zernikeRotMatrix(jmax, -rtp)[4:, 4:]
         rot_NW = galsim.zernike.zernikeRotMatrix(jmax, -q)[4:, 4:]
         for cat in (out_raw, out_avg):
             cat.meta = meta
-            cat["zk_OCS"] = cat["zk_CCS"] @ rot_OCS
-            cat["zk_NW"] = cat["zk_CCS"] @ rot_NW
+            full_zk_ccs = np.zeros((len(cat), jmax - jmin + 1))
+            full_zk_ccs[:, noll_indices - 4] = cat["zk_CCS"]
+            cat["zk_OCS"] = full_zk_ccs @ rot_OCS
+            cat["zk_NW"] = full_zk_ccs @ rot_NW
+            cat["zk_OCS"] = cat["zk_OCS"][:, noll_indices - 4]
+            cat["zk_NW"] = cat["zk_NW"][:, noll_indices - 4]
 
         # Find the right output references
         butlerQC.put(out_raw, outputRefs.aggregateZernikesRaw)
