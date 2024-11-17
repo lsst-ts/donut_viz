@@ -80,7 +80,7 @@ def zernikePyramid(
     """
     jmin = min(noll_indices)
     jmax = max(noll_indices)
-    jdict = {x: y for x, y in zip(noll_indices - jmin, range(len(noll_indices)))}
+    jdict = {x: y for x, y in zip(noll_indices, range(len(noll_indices)))}
     nmax, _ = galsim.zernike.noll_to_zern(jmax)
     nmin, _ = galsim.zernike.noll_to_zern(jmin)
 
@@ -129,7 +129,7 @@ def zernikePyramid(
         scat = ax.scatter(
             xs,
             ys,
-            c=zs[jdict[j - jmin]],
+            c=zs[jdict[j]],
             s=s,
             linewidths=0.5,
             cmap=cmap,
