@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.. _lsst.ts.donut.viz-1.2.0:
+
+-------------
+1.2.0
+-------------
+
+* Enable sparse zernikes to be used from ts_wep.
+
 .. _lsst.ts.donut.viz-1.1.2:
 
 -------------

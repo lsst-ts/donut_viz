@@ -17,11 +17,13 @@ def plotZernikePyramid(
         instrument=instrument,
     )
     zs = cat["zs_OCS"]
+    noll_indices = cat.meta["nollIndices"]
 
     fig = zernikePyramid(
         cat["thx_OCS"],
         cat["thy_OCS"],
         zs.T,
+        noll_indices,
         cmap="seismic",
         s=2,
     )
@@ -61,6 +63,7 @@ def plotZernikePyramid(
         cat["thx_OCS"],
         cat["thy_OCS"],
         resid.T,
+        noll_indices,
         cmap="seismic",
         s=2,
     )
@@ -73,7 +76,8 @@ def plotZernikePyramid(
     fig3 = zernikePyramid(
         cat["thx_OCS"],
         cat["thy_OCS"],
-        intrinsic[:, 4:29].T,
+        intrinsic[:, noll_indices].T,
+        noll_indices,
         cmap="seismic",
         s=2,
     )

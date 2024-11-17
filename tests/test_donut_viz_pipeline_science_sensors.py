@@ -27,6 +27,7 @@ class TestDonutVizPipeline(TestCase):
             "rotAngle",
             "rotTelPos",
             "visit",
+            "nollIndices",
         ]
 
         cls.butler = Butler(cls.test_repo_dir)
@@ -106,6 +107,7 @@ class TestDonutVizPipeline(TestCase):
             agg_donut_table.meta.keys(), ["extra", "intra", "average"]
         )
         donut_meta_keys = self.meta_keys + ["focusZ"]
+        donut_meta_keys.remove("nollIndices")
         for key in ["extra", "intra"]:
             self.assertCountEqual(agg_donut_table.meta[key].keys(), donut_meta_keys)
         donut_meta_keys.remove("focusZ")

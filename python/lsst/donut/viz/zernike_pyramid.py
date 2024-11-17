@@ -22,7 +22,7 @@ def zernikePyramid(
     xs,
     ys,
     zs,
-    jmin=4,
+    noll_indices,
     figsize=(13, 8),
     vmin=-1,
     vmax=1,
@@ -48,8 +48,8 @@ def zernikePyramid(
         Zernike values.  First index labels the particular Zernike coefficient,
         second index labels spatial coordinate.  First index implicitly starts
         at j=jmin (defocus by default).
-    jmin: int, optional
-        Minimum Zernike to plot.  Default 4 (defocus).
+    noll_indices: np.ndarray
+        Noll indices for zernikes in zs.
     figsize: tuple of float, optional
         Figure size in inches.  Default (13, 8).
     vmin, vmax: float, optional
@@ -78,7 +78,9 @@ def zernikePyramid(
     fig: matplotlib Figure
         The figure.
     """
-    jmax = zs.shape[0] + jmin - 1
+    jmin = min(noll_indices)
+    jmax = max(noll_indices)
+    jdict = {x: y for x, y in zip(noll_indices, range(len(noll_indices)))}
     nmax, _ = galsim.zernike.noll_to_zern(jmax)
     nmin, _ = galsim.zernike.noll_to_zern(jmin)
 
@@ -98,7 +100,7 @@ def zernikePyramid(
     axes = {}
     shiftLeft = []
     shiftRight = []
-    for j in range(jmin, jmax + 1):
+    for j in noll_indices:
         n, m = galsim.zernike.noll_to_zern(j)
         if n % 2 == 0:
             row, col = n - nmin, m // 2 + ncol // 2
@@ -114,6 +116,8 @@ def zernikePyramid(
 
     cbar = {}
     for j, ax in axes.items():
+        if j not in noll_indices:
+            continue
         n, _ = galsim.zernike.noll_to_zern(j)
         ax.set_title("Z{}".format(j))
         if vdim:
@@ -125,7 +129,7 @@ def zernikePyramid(
         scat = ax.scatter(
             xs,
             ys,
-            c=zs[j - jmin],
+            c=zs[jdict[j]],
             s=s,
             linewidths=0.5,
             cmap=cmap,

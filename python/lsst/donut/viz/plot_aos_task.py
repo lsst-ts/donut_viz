@@ -133,15 +133,8 @@ class PlotAOSTask(pipeBase.PipelineTask):
                     filename=zk_resid_fn,
                 )
 
-    def doPyramid(
-        self,
-        x,
-        y,
-        zk,
-        rtp,
-        q,
-    ):
-        fig = zernikePyramid(x, y, zk, cmap="seismic", s=10)
+    def doPyramid(self, x, y, zk, rtp, q, nollIndices):
+        fig = zernikePyramid(x, y, zk, nollIndices, cmap="seismic", s=10)
         vecs_xy = {
             r"$x_\mathrm{Opt}$": (1, 0),
             r"$y_\mathrm{Opt}$": (0, -1),
@@ -175,8 +168,9 @@ class PlotAOSTask(pipeBase.PipelineTask):
         zk = aos_raw["zk_OCS"].T
         rtp = aos_raw.meta["rotTelPos"]
         q = aos_raw.meta["parallacticAngle"]
+        nollIndices = aos_raw.meta["nollIndices"]
 
-        zkPyramid = self.doPyramid(x, y, zk, rtp, q)
+        zkPyramid = self.doPyramid(x, y, zk, rtp, q, nollIndices)
 
         # We want residuals from the intrinsic design too.
         path = Path(__file__).parent.parent.parent.parent.parent / "data"
@@ -193,10 +187,10 @@ class PlotAOSTask(pipeBase.PipelineTask):
             [z.coef for z in dzs(aos_raw["thx_OCS"], aos_raw["thy_OCS"])]
         ).T[4:29]
         intrinsic = intrinsic[: len(zk)]
-        intrinsicPyramid = self.doPyramid(x, y, intrinsic, rtp, q)
+        intrinsicPyramid = self.doPyramid(x, y, intrinsic, rtp, q, nollIndices)
 
         resid = zk - intrinsic
-        residPyramid = self.doPyramid(x, y, resid, rtp, q)
+        residPyramid = self.doPyramid(x, y, resid, rtp, q, nollIndices)
 
         return zkPyramid, residPyramid, intrinsicPyramid
 
