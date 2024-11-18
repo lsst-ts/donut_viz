@@ -503,7 +503,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         zs = np.array(zs)
         psf = np.array([[self.get_psf_degr(pair) for pair in det] for det in zs])
 
-        fig = Figure(**kwargs)
+        fig = plt.figure(**kwargs)
         fig = psfPanel(xs, ys, psf, dname, fig=fig)
 
         # draw rose
