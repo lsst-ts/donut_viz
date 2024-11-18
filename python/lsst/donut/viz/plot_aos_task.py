@@ -380,7 +380,8 @@ class PlotDonutTask(pipeBase.PipelineTask):
                         seqNum=seq_num,
                         filename=donut_gallery_fn,
                     )
-    
+
+
 class PlotPsfZernTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("visit", "instrument"),
@@ -432,11 +433,11 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
     ) -> None:
         zernikes = butlerQC.get(inputRefs.zernikes)
 
-        zkPanel = self.plotPsfFromZern(zernikes)
+        zkPanel = self.plotPsfFromZern(zernikes, figsize=(11, 14))
         zkPanel.suptitle(
             f"PSF from Zernikes\nvisit: {inputRefs.zernikes[-1].dataId['visit']}",
             fontsize="xx-large",
-            fontweight="book"
+            fontweight="book",
         )
 
         butlerQC.put(zkPanel, outputRefs.psfFromZernPanel)
@@ -454,11 +455,11 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
                     plotName="psf_zk_panel",
                     dayObs=day_obs,
                     seqNum=seq_num,
-                    filename=zk_meas_fn,
+                    filename=psf_zk_panel,
                 )
 
     def get_psf_degr(self, zset):
-        return np.sqrt(np.sum(convertZernikesToPsfWidth(zset)**2))
+        return np.sqrt(np.sum(convertZernikesToPsfWidth(zset) ** 2))
 
     def get_rtp_q(self, qtable):
         q = qtable.meta["extra"]["boresight_par_angle_rad"]
@@ -473,17 +474,17 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
             r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
         }
-    
+
         vecs_NE = {
             "az": (1, 0),
             "alt": (0, +1),
             "N": (np.sin(q), np.cos(q)),
             "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
         }
-    
+
         return vecs_xy, vecs_NE
-    
-    def plotPsfFromZern(self, zernikes):
+
+    def plotPsfFromZern(self, zernikes, **kwargs):
         xs = []
         ys = []
         zs = []
@@ -496,14 +497,15 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             for row in qt[[col for col in qt.colnames if "Z" in col]][1:].iterrows():
                 z.append([el.to(u.micron).value for el in row])
             zs.append(np.array(z))
-        
+
         xs = np.array(xs)
         ys = np.array(ys)
         zs = np.array(zs)
         psf = np.array([[self.get_psf_degr(pair) for pair in det] for det in zs])
 
-        fig = psfPanel(xs, ys, psf, dname)
-        
+        fig = Figure(**kwargs)
+        fig = psfPanel(xs, ys, psf, dname, fig=fig)
+
         # draw rose
         rtp, q = self.get_rtp_q(zernikes[-1])
         vecs_xy, vecs_NE = self.get_rose_vecs(rtp, q)
@@ -511,4 +513,3 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         rose(fig, vecs_NE, p0=(0.85, 0.94))
 
         return fig
-        

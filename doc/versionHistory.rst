@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.2.1
+
+-------------
+1.2.1
+-------------
+
+* Add PlotPsfZernTask that creates a per-detector scatter plot of the PSF calculated with the convertZernikesToPsfWidth method.
+
 .. _lsst.ts.donut.viz-1.2.0:
 
 -------------
