@@ -7,11 +7,12 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
 import matplotlib.pyplot as plt
 import numpy as np
-from astropy import units as u
 import yaml
-from lsst.utils.timer import timeMethod
+from astropy import units as u
 from lsst.ts.wep.utils import convertZernikesToPsfWidth
+from lsst.utils.timer import timeMethod
 
+from .psf_from_zern import psfPanel
 from .utilities import (
     add_rotated_axis,
     get_day_obs_seq_num_from_visitid,
@@ -19,7 +20,6 @@ from .utilities import (
     rose,
 )
 from .zernike_pyramid import zernikePyramid
-from .psf_from_zern import psfPanel
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
@@ -431,15 +431,15 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
+
         zernikes = butlerQC.get(inputRefs.zernikes)
 
-        zkPanel = self.plotPsfFromZern(zernikes, figsize=(11, 14))
+        zkPanel = self.run(zernikes, figsize=(11, 14))
         zkPanel.suptitle(
             f"PSF from Zernikes\nvisit: {inputRefs.zernikes[-1].dataId['visit']}",
             fontsize="xx-large",
             fontweight="book",
         )
-
         butlerQC.put(zkPanel, outputRefs.psfFromZernPanel)
 
         if self.config.doRubinTVUpload:
@@ -458,16 +458,53 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
                     filename=psf_zk_panel,
                 )
 
-    def get_psf_degr(self, zset):
-        return np.sqrt(np.sum(convertZernikesToPsfWidth(zset) ** 2))
+    def run(self, zernikes, **kwargs) -> plt.figure:
+        """Run the PlotPsfZern AOS task.
 
-    def get_rtp_q(self, qtable):
-        q = qtable.meta["extra"]["boresight_par_angle_rad"]
-        rot = qtable.meta["extra"]["boresight_rot_angle_rad"]
+        This task create a 3x3 grid of subplots,
+        each axe contains the psf value for each pair of
+        intra-extra donuts found for each detector.
+
+        Parameters
+        ----------
+        zernikes: list of tables.
+            List of tables containing the zernike sets
+            for each donut pair in each detector.
+        **kwargs:
+            Additional keyword arguments passed to
+            matplotlib.pyplot.figure constructor.
+
+        Returns
+        -------
+        fig: matplotlib.pyplot.figure
+            The figure.
+        """
+
+        xs = []
+        ys = []
+        zs = []
+        dname = []
+        for i, qt in enumerate(zernikes):
+            dname.append(qt.meta["extra"]["det_name"])
+            xs.append(qt["extra_centroid"]["x"][1:].value)
+            ys.append(qt["extra_centroid"]["y"][1:].value)
+            z = []
+            for row in qt[[col for col in qt.colnames if "Z" in col]][1:].iterrows():
+                z.append([el.to(u.micron).value for el in row])
+            zs.append(np.array(z))
+
+        psf = [
+            [
+                np.sqrt(np.sum(convertZernikesToPsfWidth(pair_zset) ** 2))
+                for pair_zset in det
+            ]
+            for det in zs
+        ]
+
+        q = qt.meta["extra"]["boresight_par_angle_rad"]
+        rot = qt.meta["extra"]["boresight_rot_angle_rad"]
         rtp = q - rot - np.pi / 2
-        return rtp, q
 
-    def get_rose_vecs(self, rtp, q):
         vecs_xy = {
             r"$x_\mathrm{Opt}$": (1, 0),
             r"$y_\mathrm{Opt}$": (0, -1),
@@ -482,33 +519,10 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
         }
 
-        return vecs_xy, vecs_NE
-
-    def plotPsfFromZern(self, zernikes, **kwargs):
-        xs = []
-        ys = []
-        zs = []
-        dname = []
-        for i, qt in enumerate(zernikes):
-            dname.append(qt.meta["extra"]["det_name"])
-            xs.append(qt["extra_centroid"]["x"][1:].value)
-            ys.append(qt["extra_centroid"]["y"][1:].value)
-            z = []
-            for row in qt[[col for col in qt.colnames if "Z" in col]][1:].iterrows():
-                z.append([el.to(u.micron).value for el in row])
-            zs.append(np.array(z))
-
-        xs = np.array(xs)
-        ys = np.array(ys)
-        zs = np.array(zs)
-        psf = np.array([[self.get_psf_degr(pair) for pair in det] for det in zs])
-
         fig = plt.figure(**kwargs)
         fig = psfPanel(xs, ys, psf, dname, fig=fig)
 
         # draw rose
-        rtp, q = self.get_rtp_q(zernikes[-1])
-        vecs_xy, vecs_NE = self.get_rose_vecs(rtp, q)
         rose(fig, vecs_xy, p0=(0.15, 0.94))
         rose(fig, vecs_NE, p0=(0.85, 0.94))
 

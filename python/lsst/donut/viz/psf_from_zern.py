@@ -14,9 +14,9 @@ def psfPanel(
 
     Parameters
     ----------
-    xs, ys: array of float, shape (ndet, npair)
+    xs, ys: list of list[float], shape (ndet, npair)
         Points coordinates in pixel.
-    psf: array of float, shape (ndet, npair)
+    psf: list of list[float], shape (ndet, npair)
         PSF value for each point.
     detname: list of strings, shape (ndet,)
         Detector labels.
