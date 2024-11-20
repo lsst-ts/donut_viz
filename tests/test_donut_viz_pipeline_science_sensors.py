@@ -229,3 +229,12 @@ class TestDonutVizPipeline(TestCase):
             self.butler.query_datasets("donutPlotExtra", collections=self.test_run_name)
         )
         self.assertEqual(len(extra_dataset_list), 1)
+
+    def testPlotPsfZernTask(self):
+        # Test that plots exist in butler
+        psf_zern_dataset_list = list(
+            self.butler.query_datasets(
+                "psfFromZernPanel", collections=self.test_run_name
+            )
+        )
+        self.assertEqual(len(psf_zern_dataset_list), 1)

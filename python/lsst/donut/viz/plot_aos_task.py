@@ -8,8 +8,11 @@ import lsst.pipe.base.connectionTypes as ct
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml
+from astropy import units as u
+from lsst.ts.wep.utils import convertZernikesToPsfWidth
 from lsst.utils.timer import timeMethod
 
+from .psf_from_zern import psfPanel
 from .utilities import (
     add_rotated_axis,
     get_day_obs_seq_num_from_visitid,
@@ -30,6 +33,9 @@ __all__ = [
     "PlotDonutTaskConnections",
     "PlotDonutTaskConfig",
     "PlotDonutTask",
+    "PlotPsfZernTaskConnections",
+    "PlotPsfZernTaskConfig",
+    "PlotPsfZernTask",
 ]
 
 
@@ -374,3 +380,152 @@ class PlotDonutTask(pipeBase.PipelineTask):
                         seqNum=seq_num,
                         filename=donut_gallery_fn,
                     )
+
+
+class PlotPsfZernTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "instrument"),
+):
+    zernikes = ct.Input(
+        doc="Zernikes catalog",
+        dimensions=("visit", "instrument", "detector"),
+        storageClass="AstropyTable",
+        multiple=True,
+        name="zernikes",
+    )
+    psfFromZernPanel = ct.Output(
+        doc="PSF value retrieved from zernikes",
+        dimensions=("visit", "instrument"),
+        storageClass="Plot",
+        name="psfFromZernPanel",
+    )
+
+
+class PlotPsfZernTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=PlotPsfZernTaskConnections,
+):
+    doRubinTVUpload = pexConfig.Field(
+        dtype=bool,
+        doc="Upload to RubinTV",
+        default=False,
+    )
+
+
+class PlotPsfZernTask(pipeBase.PipelineTask):
+    ConfigClass = PlotPsfZernTaskConfig
+    _DefaultName = "plotPsfZernTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ) -> None:
+
+        zernikes = butlerQC.get(inputRefs.zernikes)
+
+        zkPanel = self.run(zernikes, figsize=(11, 14))
+
+        butlerQC.put(zkPanel, outputRefs.psfFromZernPanel)
+
+        if self.config.doRubinTVUpload:
+            instrument = inputRefs.zernikes.dataId["instrument"]
+            visit = inputRefs.zernikes.dataId["visit"]
+            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                psf_zk_panel = Path(tmpdir) / "psf_zk_panel.png"
+                zkPanel.savefig(psf_zk_panel)
+
+                self.uploader.uploadPerSeqNumPlot(
+                    instrument=get_instrument_channel_name(instrument),
+                    plotName="psf_zk_panel",
+                    dayObs=day_obs,
+                    seqNum=seq_num,
+                    filename=psf_zk_panel,
+                )
+
+    def run(self, zernikes, **kwargs) -> plt.figure:
+        """Run the PlotPsfZern AOS task.
+
+        This task create a 3x3 grid of subplots,
+        each subplot shows the psf value calculated from the Zernike
+        coefficients for each pair of intra-extra donuts found
+        for each detector.
+
+        Parameters
+        ----------
+        zernikes: list of tables.
+            List of tables containing the zernike sets
+            for each donut pair in each detector.
+        **kwargs:
+            Additional keyword arguments passed to
+            matplotlib.pyplot.figure constructor.
+
+        Returns
+        -------
+        fig: matplotlib.pyplot.figure
+            The figure.
+        """
+
+        xs = []
+        ys = []
+        zs = []
+        dname = []
+        for i, qt in enumerate(zernikes):
+            dname.append(qt.meta["extra"]["det_name"])
+            xs.append(qt["extra_centroid"]["x"][1:].value)
+            ys.append(qt["extra_centroid"]["y"][1:].value)
+            z = []
+            for row in qt[[col for col in qt.colnames if "Z" in col]][1:].iterrows():
+                z.append([el.to(u.micron).value for el in row])
+            zs.append(np.array(z))
+
+        psf = [
+            [
+                np.sqrt(np.sum(convertZernikesToPsfWidth(pair_zset) ** 2))
+                for pair_zset in det
+            ]
+            for det in zs
+        ]
+
+        q = qt.meta["extra"]["boresight_par_angle_rad"]
+        rot = qt.meta["extra"]["boresight_rot_angle_rad"]
+        rtp = q - rot - np.pi / 2
+
+        vecs_xy = {
+            r"$x_\mathrm{Opt}$": (1, 0),
+            r"$y_\mathrm{Opt}$": (0, -1),
+            r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
+            r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
+        }
+
+        vecs_NE = {
+            "az": (1, 0),
+            "alt": (0, +1),
+            "N": (np.sin(q), np.cos(q)),
+            "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
+        }
+
+        fig = plt.figure(**kwargs)
+        fig.suptitle(
+            f"PSF from Zernikes\nvisit: {zernikes[-1].meta['extra']['visit']}",
+            fontsize="xx-large",
+            fontweight="book",
+        )
+        fig = psfPanel(xs, ys, psf, dname, fig=fig)
+
+        # draw rose
+        rose(fig, vecs_xy, p0=(0.15, 0.94))
+        rose(fig, vecs_NE, p0=(0.85, 0.94))
+
+        return fig
