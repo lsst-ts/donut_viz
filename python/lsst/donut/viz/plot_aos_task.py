@@ -435,11 +435,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         zernikes = butlerQC.get(inputRefs.zernikes)
 
         zkPanel = self.run(zernikes, figsize=(11, 14))
-        zkPanel.suptitle(
-            f"PSF from Zernikes\nvisit: {inputRefs.zernikes[-1].dataId['visit']}",
-            fontsize="xx-large",
-            fontweight="book",
-        )
+
         butlerQC.put(zkPanel, outputRefs.psfFromZernPanel)
 
         if self.config.doRubinTVUpload:
@@ -520,6 +516,11 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         }
 
         fig = plt.figure(**kwargs)
+        fig.suptitle(
+            f"PSF from Zernikes\nvisit: {zernikes[-1].meta['extra']['visit']}",
+            fontsize="xx-large",
+            fontweight="book",
+        )
         fig = psfPanel(xs, ys, psf, dname, fig=fig)
 
         # draw rose
