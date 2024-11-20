@@ -458,8 +458,9 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         """Run the PlotPsfZern AOS task.
 
         This task create a 3x3 grid of subplots,
-        each axe contains the psf value for each pair of
-        intra-extra donuts found for each detector.
+        each subplot shows the psf value calculated from the Zernike
+        coefficients for each pair of intra-extra donuts found
+        for each detector.
 
         Parameters
         ----------

@@ -17,7 +17,7 @@ def psfPanel(
 ) -> Figure:
     """Make a per-detector psf scatter plot
 
-    Subplots shows for each detector the psf retrieve from the zernike value
+    Subplots shows for each detector the psf retrieved from the zernike value
     for each pair of intra-extra focal images. The points are placed using
     pixel coordinates.
 
@@ -34,7 +34,10 @@ def psfPanel(
     figsize: tuple of float, optional
         Figure size in inches.  Default (11, 12).
     cmap: str, optional
-        Colormap name.  Default 'seismic'.
+        Colormap name.  Default 'cool'.
+    maxcol: int, optional
+        Maximum number of columns to use while creating the subplots grid.
+        Default 3
     **kwargs:
         Additional keyword arguments passed to matplotlib Figure constructor.
 
