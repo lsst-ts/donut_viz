@@ -4,7 +4,16 @@ from matplotlib.gridspec import GridSpec
 
 
 def psfPanel(
-    xs, ys, psf, detname, fig=None, figsize=(11, 14), cmap="cool", **kwargs
+    xs,
+    ys,
+    psf,
+    detname,
+    dettype="LSSTComCam",
+    fig=None,
+    figsize=(11, 14),
+    maxcol=3,
+    cmap="cool",
+    **kwargs,
 ) -> Figure:
     """Make a per-detector psf scatter plot
 
@@ -40,32 +49,50 @@ def psfPanel(
         fig = Figure(figsize=figsize, **kwargs)
 
     # creating the gridspec grid (3x3 equal axes and the bottom cbar ax)
+    if len(detname) < maxcol:
+        det_nrows = 1
+        ncols = len(detname)
+    else:
+        det_nrows = (
+            len(detname) // maxcol + 1
+            if len(detname) % maxcol != 0
+            else len(detname) // maxcol
+        )
+        ncols = maxcol
+
     gs = GridSpec(
-        nrows=4,
-        ncols=3,
+        nrows=det_nrows + 1,  # add a final row for the cbar
+        ncols=ncols,
         figure=fig,
-        width_ratios=[1, 1, 1],
-        height_ratios=[1, 1, 1, 0.1],
+        width_ratios=[1.0] * ncols,
+        height_ratios=[1.0] * det_nrows + [0.1],
     )
-    axs = [fig.add_subplot(gs[i, j]) for i in range(3) for j in range(3)]
+    axs = []
+    for i in range(len(detname)):
+        axs.append(fig.add_subplot(gs[i // ncols, i % ncols]))
     ax_cbar = fig.add_subplot(gs[-1, :])
 
     # setting the detector size
     # (maybe there is a more wise way to retrieve it from the data metadata)
-    det_lim_y = (0.0, 4000.0)
-    det_lim_x = (0.0, 4072.0)
+    match dettype:
+        case "LSSTComCam":
+            det_lim_y = (0.0, 4000.0)
+            det_lim_x = (0.0, 4072.0)
+        case "LSSTCam":
+            det_lim_y = (0.0, 2000.0)
+            det_lim_x = (0.0, 4072.0)
+        case _:
+            raise ValueError("Detector type not known")
 
     # setting the common colormap limits
     pmax = np.nanmax(psf)
     pmin = np.nanmin(psf)
 
     # cycling through the axes.
-    for i, ax in enumerate(axs):
-        im = ax.scatter(xs[i], ys[i], c=psf[i], cmap=cmap, vmax=pmax, vmin=pmin)
-        ax.set_title(
-            f"{detname[i]}: {np.nanmean(psf[i]):.3f} +/- {np.nanstd(psf[i]):.3f}"
-        )
-        ax.set(xlim=det_lim_x, ylim=det_lim_y, xticks=[], yticks=[], aspect="equal")
+    for i, dn in enumerate(detname):
+        im = axs[i].scatter(xs[i], ys[i], c=psf[i], cmap=cmap, vmax=pmax, vmin=pmin)
+        axs[i].set_title(f"{dn}: {np.nanmean(psf[i]):.3f} +/- {np.nanstd(psf[i]):.3f}")
+        axs[i].set(xlim=det_lim_x, ylim=det_lim_y, xticks=[], yticks=[], aspect="equal")
 
     # setting the colorbar
     cb = fig.colorbar(im, cax=ax_cbar, location="bottom")
