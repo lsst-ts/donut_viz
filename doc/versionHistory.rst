@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.2.2
+
+-------------
+1.2.2
+-------------
+
+* Change tasks to use run methods inside runQuantum to make things easier to test and enable running tasks interactively.
+
 .._lsst.ts.donut.viz-1.2.1
 
 -------------
