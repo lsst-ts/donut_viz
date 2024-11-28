@@ -88,8 +88,8 @@ def psfPanel(
             raise ValueError("Detector type not known")
 
     # setting the common colormap limits
-    pmax = np.nanmax(psf)
-    pmin = np.nanmin(psf)
+    pmax = np.nanmax(np.concatenate(psf))
+    pmin = np.nanmin(np.concatenate(psf))
 
     # cycling through the axes.
     for i, dn in enumerate(detname):
