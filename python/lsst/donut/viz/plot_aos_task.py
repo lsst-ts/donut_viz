@@ -435,8 +435,8 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         butlerQC.put(zkPanel, outputRefs.psfFromZernPanel)
 
         if self.config.doRubinTVUpload:
-            instrument = inputRefs.zernikes.dataId["instrument"]
-            visit = inputRefs.zernikes.dataId["visit"]
+            instrument = inputRefs.zernikes[0].dataId["instrument"]
+            visit = inputRefs.zernikes[0].dataId["visit"]
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
             with tempfile.TemporaryDirectory() as tmpdir:
                 psf_zk_panel = Path(tmpdir) / "psf_zk_panel.png"
