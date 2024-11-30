@@ -110,6 +110,13 @@ class PlotAOSTask(pipeBase.PipelineTask):
 
         zkPyramid, residPyramid, intrinsicPyramid = self.plotZernikePyramids(aos_raw)
 
+        # visit = inputRefs.aggregateAOSRaw.dataId["visit"]
+        # day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+        # filename = f"/sdf/home/m/mfl/u/rubintv/plots/{day_obs}_{seq_num}-zk_measurement_pyramid.png"
+        # Path(filename).touch()
+        # filename = f"/sdf/home/m/mfl/u/rubintv/plots/{day_obs}_{seq_num}-zk_residual_pyramid.png"
+        # Path(filename).touch()
+
         butlerQC.put(zkPyramid, outputRefs.measuredZernikePyramid)
         butlerQC.put(residPyramid, outputRefs.residualZernikePyramid)
         butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid)
@@ -124,6 +131,9 @@ class PlotAOSTask(pipeBase.PipelineTask):
                 zk_resid_fn = Path(tmpdir) / "zk_residual_pyramid.png"
                 residPyramid.savefig(zk_resid_fn)
 
+                # XXX remove this!
+                filename = f"/sdf/home/m/mfl/u/rubintv/plots/{day_obs}_{seq_num}-zk_measurement_pyramid.png"
+                Path(filename).touch()
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
                     plotName="zk_measurement_pyramid",
@@ -131,6 +141,10 @@ class PlotAOSTask(pipeBase.PipelineTask):
                     seqNum=seq_num,
                     filename=zk_meas_fn,
                 )
+
+                # XXX remove this!
+                filename = f"/sdf/home/m/mfl/u/rubintv/plots/{day_obs}_{seq_num}-zk_residual_pyramid.png"
+                Path(filename).touch()
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
                     plotName="zk_residual_pyramid",
@@ -373,6 +387,9 @@ class PlotDonutTask(pipeBase.PipelineTask):
                     donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
                     fig.savefig(donut_gallery_fn)
 
+                # XXX remove this!
+                    filename = f"/sdf/home/m/mfl/u/rubintv/plots/{day_obs}_{seq_num}-fp_donut_gallery.png"
+                    Path(filename).touch()
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(instrument),
                         plotName="fp_donut_gallery",
