@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.5
+
+-------------
+1.6.5
+-------------
+
+* Use the managedTempFile from RA's CI to allow it to check plot creation.
+
 .._lsst.ts.donut.viz-1.6.4
 
 -------------

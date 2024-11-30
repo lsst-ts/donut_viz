@@ -26,6 +26,11 @@ from .zernike_pyramid import zernikePyramid
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
+    from lsst.rubintv.production.utils import (
+        getAutomaticLocationConfig,
+        getCiPlotName,
+        managedTempFile,
+    )
 except ImportError:
     MultiUploader = None
 
@@ -129,28 +134,35 @@ class PlotAOSTask(pipeBase.PipelineTask):
         butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid)
 
         if self.config.doRubinTVUpload:
+            locationConfig = getAutomaticLocationConfig()
             instrument = inputRefs.aggregateAOSRaw.dataId["instrument"]
             visit = inputRefs.aggregateAOSRaw.dataId["visit"]
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zk_meas_fn = Path(tmpdir) / "zk_measurement_pyramid.png"
-                zkPyramid.savefig(zk_meas_fn)
-                zk_resid_fn = Path(tmpdir) / "zk_residual_pyramid.png"
-                residPyramid.savefig(zk_resid_fn)
 
+            ciName = getCiPlotName(
+                locationConfig, "LSSTCam", day_obs, seq_num, "zk_measurement_pyramid"
+            )
+            with managedTempFile(suffix=".png", ciOutputName=ciName) as tempFile:
+                zkPyramid.savefig(tempFile)
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
                     plotName="zk_measurement_pyramid",
                     dayObs=day_obs,
                     seqNum=seq_num,
-                    filename=zk_meas_fn,
+                    filename=tempFile,
                 )
+
+            ciName = getCiPlotName(
+                locationConfig, "LSSTCam", day_obs, seq_num, "zk_residual_pyramid"
+            )
+            with managedTempFile(suffix=".png", ciOutputName=ciName) as tempFile:
+                residPyramid.savefig(tempFile)
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
                     plotName="zk_residual_pyramid",
                     dayObs=day_obs,
                     seqNum=seq_num,
-                    filename=zk_resid_fn,
+                    filename=tempFile,
                 )
 
     def doPyramid(self, x, y, zk, rtp, q, nollIndices):
@@ -384,21 +396,25 @@ class PlotDonutTask(pipeBase.PipelineTask):
         visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
 
         if self.config.doRubinTVUpload:
+            locationConfig = getAutomaticLocationConfig()
             # seq_num is sometimes different for
             # intra vs extra-focal if pistoning
             for defocal_type, visit_id in zip(
                 ["extra", "intra"], [visitExtra, visitIntra]
             ):
                 day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit_id)
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit_id}.png"
-                    fig_dict[defocal_type].savefig(donut_gallery_fn)
+
+                ciName = getCiPlotName(
+                    locationConfig, "LSSTCam", day_obs, seq_num, "fp_donut_gallery"
+                )
+                with managedTempFile(suffix=".png", ciOutputName=ciName) as tempFile:
+                    fig_dict[defocal_type].savefig(tempFile)
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(inst),
                         plotName="fp_donut_gallery",
                         dayObs=day_obs,
                         seqNum=seq_num,
-                        filename=donut_gallery_fn,
+                        filename=tempFile,
                     )
 
     @timeMethod
