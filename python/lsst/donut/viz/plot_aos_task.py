@@ -9,11 +9,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 from astropy import units as u
+from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.utils import convertZernikesToPsfWidth
 from lsst.utils.timer import timeMethod
 
 from .psf_from_zern import psfPanel
 from .utilities import (
+    add_coordinate_roses,
     add_rotated_axis,
     get_day_obs_seq_num_from_visitid,
     get_instrument_channel_name,
@@ -270,6 +272,33 @@ class PlotDonutTask(pipeBase.PipelineTask):
         # donutStamps metadata as the
         # visitId above under which donutStamps were saved
         # is only the extra-focal visitId
+        fig_dict = self.run(donutStampsIntra, donutStampsExtra, inst)
+
+        butlerQC.put(fig_dict["extra"], outputRefs.donutPlotExtra)
+        butlerQC.put(fig_dict["intra"], outputRefs.donutPlotIntra)
+
+        if self.config.doRubinTVUpload:
+            # seq_num is sometimes different for
+            # intra vs extra-focal if pistoning
+            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+            for defocal_type in ["extra", "intra"]:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
+                    fig_dict[defocal_type].savefig(donut_gallery_fn)
+
+                    self.uploader.uploadPerSeqNumPlot(
+                        instrument=get_instrument_channel_name(inst),
+                        plotName="fp_donut_gallery",
+                        dayObs=day_obs,
+                        seqNum=seq_num,
+                        filename=donut_gallery_fn,
+                    )
+
+    @timeMethod
+    def run(
+        self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
+    ):
+
         visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
         visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
 
@@ -288,6 +317,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 raise ValueError(f"Unknown instrument {inst}")
         det_size = fp_size / nacross
         fp_center = 0.5, 0.475
+        fig_dict = dict()
 
         for donutStampSet, visit in zip(
             [donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]
@@ -340,46 +370,12 @@ class PlotDonutTask(pipeBase.PipelineTask):
                     va="top",
                 )
 
-            vecs_xy = {
-                r"$x_\mathrm{Opt}$": (1, 0),
-                r"$y_\mathrm{Opt}$": (0, -1),
-                r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
-                r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
-            }
-            rose(fig, vecs_xy, p0=(0.15, 0.8))
+            add_coordinate_roses(fig, rtp, q)
 
-            vecs_NE = {
-                "az": (1, 0),
-                "alt": (0, +1),
-                "N": (np.sin(q), np.cos(q)),
-                "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
-            }
-            rose(fig, vecs_NE, p0=(0.85, 0.8))
             fig.text(0.47, 0.93, f"{donut.defocal_type}: {visit}")
+            fig_dict[donut.defocal_type] = fig
 
-            if donut.defocal_type == "extra":
-                butlerQC.put(fig, outputRefs.donutPlotExtra)
-            elif donut.defocal_type == "intra":
-                butlerQC.put(fig, outputRefs.donutPlotIntra)
-
-            if self.config.doRubinTVUpload:
-                # that's the same for intra and extra-focal
-                instrument = inputRefs.donutStampsIntraVisit.dataId["instrument"]
-
-                # seq_num is sometimes different for
-                # intra vs extra-focal if pistoning
-                day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
-                    fig.savefig(donut_gallery_fn)
-
-                    self.uploader.uploadPerSeqNumPlot(
-                        instrument=get_instrument_channel_name(instrument),
-                        plotName="fp_donut_gallery",
-                        dayObs=day_obs,
-                        seqNum=seq_num,
-                        filename=donut_gallery_fn,
-                    )
+        return fig_dict
 
 
 class PlotPsfZernTaskConnections(
@@ -502,20 +498,6 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         rot = qt.meta["extra"]["boresight_rot_angle_rad"]
         rtp = q - rot - np.pi / 2
 
-        vecs_xy = {
-            r"$x_\mathrm{Opt}$": (1, 0),
-            r"$y_\mathrm{Opt}$": (0, -1),
-            r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
-            r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
-        }
-
-        vecs_NE = {
-            "az": (1, 0),
-            "alt": (0, +1),
-            "N": (np.sin(q), np.cos(q)),
-            "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
-        }
-
         fig = plt.figure(**kwargs)
         fig.suptitle(
             f"PSF from Zernikes\nvisit: {zernikes[-1].meta['extra']['visit']}",
@@ -525,7 +507,6 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         fig = psfPanel(xs, ys, psf, dname, fig=fig)
 
         # draw rose
-        rose(fig, vecs_xy, p0=(0.15, 0.94))
-        rose(fig, vecs_NE, p0=(0.85, 0.94))
+        add_coordinate_roses(fig, rtp, q)
 
         return fig

@@ -177,3 +177,34 @@ def get_day_obs_seq_num_from_visitid(visit):
     seq_num = visit % 100_000
 
     return day_obs, seq_num
+
+
+def add_coordinate_roses(fig, rtp, q):
+    """Add coordinate system roses to the figure.
+
+    Parameters
+    ----------
+    fig : `matplotlib.figure.Figure`
+        The matplotlib figure to which the coordinate roses will be added.
+    rtp : `float`
+        The rotation angle in radians between the optical and camera coordinate
+        systems, calculated as q - rotAngle - pi/2.
+    q : `float`
+        The boresight parallactic angle in radians, used to
+        determine the position of the North and East vectors.
+    """
+    vecs_xy = {
+        r"$x_\mathrm{Opt}$": (1, 0),
+        r"$y_\mathrm{Opt}$": (0, -1),
+        r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
+        r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
+    }
+    rose(fig, vecs_xy, p0=(0.15, 0.8))
+
+    vecs_NE = {
+        "az": (1, 0),
+        "alt": (0, +1),
+        "N": (np.sin(q), np.cos(q)),
+        "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
+    }
+    rose(fig, vecs_NE, p0=(0.85, 0.8))
