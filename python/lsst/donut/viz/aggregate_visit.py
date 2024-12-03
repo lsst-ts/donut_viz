@@ -671,6 +671,10 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         intraStampsList = []
         extraStampsList = []
         for intra, extra, quality in zip(intraStamps, extraStamps, qualityTables):
+            # Skip if quality table is empty.
+            if len(quality) == 0:
+                continue
+
             # Load the quality table and determine which donuts were selected
             intraSelect = quality[quality["DEFOCAL_TYPE"] == "intra"]["FINAL_SELECT"]
             extraSelect = quality[quality["DEFOCAL_TYPE"] == "extra"]["FINAL_SELECT"]
