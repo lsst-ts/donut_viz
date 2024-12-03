@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.2.3
+
+-------------
+1.2.3
+-------------
+
+* Fixed bug when we have different numbers of donuts on different detectors.
+
 .._lsst.ts.donut.viz-1.2.2
 
 -------------
