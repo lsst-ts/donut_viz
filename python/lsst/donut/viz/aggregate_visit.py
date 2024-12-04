@@ -88,8 +88,11 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
 
         raw_tables = []
         avg_tables = []
+        table_meta = None
 
         for zernike_table in zernike_tables:
+            if len(zernike_table) == 0:
+                continue
             raw_table = Table()
             zernikes_merged = []
             noll_indices = []
@@ -107,11 +110,11 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             avg_table["zk_CCS"] = np.atleast_2d(zernikes_merged[0])
             avg_table["detector"] = zernike_table.meta["extra"]["det_name"]
             avg_tables.append(avg_table)
+            # just get any one, they're all the same
+            if table_meta is None:
+                table_meta = zernike_table.meta
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
-
-        # just get the last one, they're all the same
-        table_meta = zernike_table.meta
 
         # TODO: Swap parallactic angle for pseudo parallactic angle.
         #       See SMTN-019 for details.
@@ -335,6 +338,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 intraDonutTable = donutTables[(pair.intra, detector)]
                 extraDonutTable = donutTables[(pair.extra, detector)]
                 qualityTable = qualityTables[(pair.extra, detector)]
+
+                if len(qualityTable) == 0:
+                    continue
 
                 # Get rows of quality table for this exposure
                 intraQualityTable = qualityTable[

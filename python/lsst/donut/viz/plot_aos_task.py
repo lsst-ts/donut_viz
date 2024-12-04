@@ -477,23 +477,27 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         ys = []
         zs = []
         dname = []
+        angles_set = False
         for i, qt in enumerate(zernikes):
-            if len(qt) > 0:
-                dname.append(qt.meta["extra"]["det_name"])
-                xs.append(qt["extra_centroid"]["x"][1:].value)
-                ys.append(qt["extra_centroid"]["y"][1:].value)
-                z = []
-                for row in qt[[col for col in qt.colnames if "Z" in col]][
-                    1:
-                ].iterrows():
-                    z.append([el.to(u.micron).value for el in row])
-                zs.append(np.array(z))
+            if len(qt) == 0:
+                zs.append(np.array([]))
+                dname.append([])
+                xs.append([])
+                ys.append([])
+                continue
+            dname.append(qt.meta["extra"]["det_name"])
+            xs.append(qt["extra_centroid"]["x"][1:].value)
+            ys.append(qt["extra_centroid"]["y"][1:].value)
+            z = []
+            for row in qt[[col for col in qt.colnames if "Z" in col]][1:].iterrows():
+                z.append([el.to(u.micron).value for el in row])
+            zs.append(np.array(z))
 
+            if not angles_set:
                 q = qt.meta["extra"]["boresight_par_angle_rad"]
                 rot = qt.meta["extra"]["boresight_rot_angle_rad"]
                 rtp = q - rot - np.pi / 2
-            else:
-                zs.append(np.array([]))
+                angles_set = True
 
         psf = [
             [
