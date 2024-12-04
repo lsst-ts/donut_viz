@@ -273,8 +273,10 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         pairTables = self.run(camera, visitInfoDict, pairs, donutTables, qualityTables)
 
         # Put pairTables in butler
-        for pairTable, pairTableRef in zip(pairTables, outputRefs.aggregateDonutTable):
-            butlerQC.put(pairTable, pairTableRef)
+        for pairTableRef in outputRefs.aggregateDonutTable:
+            refVisit = pairTableRef.dataId['visit']
+            if refVisit in pairTables.keys():
+                butlerQC.put(pairTables[refVisit], pairTableRef)
 
     @timeMethod
     def run(
@@ -302,8 +304,8 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
         Returns
         -------
-        list of astropy.table.QTable
-            List of aggregated donut tables, one per visit pair.
+        dict of astropy.table.QTable
+            Dict of aggregated donut tables, keyed on extra-focal visit.
         """
         # Find common (visit, detector) extra-focal pairs
         # DonutQualityTables only saved under extra-focal ids
@@ -316,7 +318,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 "the donut and quality tables"
             )
 
-        pairTables = []
+        pairTables = {}
         for pair in pairs:
             intraVisitInfo = visitInfoDict[pair.intra]
             extraVisitInfo = visitInfoDict[pair.extra]
@@ -440,7 +442,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
             out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
 
-            pairTables.append(out)
+            pairTables[pair.extra] = out
 
         return pairTables
 
@@ -511,6 +513,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
 
         avg_table, raw_table = self.run(adc, azr, aza)
 
+        print(outputRefs.aggregateAOSAvg)
         butlerQC.put(avg_table, outputRefs.aggregateAOSAvg)
         butlerQC.put(raw_table, outputRefs.aggregateAOSRaw)
 
