@@ -263,7 +263,6 @@ class PlotDonutTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        visit = inputRefs.donutStampsIntraVisit.dataId["visit"]
         inst = inputRefs.donutStampsIntraVisit.dataId["instrument"]
 
         donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
@@ -277,15 +276,17 @@ class PlotDonutTask(pipeBase.PipelineTask):
         butlerQC.put(fig_dict["extra"], outputRefs.donutPlotExtra)
         butlerQC.put(fig_dict["intra"], outputRefs.donutPlotIntra)
 
+        visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
+        visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
+
         if self.config.doRubinTVUpload:
             # seq_num is sometimes different for
             # intra vs extra-focal if pistoning
-            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
-            for defocal_type in ["extra", "intra"]:
+            for defocal_type, visit_id in zip(["extra", "intra"], [visitExtra, visitIntra]):
+                day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit_id)
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
+                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit_id}.png"
                     fig_dict[defocal_type].savefig(donut_gallery_fn)
-
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(inst),
                         plotName="fp_donut_gallery",
