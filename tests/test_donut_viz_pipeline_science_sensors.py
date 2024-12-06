@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 from lsst.daf.butler import Butler
+from lsst.donut.viz import AggregateDonutStampsTask, AggregateDonutStampsTaskConfig
 from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
@@ -238,3 +239,29 @@ class TestDonutVizPipeline(TestCase):
             )
         )
         self.assertEqual(len(psf_zern_dataset_list), 1)
+
+    def testDonutStampsRun(self):
+        intra_datasets = self.butler.query_datasets(
+            "donutStampsIntra", collections=self.test_run_name
+        )
+        extra_datasets = self.butler.query_datasets(
+            "donutStampsExtra", collections=self.test_run_name
+        )
+        quality_datasets = self.butler.query_datasets(
+            "donutQualityTable", collections=self.test_run_name
+        )
+        donut_stamps_intra = [self.butler.get(dataset) for dataset in intra_datasets]
+        donut_stamps_extra = [self.butler.get(dataset) for dataset in extra_datasets]
+        quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
+
+        # First check that original dataset is length more than 0
+        self.assertEqual(len(quality_tables[0]), 6)
+        quality_tables[0].remove_rows(np.arange(6))
+
+        #
+        agg_donut_config = AggregateDonutStampsTaskConfig()
+        agg_donut_task = AggregateDonutStampsTask(config=agg_donut_config)
+        task_out = agg_donut_task.run(
+            donut_stamps_intra, donut_stamps_extra, quality_tables
+        )
+        self.assertEqual(len(task_out), 4)
