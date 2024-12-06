@@ -274,7 +274,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
         # Put pairTables in butler
         for pairTableRef in outputRefs.aggregateDonutTable:
-            refVisit = pairTableRef.dataId['visit']
+            refVisit = pairTableRef.dataId["visit"]
             if refVisit in pairTables.keys():
                 butlerQC.put(pairTables[refVisit], pairTableRef)
 
@@ -384,6 +384,8 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             out = vstack(tables)
 
             # Add metadata for extra and intra focal exposures
+            # TODO: Swap parallactic angle for pseudo parallactic angle.
+            #       See SMTN-019 for details.
             out.meta["extra"] = {
                 "visit": pair.extra,
                 "focusZ": extraVisitInfo.focusZ,
@@ -720,4 +722,4 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             intraStampsList.append(intra[: self.config.maxDonutsPerDetector])
             extraStampsList.append(extra[: self.config.maxDonutsPerDetector])
 
-        return intraStampsList, extraStampsList, extra.metadata, intra.metadata
+        return intraStampsList, extraStampsList, intra.metadata, extra.metadata
