@@ -263,7 +263,6 @@ class PlotDonutTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        visit = inputRefs.donutStampsIntraVisit.dataId["visit"]
         inst = inputRefs.donutStampsIntraVisit.dataId["instrument"]
 
         donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
@@ -277,15 +276,19 @@ class PlotDonutTask(pipeBase.PipelineTask):
         butlerQC.put(fig_dict["extra"], outputRefs.donutPlotExtra)
         butlerQC.put(fig_dict["intra"], outputRefs.donutPlotIntra)
 
+        visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
+        visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
+
         if self.config.doRubinTVUpload:
             # seq_num is sometimes different for
             # intra vs extra-focal if pistoning
-            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
-            for defocal_type in ["extra", "intra"]:
+            for defocal_type, visit_id in zip(
+                ["extra", "intra"], [visitExtra, visitIntra]
+            ):
+                day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit_id)
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
+                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit_id}.png"
                     fig_dict[defocal_type].savefig(donut_gallery_fn)
-
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(inst),
                         plotName="fp_donut_gallery",
@@ -477,7 +480,14 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         ys = []
         zs = []
         dname = []
+        angles_set = False
         for i, qt in enumerate(zernikes):
+            if len(qt) == 0:
+                zs.append(np.array([]))
+                dname.append([])
+                xs.append([])
+                ys.append([])
+                continue
             dname.append(qt.meta["extra"]["det_name"])
             xs.append(qt["extra_centroid"]["x"][1:].value)
             ys.append(qt["extra_centroid"]["y"][1:].value)
@@ -486,6 +496,12 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
                 z.append([el.to(u.micron).value for el in row])
             zs.append(np.array(z))
 
+            if not angles_set:
+                q = qt.meta["extra"]["boresight_par_angle_rad"]
+                rot = qt.meta["extra"]["boresight_rot_angle_rad"]
+                rtp = q - rot - np.pi / 2
+                angles_set = True
+
         psf = [
             [
                 np.sqrt(np.sum(convertZernikesToPsfWidth(pair_zset) ** 2))
@@ -493,10 +509,6 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             ]
             for det in zs
         ]
-
-        q = qt.meta["extra"]["boresight_par_angle_rad"]
-        rot = qt.meta["extra"]["boresight_rot_angle_rad"]
-        rtp = q - rot - np.pi / 2
 
         fig = plt.figure(**kwargs)
         fig.suptitle(
@@ -507,6 +519,6 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         fig = psfPanel(xs, ys, psf, dname, fig=fig)
 
         # draw rose
-        add_coordinate_roses(fig, rtp, q)
+        add_coordinate_roses(fig, rtp, q, [(0.15, 0.94), (0.85, 0.94)])
 
         return fig

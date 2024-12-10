@@ -179,7 +179,7 @@ def get_day_obs_seq_num_from_visitid(visit):
     return day_obs, seq_num
 
 
-def add_coordinate_roses(fig, rtp, q):
+def add_coordinate_roses(fig, rtp, q, p0=None):
     """Add coordinate system roses to the figure.
 
     Parameters
@@ -192,14 +192,24 @@ def add_coordinate_roses(fig, rtp, q):
     q : `float`
         The boresight parallactic angle in radians, used to
         determine the position of the North and East vectors.
+    p0 : list or None
+        If list should be list of two (x, y) coordinates on the figure. The
+        first is for the x,y coordinates system rose and the latter is for
+        the compass directional rose. Default locations when None is passed
+        are (0.15, 0.8), (0.85, 0.8). (The default is None.)
     """
+    if p0 is None:
+        p0 = [(0.15, 0.8), (0.85, 0.8)]
+    elif np.shape(p0) != (2, 2):
+        raise ValueError("If p0 is not None, it must be a pair of (x, y) coordinates")
+
     vecs_xy = {
         r"$x_\mathrm{Opt}$": (1, 0),
         r"$y_\mathrm{Opt}$": (0, -1),
         r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
         r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
     }
-    rose(fig, vecs_xy, p0=(0.15, 0.8))
+    rose(fig, vecs_xy, p0=p0[0])
 
     vecs_NE = {
         "az": (1, 0),
@@ -207,4 +217,4 @@ def add_coordinate_roses(fig, rtp, q):
         "N": (np.sin(q), np.cos(q)),
         "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
     }
-    rose(fig, vecs_NE, p0=(0.85, 0.8))
+    rose(fig, vecs_NE, p0=p0[1])

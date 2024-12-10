@@ -4,6 +4,17 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.3.0
+
+-------------
+1.3.0
+-------------
+
+* Fix failures that occur when detectors are missing data.
+* Add tests for detectors missing data.
+* Fix intra, extra labeling in donut plots.
+* Add utilities tests.
+
 .._lsst.ts.donut.viz-1.2.3
 
 -------------
