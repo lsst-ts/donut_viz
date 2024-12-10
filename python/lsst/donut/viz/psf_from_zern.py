@@ -93,6 +93,8 @@ def psfPanel(
 
     # cycling through the axes.
     for i, dn in enumerate(detname):
+        if len(psf[i]) == 0:
+            continue
         im = axs[i].scatter(xs[i], ys[i], c=psf[i], cmap=cmap, vmax=pmax, vmin=pmin)
         axs[i].set_title(f"{dn}: {np.nanmean(psf[i]):.3f} +/- {np.nanstd(psf[i]):.3f}")
         axs[i].set(xlim=det_lim_x, ylim=det_lim_y, xticks=[], yticks=[], aspect="equal")
