@@ -245,7 +245,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
         # Only need one visitInfo per exposure.
         # And the pairer only works with uniquified visitInfos.
-        visitInfoDict = {}
+        visitInfoDict = dict()
         for donutTableRef in inputRefs.donutTables:
             table = butlerQC.get(donutTableRef)
             visit_id = table.meta["visit_info"]["visit_id"]
@@ -341,9 +341,6 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 extraDonutTable = donutTables[(pair.extra, detector)]
                 qualityTable = qualityTables[(pair.extra, detector)]
 
-                if len(qualityTable) == 0:
-                    continue
-
                 # Get rows of quality table for this exposure
                 intraQualityTable = qualityTable[
                     qualityTable["DEFOCAL_TYPE"] == "intra"
@@ -351,6 +348,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 extraQualityTable = qualityTable[
                     qualityTable["DEFOCAL_TYPE"] == "extra"
                 ]
+
+                if (len(extraQualityTable) == 0) or (len(intraQualityTable) == 0):
+                    continue
 
                 for donutTable, qualityTable in zip(
                     [intraDonutTable, extraDonutTable],
@@ -457,21 +457,21 @@ class AggregateAOSVisitTableTaskConnections(
     ),
 ):
     aggregateDonutTable = ct.Input(
-        doc="Visit-level table of donuts and Zernikes",
+        doc="Visit-level table of donuts",
         dimensions=("visit", "instrument"),
         storageClass="AstropyQTable",
         name="aggregateDonutTable",
         deferGraphConstraint=True,
     )
     aggregateZernikesRaw = ct.Input(
-        doc="Visit-level table of donuts and Zernikes",
+        doc="Visit-level table of raw Zernikes",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesRaw",
         deferGraphConstraint=True,
     )
     aggregateZernikesAvg = ct.Input(
-        doc="Visit-level table of donuts and Zernikes",
+        doc="Visit-level table of average Zernikes by detector",
         dimensions=("visit", "instrument"),
         storageClass="AstropyTable",
         name="aggregateZernikesAvg",
@@ -653,22 +653,19 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
 
-        intraStampsList, extraStampsList, intraMeta, extraMeta = self.run(
+        intraStampsOut, extraStampsOut = self.run(
             butlerQC.get(inputRefs.donutStampsIntra),
             butlerQC.get(inputRefs.donutStampsExtra),
             butlerQC.get(inputRefs.qualityTables),
         )
 
-        intraStampsListRavel = np.ravel(intraStampsList)
-        extraStampsListRavel = np.ravel(extraStampsList)
-
         butlerQC.put(
-            DonutStamps(intraStampsListRavel, metadata=intraMeta),
+            intraStampsOut,
             outputRefs.donutStampsIntraVisit,
         )
 
         butlerQC.put(
-            DonutStamps(extraStampsListRavel, metadata=extraMeta),
+            extraStampsOut,
             outputRefs.donutStampsExtraVisit,
         )
 
@@ -681,6 +678,8 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
     ) -> tuple[typing.List, typing.List, dafBase.PropertyList, dafBase.PropertyList]:
         intraStampsList = []
         extraStampsList = []
+        intraMetaAll = None
+        extraMetaAll = None
         for intra, extra, quality in zip(intraStamps, extraStamps, qualityTables):
             # Skip if quality table is empty.
             if len(quality) == 0:
@@ -693,33 +692,54 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             # Extract metadata dictionaries
             intraMeta = intra.metadata.toDict().copy()
             extraMeta = extra.metadata.toDict().copy()
+            listKeys = [
+                key
+                for key, val in intraMeta.items()
+                if (isinstance(val, list) and key != "COMMENT")
+            ]
+            singleKeys = set(intraMeta) - set(listKeys)
 
             # Select donuts used in Zernike estimation
             intra = DonutStamps([intra[i] for i in range(len(intra)) if intraSelect[i]])
             extra = DonutStamps([extra[i] for i in range(len(extra)) if extraSelect[i]])
 
             # Copy over metadata
-            intraMeta = {
-                key: (
-                    val
-                    if (not isinstance(val, list) or key == "COMMENT")
-                    else np.array(val)[intraSelect].tolist()
+            if intraMetaAll is None:
+                intraMetaAll = dict()
+                extraMetaAll = dict()
+                for key in singleKeys:
+                    intraMetaAll[key] = intraMeta[key]
+                    extraMetaAll[key] = extraMeta[key]
+                for key in listKeys:
+                    intraMetaAll[key] = list()
+                    extraMetaAll[key] = list()
+
+            for key in listKeys:
+                intraMetaAll[key].append(
+                    np.array(intraMeta[key])[intraSelect].tolist()[
+                        : self.config.maxDonutsPerDetector
+                    ]
                 )
-                for key, val in intraMeta.items()
-            }
-            intra._metadata = intra.metadata.from_mapping(intraMeta)
-            extraMeta = {
-                key: (
-                    val
-                    if (not isinstance(val, list) or key == "COMMENT")
-                    else np.array(val)[extraSelect].tolist()
+                extraMetaAll[key].append(
+                    np.array(extraMeta[key])[extraSelect].tolist()[
+                        : self.config.maxDonutsPerDetector
+                    ]
                 )
-                for key, val in extraMeta.items()
-            }
-            extra._metadata = extra.metadata.from_mapping(extraMeta)
 
             # Append the requested number of donuts
             intraStampsList.append(intra[: self.config.maxDonutsPerDetector])
             extraStampsList.append(extra[: self.config.maxDonutsPerDetector])
 
-        return intraStampsList, extraStampsList, intra.metadata, extra.metadata
+        for key in listKeys:
+            intraMetaAll[key] = np.ravel(intraMetaAll[key])
+            extraMetaAll[key] = np.ravel(extraMetaAll[key])
+        intra._metadata = intra.metadata.from_mapping(intraMetaAll)
+        extra._metadata = extra.metadata.from_mapping(extraMetaAll)
+
+        intraStampsListRavel = np.ravel(intraStampsList)
+        extraStampsListRavel = np.ravel(extraStampsList)
+
+        intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=intra._metadata)
+        extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extra._metadata)
+
+        return intraStampsRavel, extraStampsRavel

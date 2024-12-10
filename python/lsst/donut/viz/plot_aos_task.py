@@ -282,7 +282,9 @@ class PlotDonutTask(pipeBase.PipelineTask):
         if self.config.doRubinTVUpload:
             # seq_num is sometimes different for
             # intra vs extra-focal if pistoning
-            for defocal_type, visit_id in zip(["extra", "intra"], [visitExtra, visitIntra]):
+            for defocal_type, visit_id in zip(
+                ["extra", "intra"], [visitExtra, visitIntra]
+            ):
                 day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit_id)
                 with tempfile.TemporaryDirectory() as tmpdir:
                     donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit_id}.png"
