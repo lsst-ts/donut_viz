@@ -509,21 +509,20 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        adc = butlerQC.get(inputRefs.aggregateDonutTable)
+        adt = butlerQC.get(inputRefs.aggregateDonutTable)
         azr = butlerQC.get(inputRefs.aggregateZernikesRaw)
         aza = butlerQC.get(inputRefs.aggregateZernikesAvg)
 
-        avg_table, raw_table = self.run(adc, azr, aza)
+        avg_table, raw_table = self.run(adt, azr, aza)
 
-        print(outputRefs.aggregateAOSAvg)
         butlerQC.put(avg_table, outputRefs.aggregateAOSAvg)
         butlerQC.put(raw_table, outputRefs.aggregateAOSRaw)
 
     @timeMethod
     def run(
-        self, adc: typing.List[Table], azr: typing.List[Table], aza: typing.List[Table]
+        self, adt: typing.List[Table], azr: typing.List[Table], aza: typing.List[Table]
     ) -> tuple[Table, Table]:
-        dets = np.unique(adc["detector"])
+        dets = np.unique(adt["detector"])
         avg_table = aza.copy()
         avg_keys = [
             "coord_ra",
@@ -543,22 +542,22 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         for det in dets:
             w = avg_table["detector"] == det
             for k in avg_keys:
-                avg_table[k][w] = np.mean(adc[k][adc["detector"] == det])
+                avg_table[k][w] = np.mean(adt[k][adt["detector"] == det])
 
         raw_table = azr.copy()
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
         for det in dets:
             w = raw_table["detector"] == det
-            wadc = adc["detector"] == det
-            fzmin = adc[wadc]["focusZ"].min()
-            fzmax = adc[wadc]["focusZ"].max()
+            wadt = adt["detector"] == det
+            fzmin = adt[wadt]["focusZ"].min()
+            fzmax = adt[wadt]["focusZ"].max()
             if fzmin == fzmax:  # single-sided Zernike estimates
                 for k in avg_keys:
-                    raw_table[k][w] = adc[k][wadc]
+                    raw_table[k][w] = adt[k][wadt]
             else:  # double-sided Zernike estimates
-                wintra = adc[wadc]["focusZ"] == fzmin
-                wextra = adc[wadc]["focusZ"] == fzmax
+                wintra = adt[wadt]["focusZ"] == fzmin
+                wextra = adt[wadt]["focusZ"] == fzmax
                 for k in avg_keys:
                     # If one table has more rows than the other,
                     # trim the longer one
@@ -572,13 +571,13 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                         )
                     # ought to be the same length now
                     raw_table[k][w] = 0.5 * (
-                        adc[k][wadc][wintra] + adc[k][wadc][wextra]
+                        adt[k][wadt][wintra] + adt[k][wadt][wextra]
                     )
                     if k + "_intra" not in raw_table.colnames:
                         raw_table[k + "_intra"] = np.nan
                         raw_table[k + "_extra"] = np.nan
-                    raw_table[k + "_intra"][w] = adc[k][wadc][wintra]
-                    raw_table[k + "_extra"][w] = adc[k][wadc][wextra]
+                    raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
+                    raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
 
         return avg_table, raw_table
 

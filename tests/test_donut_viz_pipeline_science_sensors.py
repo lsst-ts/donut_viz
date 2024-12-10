@@ -1,4 +1,5 @@
 import os
+from copy import copy
 
 import numpy as np
 from lsst.daf.butler import Butler
@@ -9,6 +10,8 @@ from lsst.donut.viz import (
     AggregateDonutTablesTaskConfig,
     AggregateZernikeTablesTask,
     AggregateZernikeTablesTaskConfig,
+    PlotPsfZernTask,
+    PlotPsfZernTaskConfig,
 )
 from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 from lsst.ts.wep.task.pairTask import ExposurePairer
@@ -378,3 +381,19 @@ class TestDonutVizPipeline(TestCase):
             camera, visitInfoDict, pairs, donutTables, qualityTables
         )
         self.assertEqual(len(agg_donut_table[4021123106001]), 6)
+
+    def testPlotPsfZernTaskMissingData(self):
+        # Test that if detectors have different numbers of zernikes
+        # the plot still gets made.
+        zernike_datasets = self.butler.query_datasets(
+            "zernikes", collections=self.test_run_name
+        )
+        zernikes = [self.butler.get(dataset) for dataset in zernike_datasets]
+        zernikes_missing_data = copy(zernikes)
+        zernikes_missing_data[0].remove_rows(np.arange(len(zernikes_missing_data[0])))
+        task = PlotPsfZernTask(config=PlotPsfZernTaskConfig())
+        for input_data in [zernikes, zernikes_missing_data]:
+            try:
+                task.run(zernikes)
+            except Exception:
+                self.fail(f"Unexpected exception raised with input {input_data}")

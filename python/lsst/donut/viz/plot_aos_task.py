@@ -519,6 +519,6 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         fig = psfPanel(xs, ys, psf, dname, fig=fig)
 
         # draw rose
-        add_coordinate_roses(fig, rtp, q)
+        add_coordinate_roses(fig, rtp, q, [(0.15, 0.94), (0.85, 0.94)])
 
         return fig
