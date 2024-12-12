@@ -8,9 +8,14 @@ import lsst.pipe.base.connectionTypes as ct
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml
+from astropy import units as u
+from lsst.ts.wep.task import DonutStamps
+from lsst.ts.wep.utils import convertZernikesToPsfWidth
 from lsst.utils.timer import timeMethod
 
+from .psf_from_zern import psfPanel
 from .utilities import (
+    add_coordinate_roses,
     add_rotated_axis,
     get_day_obs_seq_num_from_visitid,
     get_instrument_channel_name,
@@ -30,6 +35,9 @@ __all__ = [
     "PlotDonutTaskConnections",
     "PlotDonutTaskConfig",
     "PlotDonutTask",
+    "PlotPsfZernTaskConnections",
+    "PlotPsfZernTaskConfig",
+    "PlotPsfZernTask",
 ]
 
 
@@ -255,7 +263,6 @@ class PlotDonutTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        visit = inputRefs.donutStampsIntraVisit.dataId["visit"]
         inst = inputRefs.donutStampsIntraVisit.dataId["instrument"]
 
         donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
@@ -264,6 +271,37 @@ class PlotDonutTask(pipeBase.PipelineTask):
         # donutStamps metadata as the
         # visitId above under which donutStamps were saved
         # is only the extra-focal visitId
+        fig_dict = self.run(donutStampsIntra, donutStampsExtra, inst)
+
+        butlerQC.put(fig_dict["extra"], outputRefs.donutPlotExtra)
+        butlerQC.put(fig_dict["intra"], outputRefs.donutPlotIntra)
+
+        visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
+        visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
+
+        if self.config.doRubinTVUpload:
+            # seq_num is sometimes different for
+            # intra vs extra-focal if pistoning
+            for defocal_type, visit_id in zip(
+                ["extra", "intra"], [visitExtra, visitIntra]
+            ):
+                day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit_id)
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit_id}.png"
+                    fig_dict[defocal_type].savefig(donut_gallery_fn)
+                    self.uploader.uploadPerSeqNumPlot(
+                        instrument=get_instrument_channel_name(inst),
+                        plotName="fp_donut_gallery",
+                        dayObs=day_obs,
+                        seqNum=seq_num,
+                        filename=donut_gallery_fn,
+                    )
+
+    @timeMethod
+    def run(
+        self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
+    ):
+
         visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
         visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
 
@@ -282,6 +320,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 raise ValueError(f"Unknown instrument {inst}")
         det_size = fp_size / nacross
         fp_center = 0.5, 0.475
+        fig_dict = dict()
 
         for donutStampSet, visit in zip(
             [donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]
@@ -334,43 +373,152 @@ class PlotDonutTask(pipeBase.PipelineTask):
                     va="top",
                 )
 
-            vecs_xy = {
-                r"$x_\mathrm{Opt}$": (1, 0),
-                r"$y_\mathrm{Opt}$": (0, -1),
-                r"$x_\mathrm{Cam}$": (np.cos(rtp), -np.sin(rtp)),
-                r"$y_\mathrm{Cam}$": (-np.sin(rtp), -np.cos(rtp)),
-            }
-            rose(fig, vecs_xy, p0=(0.15, 0.8))
+            add_coordinate_roses(fig, rtp, q)
 
-            vecs_NE = {
-                "az": (1, 0),
-                "alt": (0, +1),
-                "N": (np.sin(q), np.cos(q)),
-                "E": (np.sin(q - np.pi / 2), np.cos(q - np.pi / 2)),
-            }
-            rose(fig, vecs_NE, p0=(0.85, 0.8))
             fig.text(0.47, 0.93, f"{donut.defocal_type}: {visit}")
+            fig_dict[donut.defocal_type] = fig
 
-            if donut.defocal_type == "extra":
-                butlerQC.put(fig, outputRefs.donutPlotExtra)
-            elif donut.defocal_type == "intra":
-                butlerQC.put(fig, outputRefs.donutPlotIntra)
+        return fig_dict
 
-            if self.config.doRubinTVUpload:
-                # that's the same for intra and extra-focal
-                instrument = inputRefs.donutStampsIntraVisit.dataId["instrument"]
 
-                # seq_num is sometimes different for
-                # intra vs extra-focal if pistoning
-                day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
-                    fig.savefig(donut_gallery_fn)
+class PlotPsfZernTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "instrument"),
+):
+    zernikes = ct.Input(
+        doc="Zernikes catalog",
+        dimensions=("visit", "instrument", "detector"),
+        storageClass="AstropyTable",
+        multiple=True,
+        name="zernikes",
+    )
+    psfFromZernPanel = ct.Output(
+        doc="PSF value retrieved from zernikes",
+        dimensions=("visit", "instrument"),
+        storageClass="Plot",
+        name="psfFromZernPanel",
+    )
 
-                    self.uploader.uploadPerSeqNumPlot(
-                        instrument=get_instrument_channel_name(instrument),
-                        plotName="fp_donut_gallery",
-                        dayObs=day_obs,
-                        seqNum=seq_num,
-                        filename=donut_gallery_fn,
-                    )
+
+class PlotPsfZernTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=PlotPsfZernTaskConnections,
+):
+    doRubinTVUpload = pexConfig.Field(
+        dtype=bool,
+        doc="Upload to RubinTV",
+        default=False,
+    )
+
+
+class PlotPsfZernTask(pipeBase.PipelineTask):
+    ConfigClass = PlotPsfZernTaskConfig
+    _DefaultName = "plotPsfZernTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ) -> None:
+
+        zernikes = butlerQC.get(inputRefs.zernikes)
+
+        zkPanel = self.run(zernikes, figsize=(11, 14))
+
+        butlerQC.put(zkPanel, outputRefs.psfFromZernPanel)
+
+        if self.config.doRubinTVUpload:
+            instrument = inputRefs.zernikes[0].dataId["instrument"]
+            visit = inputRefs.zernikes[0].dataId["visit"]
+            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                psf_zk_panel = Path(tmpdir) / "psf_zk_panel.png"
+                zkPanel.savefig(psf_zk_panel)
+
+                self.uploader.uploadPerSeqNumPlot(
+                    instrument=get_instrument_channel_name(instrument),
+                    plotName="psf_zk_panel",
+                    dayObs=day_obs,
+                    seqNum=seq_num,
+                    filename=psf_zk_panel,
+                )
+
+    def run(self, zernikes, **kwargs) -> plt.figure:
+        """Run the PlotPsfZern AOS task.
+
+        This task create a 3x3 grid of subplots,
+        each subplot shows the psf value calculated from the Zernike
+        coefficients for each pair of intra-extra donuts found
+        for each detector.
+
+        Parameters
+        ----------
+        zernikes: list of tables.
+            List of tables containing the zernike sets
+            for each donut pair in each detector.
+        **kwargs:
+            Additional keyword arguments passed to
+            matplotlib.pyplot.figure constructor.
+
+        Returns
+        -------
+        fig: matplotlib.pyplot.figure
+            The figure.
+        """
+
+        xs = []
+        ys = []
+        zs = []
+        dname = []
+        angles_set = False
+        for i, qt in enumerate(zernikes):
+            if len(qt) == 0:
+                zs.append(np.array([]))
+                dname.append([])
+                xs.append([])
+                ys.append([])
+                continue
+            dname.append(qt.meta["extra"]["det_name"])
+            xs.append(qt["extra_centroid"]["x"][1:].value)
+            ys.append(qt["extra_centroid"]["y"][1:].value)
+            z = []
+            for row in qt[[col for col in qt.colnames if "Z" in col]][1:].iterrows():
+                z.append([el.to(u.micron).value for el in row])
+            zs.append(np.array(z))
+
+            if not angles_set:
+                q = qt.meta["extra"]["boresight_par_angle_rad"]
+                rot = qt.meta["extra"]["boresight_rot_angle_rad"]
+                rtp = q - rot - np.pi / 2
+                angles_set = True
+
+        psf = [
+            [
+                np.sqrt(np.sum(convertZernikesToPsfWidth(pair_zset) ** 2))
+                for pair_zset in det
+            ]
+            for det in zs
+        ]
+
+        fig = plt.figure(**kwargs)
+        fig.suptitle(
+            f"PSF from Zernikes\nvisit: {zernikes[-1].meta['extra']['visit']}",
+            fontsize="xx-large",
+            fontweight="book",
+        )
+        fig = psfPanel(xs, ys, psf, dname, fig=fig)
+
+        # draw rose
+        add_coordinate_roses(fig, rtp, q, [(0.15, 0.94), (0.85, 0.94)])
+
+        return fig

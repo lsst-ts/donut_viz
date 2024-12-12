@@ -4,6 +4,41 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.3.0
+
+-------------
+1.3.0
+-------------
+
+* Fix failures that occur when detectors are missing data.
+* Add tests for detectors missing data.
+* Fix intra, extra labeling in donut plots.
+* Add utilities tests.
+
+.._lsst.ts.donut.viz-1.2.3
+
+-------------
+1.2.3
+-------------
+
+* Fixed bug when we have different numbers of donuts on different detectors.
+
+.._lsst.ts.donut.viz-1.2.2
+
+-------------
+1.2.2
+-------------
+
+* Change tasks to use run methods inside runQuantum to make things easier to test and enable running tasks interactively.
+
+.._lsst.ts.donut.viz-1.2.1
+
+-------------
+1.2.1
+-------------
+
+* Add PlotPsfZernTask that creates a per-detector scatter plot of the PSF calculated with the convertZernikesToPsfWidth method.
+
 .. _lsst.ts.donut.viz-1.2.0:
 
 -------------
