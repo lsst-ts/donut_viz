@@ -12,11 +12,11 @@ tasks:
     config:
       # Although we don't have to apply the amp offset corrections, we do want
       # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
-      doAmpOffset: true
-      ampOffset.doApplyAmpOffset: false
+      doAmpOffset: False
+      ampOffset.doApplyAmpOffset: False
       # Turn off slow steps in ISR
-      doBrighterFatter: false
-      doCrosstalk: false
+      doBrighterFatter: False
+      doCrosstalk: False
       # Turn off flats, biases, darks because we don't have these in test repo
       doBias: False
       doDark: False
@@ -28,6 +28,7 @@ tasks:
       doDefect: False
       doSaturation: False
       doSuspect: False
+      doITLEdgeBleedMask: False
   generateDonutCatalogWcsTask:
     class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:

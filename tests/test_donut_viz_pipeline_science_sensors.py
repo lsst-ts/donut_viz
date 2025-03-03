@@ -57,7 +57,7 @@ class TestDonutVizPipeline(TestCase):
         test_pipeline = os.path.join(
             os.getenv("DONUT_VIZ_DIR"),
             "pipelines",
-            "scienceDirectDetectPipeline.yaml",
+            "scienceWcsCatalogPipeline.yaml",
         )
 
         pipe_cmd = writePipetaskCmd(
