@@ -22,9 +22,13 @@ __all__ = [
     "AggregateDonutTablesTaskConnections",
     "AggregateDonutTablesTaskConfig",
     "AggregateDonutTablesTask",
+    "AggregateDonutTablesCwfsTaskConnections",
+    "AggregateDonutTablesCwfsTaskConfig",
+    "AggregateDonutTablesCwfsTask",
     "AggregateAOSVisitTableTaskConnections",
     "AggregateAOSVisitTableTaskConfig",
     "AggregateAOSVisitTableTask",
+    "AggregateAOSVisitTableCwfsTask",
     "AggregateDonutStampsTaskConnections",
     "AggregateDonutStampsTaskConfig",
     "AggregateDonutStampsTask",
@@ -449,6 +453,181 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         return pairTables
 
 
+class AggregateDonutTablesCwfsTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("instrument", "visit"),
+):
+    donutTables = ct.Input(
+        doc="Donut tables",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutTable",
+        multiple=True,
+    )
+    qualityTables = ct.Input(
+        doc="Donut quality tables",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutQualityTable",
+        multiple=True,
+        deferGraphConstraint=True,
+    )
+    camera = ct.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
+    )
+    aggregateDonutTable = ct.Output(
+        doc="Visit-level table of donuts and Zernikes",
+        dimensions=("visit", "instrument"),
+        storageClass="AstropyQTable",
+        name="aggregateDonutTable",
+        multiple=False,
+    )
+
+
+class AggregateDonutTablesCwfsTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=AggregateDonutTablesCwfsTaskConnections,
+):
+    pass
+
+
+class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
+    ConfigClass = AggregateDonutTablesCwfsTaskConfig
+    _DefaultName = "AggregateDonutTablesCwfs"
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ):
+        camera = butlerQC.get(inputRefs.camera)
+
+        # Make dictionaries to match detectors
+        donutTables = {
+            (ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables
+        }
+        qualityTables = {
+            (ref.dataId["detector"]): butlerQC.get(ref)
+            for ref in inputRefs.qualityTables
+        }
+
+        aggTable = self.run(camera, donutTables, qualityTables)
+        butlerQC.put(aggTable, outputRefs.aggregateDonutTable)
+
+    @timeMethod
+    def run(
+        self,
+        camera,
+        donutTables: dict,
+        qualityTables: dict,
+    ) -> typing.List[QTable]:
+        """Aggregate donut tables for a set of visits.
+
+        Parameters
+        ----------
+        camera : lsst.afw.cameraGeom.Camera
+            The camera object.
+        donutTables : dict
+            Dictionary of donut tables keyed by detector.
+        qualityTables : dict
+            Dictionary of quality tables keyed by detector.
+
+        Returns
+        -------
+        dict of astropy.table.QTable
+            Dict of aggregated donut tables, keyed on extra-focal visit.
+        """
+        tables = []
+        extraDetectorIds = [191, 195, 199, 203]
+
+        for detector in extraDetectorIds:
+            det_extra = camera[detector]
+            det_intra = camera[detector + 1]
+
+            # Load the donut catalog table, and the donut quality table
+            extraDonutTable = donutTables[detector]
+            intraDonutTable = donutTables[detector + 1]
+            qualityTable = qualityTables[detector]
+
+            if len(qualityTable) == 0:
+                continue
+
+            # Get rows of quality table for this exposure
+            intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
+            extraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
+
+            for donutTable, qualityTable, det in zip(
+                [extraDonutTable, intraDonutTable],
+                [extraQualityTable, intraQualityTable],
+                [det_extra, det_intra],
+            ):
+                # Select donuts used in Zernike estimation
+                table = donutTable[qualityTable["FINAL_SELECT"]]
+
+                # Add focusZ to donut table
+                offset = 1.5 if det.getId() in extraDetectorIds else -1.5
+                table["focusZ"] = table.meta["visit_info"]["focus_z"] + offset * u.mm
+
+                # Get pixels -> field angle transform for this detector
+                tform = det.getTransform(PIXELS, FIELD_ANGLE)
+
+                # Add field angle in CCS to the table
+                pts = tform.applyForward(
+                    [
+                        Point2D(x, y)
+                        for x, y in zip(table["centroid_x"], table["centroid_y"])
+                    ]
+                )
+                table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
+                table["thy_CCS"] = [pt.x for pt in pts]
+                table["detector"] = det.getName()
+
+                tables.append(table)
+
+        # Grab visitInfo. The last one will do since all should be the same.
+        visitInfo = convertDictToVisitInfo(table.meta["visit_info"])
+
+        # Don't attempt to stack metadata
+        for table in tables:
+            table.meta = {}
+
+        out = vstack(tables)
+
+        # Add metadata for extra and intra focal exposures
+        # TODO: Swap parallactic angle for pseudo parallactic angle.
+        #       See SMTN-019 for details.
+        out.meta["visitInfo"] = {
+            "visit": visitInfo.id,
+            "focusZ": visitInfo.focusZ,
+            "parallacticAngle": visitInfo.boresightParAngle.asRadians(),
+            "rotAngle": visitInfo.boresightRotAngle.asRadians(),
+            "rotTelPos": visitInfo.boresightParAngle.asRadians()
+            - visitInfo.boresightRotAngle.asRadians()
+            - np.pi / 2,
+            "ra": visitInfo.boresightRaDec.getRa().asRadians(),
+            "dec": visitInfo.boresightRaDec.getDec().asRadians(),
+            "az": visitInfo.boresightAzAlt.getLongitude().asRadians(),
+            "alt": visitInfo.boresightAzAlt.getLatitude().asRadians(),
+            "mjd": visitInfo.date.toAstropy().mjd,
+        }
+
+        # Calculate coordinates in different reference frames
+        q = out.meta["visitInfo"]["parallacticAngle"]
+        rtp = out.meta["visitInfo"]["rotTelPos"]
+        out["thx_OCS"] = np.cos(rtp) * out["thx_CCS"] - np.sin(rtp) * out["thy_CCS"]
+        out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
+        out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
+        out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+
+        return out
+
+
 class AggregateAOSVisitTableTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=(
@@ -578,6 +757,79 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                         raw_table[k + "_extra"] = np.nan
                     raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
                     raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
+
+        return avg_table, raw_table
+
+
+class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
+    ConfigClass = AggregateAOSVisitTableTaskConfig
+    _DefaultName = "AggregateAOSVisitTableCwfs"
+
+    @timeMethod
+    def run(
+        self, adt: typing.List[Table], azr: typing.List[Table], aza: typing.List[Table]
+    ) -> tuple[Table, Table]:
+        extraDetectorNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
+        intraDetectorNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
+        # Only take extra focal detector names
+        avg_table = aza.copy()
+        avg_keys = [
+            "coord_ra",
+            "coord_dec",
+            "centroid_x",
+            "centroid_y",
+            "thx_CCS",
+            "thy_CCS",
+            "thx_OCS",
+            "thy_OCS",
+            "th_N",
+            "th_W",
+        ]
+        for k in avg_keys:
+            avg_table[k] = np.nan  # Allocate
+
+        # Process average table
+        for det_extra, det_intra in zip(extraDetectorNames, intraDetectorNames):
+            w = avg_table["detector"] == det_extra
+            wextra = adt["detector"] == det_extra
+            wintra = adt["detector"] == det_intra
+            # Combine extra and intra detector masks
+            wadt = np.logical_or(wextra, wintra)
+            for k in avg_keys:
+                avg_table[k][w] = np.mean(adt[k][wadt])
+
+        # Process raw table
+        raw_table = azr.copy()
+        for k in avg_keys:
+            raw_table[k] = np.nan  # Allocate
+        for det_extra, det_intra in zip(extraDetectorNames, intraDetectorNames):
+            w = raw_table["detector"] == det_extra
+            wextra = adt["detector"] == det_extra
+            wintra = adt["detector"] == det_intra
+            # Combine extra and intra detector masks
+            wadt = np.logical_or(wextra, wintra)
+            # Check if there are any matching rows
+            if not np.any(wadt):
+                continue
+
+            for k in avg_keys:
+                # If one table has more rows than the other,
+                # trim the longer one
+                if wintra.sum() > wextra.sum():
+                    wintra[wintra] = [True] * wextra.sum() + [False] * (
+                        wintra.sum() - wextra.sum()
+                    )
+                elif wextra.sum() > wintra.sum():
+                    wextra[wextra] = [True] * wintra.sum() + [False] * (
+                        wextra.sum() - wintra.sum()
+                    )
+                # ought to be the same length now
+                raw_table[k][w] = 0.5 * (adt[k][wintra] + adt[k][wextra])
+                if k + "_intra" not in raw_table.colnames:
+                    raw_table[k + "_intra"] = np.nan
+                    raw_table[k + "_extra"] = np.nan
+                raw_table[k + "_intra"][w] = adt[k][wintra]
+                raw_table[k + "_extra"][w] = adt[k][wextra]
 
         return avg_table, raw_table
 
