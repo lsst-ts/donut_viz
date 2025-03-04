@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.4.0
+
+-------------
+1.4.0
+-------------
+
+* Add CWFS compatible tasks for donut_viz pipeline.
+
 .._lsst.ts.donut.viz-1.3.0
 
 -------------
