@@ -494,25 +494,25 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
             if det_name == "R00_SW0":
                 i = 0 + 0.5
                 j = 1 - 0.5
-            if det_name == "R00_SW1":
+            elif det_name == "R00_SW1":
                 i = 1 + 0.5
                 j = 1 - 0.5
-            if det_name == "R44_SW0":
+            elif det_name == "R44_SW0":
                 i = 0
                 j = -1
-            if det_name == "R44_SW1":
+            elif det_name == "R44_SW1":
                 i = -1
                 j = -1
-            if det_name == "R04_SW0":
+            elif det_name == "R04_SW0":
                 i = 1
                 j = 0 - 0.5
-            if det_name == "R04_SW1":
+            elif det_name == "R04_SW1":
                 i = 1
                 j = -1 - 0.5
-            if det_name == "R40_SW0":
+            elif det_name == "R40_SW0":
                 i = -1 + 0.5
                 j = 0
-            if det_name == "R40_SW1":
+            elif det_name == "R40_SW1":
                 i = -1 + 0.5
                 j = 1
             x = i - off
