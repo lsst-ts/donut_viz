@@ -376,3 +376,17 @@ class TestDonutVizPipeline(TestCase):
                 task.run(zernikes)
             except Exception:
                 self.fail(f"Unexpected exception raised with input {input_data}")
+
+    def testDonutPlotCwfsTask(self):
+        # Test that plots exist in butler
+        intra_dataset_list = list(
+            self.butler.query_datasets("donutPlot", collections=self.test_run_name)
+        )
+        self.assertEqual(len(intra_dataset_list), 1)
+        self.assertEqual(intra_dataset_list[0].dataId["visit"], 4021123106000)
+
+        extra_dataset_list = list(
+            self.butler.query_datasets("donutPlot", collections=self.test_run_name)
+        )
+        self.assertEqual(len(extra_dataset_list), 1)
+        self.assertEqual(extra_dataset_list[0].dataId["visit"], 4021123106000)

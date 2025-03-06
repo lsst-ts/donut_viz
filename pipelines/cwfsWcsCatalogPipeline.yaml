@@ -61,11 +61,10 @@ tasks:
     class: lsst.donut.viz.PlotAOSTask
     config:
       doRubinTVUpload: False
-  # Temporarily disable the donut plot task until CWFS version is ready
-  # plotDonutTask:
-  #   class: lsst.donut.viz.PlotDonutTask
-  #   config:
-  #     doRubinTVUpload: False
+  plotDonutCwfsTask:
+    class: lsst.donut.viz.PlotDonutCwfsTask
+    config:
+      doRubinTVUpload: False
   plotPsfZernTask:
     class: lsst.donut.viz.PlotPsfZernTask
     config:
