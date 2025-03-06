@@ -1,25 +1,20 @@
 import os
 from copy import copy
 
+import matplotlib
 import numpy as np
 from lsst.daf.butler import Butler
-from lsst.donut.viz import (
-    AggregateDonutStampsTask,
-    AggregateDonutStampsTaskConfig,
-    AggregateDonutTablesCwfsTask,
-    AggregateDonutTablesCwfsTaskConfig,
-    AggregateZernikeTablesTask,
-    AggregateZernikeTablesTaskConfig,
-    PlotPsfZernTask,
-    PlotPsfZernTaskConfig,
-)
+from lsst.donut.viz import (AggregateDonutStampsTask,
+                            AggregateDonutStampsTaskConfig,
+                            AggregateDonutTablesCwfsTask,
+                            AggregateDonutTablesCwfsTaskConfig,
+                            AggregateZernikeTablesTask,
+                            AggregateZernikeTablesTaskConfig,
+                            PlotDonutCwfsTask, PlotDonutCwfsTaskConfig,
+                            PlotPsfZernTask, PlotPsfZernTaskConfig)
 from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
-from lsst.ts.wep.utils import (
-    getModulePath,
-    runProgram,
-    writeCleanUpRepoCmd,
-    writePipetaskCmd,
-)
+from lsst.ts.wep.utils import (getModulePath, runProgram, writeCleanUpRepoCmd,
+                               writePipetaskCmd)
 from lsst.utils.tests import TestCase
 
 
@@ -239,6 +234,52 @@ class TestDonutVizPipeline(TestCase):
         )
         self.assertEqual(len(residual_dataset_list), 1)
         self.assertEqual(residual_dataset_list[0].dataId["visit"], 4021123106000)
+
+    def testPlotDonutCwfsTask(self):
+        # Test that plots exist in butler
+        dataset_list = list(
+            self.butler.query_datasets("donutPlot", collections=self.test_run_name)
+        )
+        self.assertEqual(len(dataset_list), 1)
+        self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
+
+    def testPlotDonutCwfsRunMissingData(self):
+        # Aggregate only 3 of 4 detectors
+        config = AggregateDonutStampsTaskConfig()
+        task = AggregateDonutStampsTask(config=config)
+        intra_datasets = self.butler.query_datasets(
+            "donutStampsIntra", collections=self.test_run_name
+        )
+        extra_datasets = self.butler.query_datasets(
+            "donutStampsExtra", collections=self.test_run_name
+        )
+        quality_datasets = self.butler.query_datasets(
+            "donutQualityTable", collections=self.test_run_name
+        )
+        donut_stamps_intra = [self.butler.get(dataset) for dataset in intra_datasets]
+        donut_stamps_extra = [self.butler.get(dataset) for dataset in extra_datasets]
+        quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
+
+        # First check that original dataset is length more than 0
+
+        # Remove all rows in first table
+        quality_tables[0].remove_rows(np.arange(4))
+
+        # Test that outputs are still created with only 3 detectors
+        agg_donut_config = AggregateDonutStampsTaskConfig()
+        agg_donut_task = AggregateDonutStampsTask(config=agg_donut_config)
+        intra_stamps_miss, extra_stamps_miss = agg_donut_task.run(
+            donut_stamps_intra, donut_stamps_extra, quality_tables
+        )
+        self.assertEqual(len(intra_stamps_miss), 3)
+        self.assertEqual(len(extra_stamps_miss), 3)
+
+        # Run the plotting task
+        inst = intra_datasets[0].dataId["instrument"]
+        config = PlotDonutCwfsTaskConfig()
+        task = PlotDonutCwfsTask(config=config)
+        taskOut = task.run(intra_stamps_miss, extra_stamps_miss, inst)
+        self.assertIsInstance(taskOut, matplotlib.figure.Figure)
 
     def testPlotPsfZernTask(self):
         # Test that plots exist in butler
