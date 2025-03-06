@@ -4,17 +4,25 @@ from copy import copy
 import matplotlib
 import numpy as np
 from lsst.daf.butler import Butler
-from lsst.donut.viz import (AggregateDonutStampsTask,
-                            AggregateDonutStampsTaskConfig,
-                            AggregateDonutTablesCwfsTask,
-                            AggregateDonutTablesCwfsTaskConfig,
-                            AggregateZernikeTablesTask,
-                            AggregateZernikeTablesTaskConfig,
-                            PlotDonutCwfsTask, PlotDonutCwfsTaskConfig,
-                            PlotPsfZernTask, PlotPsfZernTaskConfig)
+from lsst.donut.viz import (
+    AggregateDonutStampsTask,
+    AggregateDonutStampsTaskConfig,
+    AggregateDonutTablesCwfsTask,
+    AggregateDonutTablesCwfsTaskConfig,
+    AggregateZernikeTablesTask,
+    AggregateZernikeTablesTaskConfig,
+    PlotDonutCwfsTask,
+    PlotDonutCwfsTaskConfig,
+    PlotPsfZernTask,
+    PlotPsfZernTaskConfig,
+)
 from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
-from lsst.ts.wep.utils import (getModulePath, runProgram, writeCleanUpRepoCmd,
-                               writePipetaskCmd)
+from lsst.ts.wep.utils import (
+    getModulePath,
+    runProgram,
+    writeCleanUpRepoCmd,
+    writePipetaskCmd,
+)
 from lsst.utils.tests import TestCase
 
 
