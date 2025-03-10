@@ -35,6 +35,9 @@ __all__ = [
     "PlotDonutTaskConnections",
     "PlotDonutTaskConfig",
     "PlotDonutTask",
+    "PlotDonutCwfsTaskConnections",
+    "PlotDonutCwfsTaskConfig",
+    "PlotDonutCwfsTask",
     "PlotPsfZernTaskConnections",
     "PlotPsfZernTaskConfig",
     "PlotPsfZernTask",
@@ -379,6 +382,179 @@ class PlotDonutTask(pipeBase.PipelineTask):
             fig_dict[donut.defocal_type] = fig
 
         return fig_dict
+
+
+class PlotDonutCwfsTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "instrument"),
+):
+    donutStampsIntraVisit = ct.Input(
+        doc="Intrafocal Donut Stamps",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsIntraVisit",
+    )
+    donutStampsExtraVisit = ct.Input(
+        doc="Extrafocal Donut Stamps",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsExtraVisit",
+    )
+    donutPlot = ct.Output(
+        doc="Donut Plot",
+        dimensions=("visit", "instrument"),
+        storageClass="Plot",
+        name="donutPlot",
+    )
+
+
+class PlotDonutCwfsTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=PlotDonutCwfsTaskConnections,
+):
+    doRubinTVUpload = pexConfig.Field(
+        dtype=bool,
+        doc="Upload to RubinTV",
+        default=False,
+    )
+
+
+class PlotDonutCwfsTask(pipeBase.PipelineTask):
+    ConfigClass = PlotDonutCwfsTaskConfig
+    _DefaultName = "plotDonutCwfsTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ) -> None:
+        inst = inputRefs.donutStampsIntraVisit.dataId["instrument"]
+
+        donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
+        donutStampsExtra = butlerQC.get(inputRefs.donutStampsExtraVisit)
+
+        fig = self.run(donutStampsIntra, donutStampsExtra, inst)
+
+        butlerQC.put(fig, outputRefs.donutPlot)
+
+        # Same visit for both extra and intra-focal corner sensors
+        visit = donutStampsIntra.metadata.getArray("VISIT")[0]
+
+        if self.config.doRubinTVUpload:
+            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
+                fig.savefig(donut_gallery_fn)
+                self.uploader.uploadPerSeqNumPlot(
+                    instrument=get_instrument_channel_name(inst),
+                    plotName="fp_donut_gallery",
+                    dayObs=day_obs,
+                    seqNum=seq_num,
+                    filename=donut_gallery_fn,
+                )
+
+    @timeMethod
+    def run(
+        self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
+    ):
+
+        visit = donutStampsIntra.metadata.getArray("VISIT")[0]
+        # LSST detector layout
+        q = donutStampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
+        rotAngle = donutStampsExtra.metadata["BORESIGHT_ROT_ANGLE_RAD"]
+        rtp = q - rotAngle - np.pi / 2
+
+        # Combine all donuts into one list
+        donutStampsList = []
+        for stamp in donutStampsExtra:
+            donutStampsList.append(stamp)
+        for stamp in donutStampsIntra:
+            donutStampsList.append(stamp)
+
+        fp_center = 0.5, 0.475
+        fp_size = 0.7
+        nacross = 4
+        det_size = fp_size / nacross
+        fig = plt.figure(figsize=(11, 8.5))
+        aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
+
+        for donut in donutStampsList:
+            det_name = donut.detector_name
+            off = 0
+            if det_name == "R00_SW0":
+                i = 0 + 0.5
+                j = 1 - 0.5
+            elif det_name == "R00_SW1":
+                i = 1 + 0.5
+                j = 1 - 0.5
+            elif det_name == "R44_SW0":
+                i = 0
+                j = -1
+            elif det_name == "R44_SW1":
+                i = -1
+                j = -1
+            elif det_name == "R04_SW0":
+                i = 1
+                j = 0 - 0.5
+            elif det_name == "R04_SW1":
+                i = 1
+                j = -1 - 0.5
+            elif det_name == "R40_SW0":
+                i = -1 + 0.5
+                j = 0
+            elif det_name == "R40_SW1":
+                i = -1 + 0.5
+                j = 1
+            x = i - off
+            y = off - j
+            xp = np.cos(rtp) * x + np.sin(rtp) * y
+            yp = -np.sin(rtp) * x + np.cos(rtp) * y
+
+            ax, aux_ax = add_rotated_axis(
+                fig,
+                (
+                    xp * det_size + fp_center[0],
+                    yp * det_size * aspect + fp_center[1],
+                ),
+                (det_size * 1.25, det_size * 1.25),
+                -np.rad2deg(rtp),
+            )
+            arr = donut.stamp_im.image.array
+            vmin, vmax = np.quantile(arr, (0.01, 0.99))
+            aux_ax.imshow(
+                donut.stamp_im.image.array.T,
+                vmin=vmin,
+                vmax=vmax,
+                extent=[0, det_size * 1.25, 0, det_size * 1.25],
+                origin="upper",  # +y is down
+            )
+            xlim = aux_ax.get_xlim()
+            ylim = aux_ax.get_ylim()
+            defocal = "intra" if det_name[-3:] == "SW0" else "extra"
+            label = f"{det_name} {defocal}"
+            aux_ax.text(
+                xlim[0] + 0.03 * (xlim[1] - xlim[0]),
+                ylim[1] - 0.03 * (ylim[1] - ylim[0]),
+                label,
+                color="w",
+                rotation=-np.rad2deg(rtp),
+                rotation_mode="anchor",
+                ha="left",
+                va="top",
+            )
+        add_coordinate_roses(fig, rtp, q)
+        fig.text(0.47, 0.97, f"{visit}")
+        return fig
 
 
 class PlotPsfZernTaskConnections(

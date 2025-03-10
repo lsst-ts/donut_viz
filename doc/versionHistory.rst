@@ -3,6 +3,13 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-1.5.0
+
+-------------
+1.5.0
+-------------
+
+* Add donut plot for LSSTCam corner sensors.
 
 .._lsst.ts.donut.viz-1.4.0
 
