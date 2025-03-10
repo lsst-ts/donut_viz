@@ -1,6 +1,7 @@
 import os
 from copy import copy
 
+import matplotlib
 import numpy as np
 from lsst.daf.butler import Butler
 from lsst.donut.viz import (
@@ -10,6 +11,8 @@ from lsst.donut.viz import (
     AggregateDonutTablesTaskConfig,
     AggregateZernikeTablesTask,
     AggregateZernikeTablesTaskConfig,
+    PlotDonutTask,
+    PlotDonutTaskConfig,
     PlotPsfZernTask,
     PlotPsfZernTaskConfig,
 )
@@ -255,6 +258,36 @@ class TestDonutVizPipeline(TestCase):
         )
         self.assertEqual(len(extra_dataset_list), 1)
         self.assertEqual(extra_dataset_list[0].dataId["visit"], 4021123106001)
+
+        # Test that using the S11 config produces a plot
+        intra_datasets = self.butler.query_datasets(
+            "donutStampsIntraVisit", collections=self.test_run_name
+        )
+
+        extra_datasets = self.butler.query_datasets(
+            "donutStampsExtraVisit", collections=self.test_run_name
+        )
+
+        intra_stamps = self.butler.get(
+            "donutStampsIntraVisit",
+            dataId=intra_datasets[0].dataId,
+            collections=self.test_run_name,
+        )
+
+        extra_stamps = self.butler.get(
+            "donutStampsExtraVisit",
+            dataId=extra_datasets[0].dataId,
+            collections=self.test_run_name,
+        )
+        inst = intra_datasets[0].dataId["instrument"]
+
+        config = PlotDonutTaskConfig()
+        config.doS11only = True
+        task = PlotDonutTask(config=config)
+        taskOut = task.run(intra_stamps, extra_stamps, inst)
+        self.assertEqual(len(taskOut), 2)
+        self.assertIsInstance(taskOut["intra"], matplotlib.figure.Figure)
+        self.assertIsInstance(taskOut["extra"], matplotlib.figure.Figure)
 
     def testPlotPsfZernTask(self):
         # Test that plots exist in butler

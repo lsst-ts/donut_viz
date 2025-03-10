@@ -245,6 +245,9 @@ class PlotDonutTaskConfig(
         doc="Upload to RubinTV",
         default=False,
     )
+    doS11only = pexConfig.Field(
+        dtype=bool, doc="Use only S11 in FAM mode", default=False
+    )
 
 
 class PlotDonutTask(pipeBase.PipelineTask):
@@ -312,10 +315,19 @@ class PlotDonutTask(pipeBase.PipelineTask):
         q = donutStampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
         rotAngle = donutStampsExtra.metadata["BORESIGHT_ROT_ANGLE_RAD"]
         rtp = q - rotAngle - np.pi / 2
+
+        # Default multiplication factor and offset
+        factor = 3
+        offset = 7
+
         match inst:
             case "LSSTCam" | "LSSTCamSim":
                 nacross = 15
                 fp_size = 0.55  # 55% of horizontal space
+                if self.config.doS11only:
+                    factor = 1
+                    offset = 3
+                    nacross = 5
             case "LSSTComCam" | "LSSTComCamSim":
                 nacross = 3
                 fp_size = 0.50  # 50% of horizontal space
@@ -323,6 +335,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 raise ValueError(f"Unknown instrument {inst}")
         det_size = fp_size / nacross
         fp_center = 0.5, 0.475
+
         fig_dict = dict()
 
         for donutStampSet, visit in zip(
@@ -333,16 +346,15 @@ class PlotDonutTask(pipeBase.PipelineTask):
             aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
             for donut in donutStampSet:
                 det_name = donut.detector_name
-                # if 'R30' in det_name:
-                #     continue
-                # if 'S00' in det_name:
-                #     continue
-                # if 'S01' in det_name:
-                #     continue
-                i = 3 * int(det_name[1]) + int(det_name[5])
-                j = 3 * int(det_name[2]) + int(det_name[6])
-                x = i - 7
-                y = 7 - j
+                # For FAM mode, if plotting only S11 corner, do not
+                # plot anything else
+                if self.config.doS11only:
+                    if det_name[-2:] != "11":
+                        continue
+                i = factor * int(det_name[1]) + int(det_name[5])
+                j = factor * int(det_name[2]) + int(det_name[6])
+                x = i - offset
+                y = offset - j
                 xp = np.cos(rtp) * x + np.sin(rtp) * y
                 yp = -np.sin(rtp) * x + np.cos(rtp) * y
                 ax, aux_ax = add_rotated_axis(

@@ -3,6 +3,15 @@
 ##################
 Version History
 ##################
+
+.._lsst.ts.donut.viz-1.6.0
+
+-------------
+1.6.0
+-------------
+
+* Add S11-only mode for LsstCam Full Array Mode.
+
 .._lsst.ts.donut.viz-1.5.0
 
 -------------
