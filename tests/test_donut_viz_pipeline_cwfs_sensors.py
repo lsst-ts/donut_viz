@@ -61,6 +61,7 @@ class TestDonutVizPipeline(TestCase):
         test_pipeline = os.path.join(
             os.getenv("DONUT_VIZ_DIR"),
             "pipelines",
+            "tests",
             "cwfsWcsCatalogPipeline.yaml",
         )
 

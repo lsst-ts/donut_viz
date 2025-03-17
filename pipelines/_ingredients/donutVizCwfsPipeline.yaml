@@ -1,0 +1,23 @@
+description: donut viz pipeline tasks
+
+tasks:
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutTablesCwfsTask:
+    class: lsst.donut.viz.AggregateDonutTablesCwfsTask
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+  aggregateAOSVisitTableCwfsTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableCwfsTask
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: False
+  plotDonutCwfsTask:
+    class: lsst.donut.viz.PlotDonutCwfsTask
+    config:
+      doRubinTVUpload: False
+  plotPsfZernTask:
+    class: lsst.donut.viz.PlotPsfZernTask
+    config:
+      doRubinTVUpload: False
