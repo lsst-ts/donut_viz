@@ -4,6 +4,16 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.1
+
+-------------
+1.6.1
+-------------
+
+* Move AOS pipelines to donut_viz to avoid import in ts_wep.
+* Add LSSTCam pipelines.
+* Add test_pipelines.py.
+
 .._lsst.ts.donut.viz-1.6.0
 
 -------------
