@@ -384,6 +384,13 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
         tables = []
 
+        blendInfo = {
+            "intra_blend_x": [],
+            "intra_blend_y": [],
+            "extra_blend_x": [],
+            "extra_blend_y": [],
+        }
+
         # Iterate over the common (visit, detector) pairs
         for detector in detectors:
             # Get pixels -> field angle transform for this detector
@@ -394,6 +401,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             intraDonutTable = donutTablesIntra[detector]
             extraDonutTable = donutTablesExtra[detector]
             qualityTable = qualityTables[detector]
+
 
             # Get rows of quality table for this exposure
             intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
@@ -422,6 +430,15 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
                 table["thy_CCS"] = [pt.x for pt in pts]
                 table["detector"] = det.getName()
+
+                # Select donuts used in Zernike estimation
+                defocal_type = qualityTable["DEFOCAL_TYPE"][0]
+                blendInfo[f"{defocal_type}_blend_x"] += [
+                    donutTable.meta["blend_centroid_x"][idx] for idx in use_idx
+                ]
+                blendInfo[f"{defocal_type}_blend_y"] += [
+                    donutTable.meta["blend_centroid_y"][idx] for idx in use_idx
+                ]
 
                 tables.append(table)
 
@@ -462,6 +479,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             "alt": intraVisitInfo.boresightAzAlt.getLatitude().asRadians(),
             "mjd": intraVisitInfo.date.toAstropy().mjd,
         }
+
+        # Add blend info to the table
+        out.meta["blendInfo"] = blendInfo
 
         # Carefully average angles in meta
         out.meta["average"] = {}
@@ -580,6 +600,12 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         """
         tables = []
         extraDetectorIds = [191, 195, 199, 203]
+        blendInfo = {
+            "intra_blend_x": [],
+            "intra_blend_y": [],
+            "extra_blend_x": [],
+            "extra_blend_y": [],
+        }
 
         for detector in donutTables.keys():
             if detector not in extraDetectorIds:
@@ -601,9 +627,6 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 self.log.warning(f"Missing quality table for detector {detector}, skipping.")
                 continue
 
-            if len(qualityTable) == 0:
-                continue
-
             # Get rows of quality table for this exposure
             intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
             extraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
@@ -613,8 +636,18 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 [extraQualityTable, intraQualityTable],
                 [det_extra, det_intra],
             ):
+                if len(qualityTable) == 0:
+                    continue
                 # Select donuts used in Zernike estimation
-                table = donutTable[qualityTable["FINAL_SELECT"]]
+                defocal_type = qualityTable["DEFOCAL_TYPE"][0]
+                use_idx = np.where(qualityTable["FINAL_SELECT"])[0]
+                table = donutTable[use_idx]
+                blendInfo[f"{defocal_type}_blend_x"] += [
+                    donutTable.meta["blend_centroid_x"][idx] for idx in use_idx
+                ]
+                blendInfo[f"{defocal_type}_blend_y"] += [
+                    donutTable.meta["blend_centroid_y"][idx] for idx in use_idx
+                ]
 
                 # Add focusZ to donut table
                 offset = 1.5 if det.getId() in extraDetectorIds else -1.5
@@ -670,6 +703,9 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
         out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
         out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+
+        # Add blend info to the table
+        out.meta["blendInfo"] = blendInfo
 
         return pipeBase.Struct(aggregateDonutTable=out)
 
