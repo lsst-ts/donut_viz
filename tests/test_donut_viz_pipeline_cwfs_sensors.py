@@ -112,14 +112,14 @@ class TestDonutVizPipeline(TestCase):
         self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys)
 
     def testAggregateDonuts(self):
-        donut_table_list = list(
+        agg_donut_table_list = list(
             self.butler.query_datasets(
                 "aggregateDonutTable", collections=self.test_run_name
             )
         )
-        self.assertEqual(len(donut_table_list), 1)
-        self.assertEqual(donut_table_list[0].dataId["visit"], 4021123106000)
-        agg_donut_table = self.butler.get(donut_table_list[0])
+        self.assertEqual(len(agg_donut_table_list), 1)
+        self.assertEqual(agg_donut_table_list[0].dataId["visit"], 4021123106000)
+        agg_donut_table = self.butler.get(agg_donut_table_list[0])
         self.assertEqual(len(agg_donut_table), 16)
         all_detectors = self.extraDetectorNames + self.intraDetectorNames
         self.assertCountEqual(
@@ -127,10 +127,39 @@ class TestDonutVizPipeline(TestCase):
             sorted([det for det in all_detectors for _ in range(2)]),
         )
         self.assertCountEqual(agg_donut_table["focusZ"].value, [1.5] * 8 + [-1.5] * 8)
-        self.assertCountEqual(agg_donut_table.meta.keys(), ["visitInfo"])
+        self.assertCountEqual(agg_donut_table.meta.keys(), ["visitInfo", "blendInfo"])
         donut_meta_keys = self.meta_keys + ["focusZ"]
         donut_meta_keys.remove("nollIndices")
         self.assertCountEqual(agg_donut_table.meta["visitInfo"].keys(), donut_meta_keys)
+
+        # Check that the donut table blend info is correct
+        donut_table_list = list(
+            self.butler.query_datasets("donutTable", collections=self.test_run_name)
+        )
+        intra_blend_x = list()
+        intra_blend_y = list()
+        extra_blend_x = list()
+        extra_blend_y = list()
+        for donut_table_ref in donut_table_list:
+            donut_table = self.butler.get(donut_table_ref)
+            if donut_table_ref.dataId["detector"] % 2 == 1:
+                extra_blend_x += donut_table.meta["blend_centroid_x"]
+                extra_blend_y += donut_table.meta["blend_centroid_y"]
+            else:
+                intra_blend_x += donut_table.meta["blend_centroid_x"]
+                intra_blend_y += donut_table.meta["blend_centroid_y"]
+        self.assertCountEqual(
+            agg_donut_table.meta["blendInfo"]["extra_blend_x"], extra_blend_x
+        )
+        self.assertCountEqual(
+            agg_donut_table.meta["blendInfo"]["extra_blend_y"], extra_blend_y
+        )
+        self.assertCountEqual(
+            agg_donut_table.meta["blendInfo"]["intra_blend_x"], intra_blend_x
+        )
+        self.assertCountEqual(
+            agg_donut_table.meta["blendInfo"]["intra_blend_y"], intra_blend_y
+        )
 
     def testAggregateDonutStamps(self):
         intra_dataset_list = list(

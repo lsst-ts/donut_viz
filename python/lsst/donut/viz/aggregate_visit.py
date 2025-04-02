@@ -326,6 +326,12 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         for pair in pairs:
             intraVisitInfo = visitInfoDict[pair.intra]
             extraVisitInfo = visitInfoDict[pair.extra]
+            blendInfo = {
+                "intra_blend_x": [],
+                "intra_blend_y": [],
+                "extra_blend_x": [],
+                "extra_blend_y": [],
+            }
 
             tables = []
 
@@ -361,7 +367,15 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                     [intraQualityTable, extraQualityTable],
                 ):
                     # Select donuts used in Zernike estimation
-                    table = donutTable[qualityTable["FINAL_SELECT"]]
+                    defocal_type = qualityTable["DEFOCAL_TYPE"][0]
+                    use_idx = np.where(qualityTable["FINAL_SELECT"])[0]
+                    table = donutTable[use_idx]
+                    blendInfo[f"{defocal_type}_blend_x"] += [
+                        donutTable.meta["blend_centroid_x"][idx] for idx in use_idx
+                    ]
+                    blendInfo[f"{defocal_type}_blend_y"] += [
+                        donutTable.meta["blend_centroid_y"][idx] for idx in use_idx
+                    ]
 
                     # Add focusZ to donut table
                     table["focusZ"] = table.meta["visit_info"]["focus_z"]
@@ -447,6 +461,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
             out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
             out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+
+            # Add blend info to the table
+            out.meta["blendInfo"] = blendInfo
 
             pairTables[pair.extra] = out
 
@@ -545,6 +562,12 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         """
         tables = []
         extraDetectorIds = [191, 195, 199, 203]
+        blendInfo = {
+            "intra_blend_x": [],
+            "intra_blend_y": [],
+            "extra_blend_x": [],
+            "extra_blend_y": [],
+        }
 
         for detector in extraDetectorIds:
             det_extra = camera[detector]
@@ -555,9 +578,6 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
             intraDonutTable = donutTables[detector + 1]
             qualityTable = qualityTables[detector]
 
-            if len(qualityTable) == 0:
-                continue
-
             # Get rows of quality table for this exposure
             intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
             extraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
@@ -567,8 +587,18 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 [extraQualityTable, intraQualityTable],
                 [det_extra, det_intra],
             ):
+                if len(qualityTable) == 0:
+                    continue
                 # Select donuts used in Zernike estimation
-                table = donutTable[qualityTable["FINAL_SELECT"]]
+                defocal_type = qualityTable["DEFOCAL_TYPE"][0]
+                use_idx = np.where(qualityTable["FINAL_SELECT"])[0]
+                table = donutTable[use_idx]
+                blendInfo[f"{defocal_type}_blend_x"] += [
+                    donutTable.meta["blend_centroid_x"][idx] for idx in use_idx
+                ]
+                blendInfo[f"{defocal_type}_blend_y"] += [
+                    donutTable.meta["blend_centroid_y"][idx] for idx in use_idx
+                ]
 
                 # Add focusZ to donut table
                 offset = 1.5 if det.getId() in extraDetectorIds else -1.5
@@ -624,6 +654,9 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
         out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
         out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+
+        # Add blend info to the table
+        out.meta["blendInfo"] = blendInfo
 
         return out
 
