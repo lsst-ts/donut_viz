@@ -139,6 +139,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Average mjds
         meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
         meta["nollIndices"] = noll_indices
+        meta["band"] = table_meta["extra"]["band"]
 
         q = meta["parallacticAngle"]
         rtp = meta["rotTelPos"]

@@ -92,7 +92,8 @@ class TestDonutVizPipeline(TestCase):
         agg_zern_avg = self.butler.get(average_dataset_list[0])
         self.assertEqual(len(agg_zern_avg), 2)
         self.assertCountEqual(agg_zern_avg["detector"], ["R22_S10", "R22_S11"])
-        self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys)
+        zern_keys = self.meta_keys + ["band"]
+        self.assertCountEqual(agg_zern_avg.meta.keys(), zern_keys)
 
     def testAggregateZernikesRaw(self):
         raw_dataset_list = list(
@@ -107,7 +108,8 @@ class TestDonutVizPipeline(TestCase):
         self.assertCountEqual(
             agg_zern_raw["detector"], ["R22_S10"] * 3 + ["R22_S11"] * 3
         )
-        self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys)
+        zern_keys = self.meta_keys + ["band"]
+        self.assertCountEqual(agg_zern_raw.meta.keys(), zern_keys)
 
     def testAggregateDonuts(self):
         agg_donut_table_list = list(
@@ -186,7 +188,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(raw_visit_table_list), 1)
         self.assertEqual(raw_visit_table_list[0].dataId["visit"], 4021123106001)
         raw_visit_table = self.butler.get(raw_visit_table_list[0])
-        raw_table_keys = self.meta_keys + ["blendInfo"]
+        raw_table_keys = self.meta_keys + ["blendInfo", "band"]
         self.assertCountEqual(raw_visit_table.meta.keys(), raw_table_keys)
         raw_zern_table = self.butler.get(
             "aggregateZernikesRaw",
@@ -240,7 +242,8 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(avg_visit_table_list), 1)
         self.assertEqual(avg_visit_table_list[0].dataId["visit"], 4021123106001)
         avg_visit_table = self.butler.get(avg_visit_table_list[0])
-        self.assertCountEqual(avg_visit_table.meta.keys(), self.meta_keys)
+        visit_keys = self.meta_keys + ["band"]
+        self.assertCountEqual(avg_visit_table.meta.keys(), visit_keys)
         avg_zern_table = self.butler.get(
             "aggregateZernikesAvg",
             dataId=avg_visit_table_list[0].dataId,
