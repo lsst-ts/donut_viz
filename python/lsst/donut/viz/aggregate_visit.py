@@ -753,8 +753,10 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
 
         raw_table = azr.copy()
         raw_table.meta["blendInfo"] = {
-            "blend_centroid_x": list(),
-            "blend_centroid_y": list(),
+            "blend_centroid_x_intra": list(),
+            "blend_centroid_x_extra": list(),
+            "blend_centroid_y_intra": list(),
+            "blend_centroid_y_extra": list(),
         }
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
@@ -790,16 +792,21 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                     raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
                     raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
                 # Add blend information into metadata
-                for blend_key in raw_table.meta["blendInfo"].keys():
+                for blend_key in ["blend_centroid_x", "blend_centroid_y"]:
                     # Just need to match the items kept from each detector.
-                    max_length = wintra.sum() * 2
                     det_select = [
                         adt.meta["blendInfo"][blend_key][idx]
                         for idx, x in enumerate(wadt)
                         if x
                     ]
-                    det_select = det_select[:max_length]
-                    raw_table.meta["blendInfo"][blend_key] += det_select
+                    intra_select = [
+                        det_select[idx] for idx, x in enumerate(wintra) if x
+                    ]
+                    extra_select = [
+                        det_select[idx] for idx, x in enumerate(wextra) if x
+                    ]
+                    raw_table.meta["blendInfo"][f"{blend_key}_intra"] += intra_select
+                    raw_table.meta["blendInfo"][f"{blend_key}_extra"] += extra_select
 
         return avg_table, raw_table
 
@@ -844,8 +851,10 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
         # Process raw table
         raw_table = azr.copy()
         raw_table.meta["blendInfo"] = {
-            "blend_centroid_x": list(),
-            "blend_centroid_y": list(),
+            "blend_centroid_x_intra": list(),
+            "blend_centroid_x_extra": list(),
+            "blend_centroid_y_intra": list(),
+            "blend_centroid_y_extra": list(),
         }
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
@@ -879,16 +888,22 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
                 raw_table[k + "_extra"][w] = adt[k][wextra]
 
             # Add blend information into metadata
-            for blend_key in raw_table.meta["blendInfo"].keys():
+            for blend_key in ["blend_centroid_x", "blend_centroid_y"]:
                 # Just need to match the items kept from each detector.
-                max_length = wintra.sum() * 2
-                det_select = [
+                extra_select = [
                     adt.meta["blendInfo"][blend_key][idx]
-                    for idx, x in enumerate(wadt)
+                    for idx, x in enumerate(wextra)
                     if x
                 ]
-                det_select = det_select[:max_length]
-                raw_table.meta["blendInfo"][blend_key] += det_select
+                intra_select = [
+                    adt.meta["blendInfo"][blend_key][idx]
+                    for idx, x in enumerate(wintra)
+                    if x
+                ]
+                extra_select = extra_select[: wextra.sum()]  # Match lengths
+                intra_select = intra_select[: wintra.sum()]
+                raw_table.meta["blendInfo"][f"{blend_key}_intra"] += intra_select
+                raw_table.meta["blendInfo"][f"{blend_key}_extra"] += extra_select
 
         return avg_table, raw_table
 

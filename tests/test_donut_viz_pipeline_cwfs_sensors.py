@@ -213,21 +213,47 @@ class TestDonutVizPipeline(TestCase):
                 "aggregateDonutTable", collections=self.test_run_name
             )
         )
-        agg_donut_tables = [self.butler.get(ref) for ref in agg_donut_table_list]
+        agg_donut_table = self.butler.get(agg_donut_table_list[0])
+        extra_idx = np.where(agg_donut_table["focusZ"].value == 1.5)[0]
+        intra_idx = np.where(agg_donut_table["focusZ"].value == -1.5)[0]
         self.assertCountEqual(
-            raw_visit_table.meta["blendInfo"]["blend_centroid_x"],
+            raw_visit_table.meta["blendInfo"]["blend_centroid_x_extra"],
             [
                 x
-                for agg_donut_table in agg_donut_tables
-                for x in agg_donut_table.meta["blendInfo"]["blend_centroid_x"]
+                for idx, x in enumerate(
+                    agg_donut_table.meta["blendInfo"]["blend_centroid_x"]
+                )
+                if idx in extra_idx
             ],
         )
         self.assertCountEqual(
-            raw_visit_table.meta["blendInfo"]["blend_centroid_y"],
+            raw_visit_table.meta["blendInfo"]["blend_centroid_x_intra"],
             [
                 x
-                for agg_donut_table in agg_donut_tables
-                for x in agg_donut_table.meta["blendInfo"]["blend_centroid_y"]
+                for idx, x in enumerate(
+                    agg_donut_table.meta["blendInfo"]["blend_centroid_x"]
+                )
+                if idx in intra_idx
+            ],
+        )
+        self.assertCountEqual(
+            raw_visit_table.meta["blendInfo"]["blend_centroid_y_extra"],
+            [
+                x
+                for idx, x in enumerate(
+                    agg_donut_table.meta["blendInfo"]["blend_centroid_y"]
+                )
+                if idx in extra_idx
+            ],
+        )
+        self.assertCountEqual(
+            raw_visit_table.meta["blendInfo"]["blend_centroid_y_intra"],
+            [
+                x
+                for idx, x in enumerate(
+                    agg_donut_table.meta["blendInfo"]["blend_centroid_y"]
+                )
+                if idx in intra_idx
             ],
         )
 
