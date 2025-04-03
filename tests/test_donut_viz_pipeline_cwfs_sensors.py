@@ -114,7 +114,7 @@ class TestDonutVizPipeline(TestCase):
         agg_zern_avg = self.butler.get(average_dataset_list[0])
         self.assertEqual(len(agg_zern_avg), 1)
         self.assertCountEqual(agg_zern_avg["detector"], self.extra_detector_names)
-        self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys + ["estimatorInfo"])
+        self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys + ["estimatorInfo", "band"])
 
     def testAggregateZernikesRaw(self) -> None:
         raw_dataset_list = list(
@@ -128,7 +128,7 @@ class TestDonutVizPipeline(TestCase):
             agg_zern_raw["detector"],
             sorted([det for det in self.extra_detector_names for _ in range(2)]),
         )
-        self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys + ["estimatorInfo"])
+        self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys + ["estimatorInfo", "band"])
 
     def testAggregateDonuts(self) -> None:
         donut_table_list = list(
@@ -196,7 +196,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(raw_visit_table_list), 1)
         self.assertEqual(raw_visit_table_list[0].dataId["visit"], 4021123106000)
         raw_visit_table = self.butler.get(raw_visit_table_list[0])
-        raw_table_keys = self.meta_keys + ["blendInfo"]+ ["estimatorInfo"]
+        raw_table_keys = self.meta_keys + ["blendInfo", "estimatorInfo", "band"]
         self.assertCountEqual(raw_visit_table.meta.keys(), raw_table_keys)
         raw_zern_table = self.butler.get(
             "aggregateZernikesRaw",
@@ -253,7 +253,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(avg_visit_table_list), 1)
         self.assertEqual(avg_visit_table_list[0].dataId["visit"], 4021123106000)
         avg_visit_table = self.butler.get(avg_visit_table_list[0])
-        self.assertCountEqual(avg_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo"])
+        self.assertCountEqual(avg_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo", "band"])
         avg_zern_table = self.butler.get(
             "aggregateZernikesAvg",
             dataId=avg_visit_table_list[0].dataId,

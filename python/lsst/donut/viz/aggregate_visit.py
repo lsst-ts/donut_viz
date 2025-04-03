@@ -218,6 +218,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Noll indices corresponding to the Zernike coefficients
         noll_indices = np.array(zernike_table.meta["noll_indices"])
         meta["nollIndices"] = noll_indices
+        meta["band"] = table_meta["extra"]["band"]
 
         # Transform Zernike coefficients to OCS and NW frames
         q = meta["parallacticAngle"]
