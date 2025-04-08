@@ -1013,6 +1013,14 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             # Load the quality table and determine which donuts were selected
             intraSelect = quality[quality["DEFOCAL_TYPE"] == "intra"]["FINAL_SELECT"]
             extraSelect = quality[quality["DEFOCAL_TYPE"] == "extra"]["FINAL_SELECT"]
+            intraLen = intraSelect.sum()
+            extraLen = extraSelect.sum()
+            if intraLen.sum() > extraLen.sum():
+                maxLen = extraLen
+            else:
+                maxLen = intraLen
+            if maxLen > self.config.maxDonutsPerDetector:
+                maxLen = self.config.maxDonutsPerDetector
 
             # Extract metadata dictionaries
             intraMeta = intra.metadata.toDict().copy()
@@ -1041,28 +1049,28 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
 
             for key in listKeys:
                 intraMetaAll[key].append(
-                    np.array(intraMeta[key])[intraSelect].tolist()[
-                        : self.config.maxDonutsPerDetector
-                    ]
+                    np.array(intraMeta[key])[intraSelect].tolist()[:maxLen]
                 )
                 extraMetaAll[key].append(
-                    np.array(extraMeta[key])[extraSelect].tolist()[
-                        : self.config.maxDonutsPerDetector
-                    ]
+                    np.array(extraMeta[key])[extraSelect].tolist()[:maxLen]
                 )
 
             # Append the requested number of donuts
-            intraStampsList.append(intra[: self.config.maxDonutsPerDetector])
-            extraStampsList.append(extra[: self.config.maxDonutsPerDetector])
+            intraStampsList.append(intra[:maxLen])
+            extraStampsList.append(extra[:maxLen])
 
         for key in listKeys:
-            intraMetaAll[key] = np.ravel(intraMetaAll[key])
-            extraMetaAll[key] = np.ravel(extraMetaAll[key])
+            intraMetaAll[key] = [val for metaList in intraMetaAll for val in metaList]
+            extraMetaAll[key] = [val for metaList in extraMetaAll for val in metaList]
         intra._metadata = intra.metadata.from_mapping(intraMetaAll)
         extra._metadata = extra.metadata.from_mapping(extraMetaAll)
 
-        intraStampsListRavel = np.ravel(intraStampsList)
-        extraStampsListRavel = np.ravel(extraStampsList)
+        intraStampsListRavel = [
+            stamp for stampList in intraStampsList for stamp in stampList
+        ]
+        extraStampsListRavel = [
+            stamp for stampList in extraStampsList for stamp in stampList
+        ]
 
         intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=intra._metadata)
         extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extra._metadata)
