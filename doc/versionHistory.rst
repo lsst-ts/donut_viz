@@ -4,6 +4,15 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.2
+
+-------------
+1.6.2
+-------------
+
+* Add blend information to aggregate donut tables metadata.
+* Add blend information to raw aggregate visit tables metadata.
+
 .._lsst.ts.donut.viz-1.6.1
 
 -------------

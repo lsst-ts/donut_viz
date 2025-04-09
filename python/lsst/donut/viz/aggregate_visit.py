@@ -139,6 +139,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Average mjds
         meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
         meta["nollIndices"] = noll_indices
+        meta["band"] = table_meta["extra"]["band"]
 
         q = meta["parallacticAngle"]
         rtp = meta["rotTelPos"]
@@ -326,6 +327,10 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         for pair in pairs:
             intraVisitInfo = visitInfoDict[pair.intra]
             extraVisitInfo = visitInfoDict[pair.extra]
+            blendInfo = {
+                "blend_centroid_x": list(),
+                "blend_centroid_y": list(),
+            }
 
             tables = []
 
@@ -361,7 +366,14 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                     [intraQualityTable, extraQualityTable],
                 ):
                     # Select donuts used in Zernike estimation
-                    table = donutTable[qualityTable["FINAL_SELECT"]]
+                    use_idx = np.where(qualityTable["FINAL_SELECT"])[0]
+                    table = donutTable[use_idx]
+                    blendInfo["blend_centroid_x"] += [
+                        donutTable.meta["blend_centroid_x"][idx] for idx in use_idx
+                    ]
+                    blendInfo["blend_centroid_y"] += [
+                        donutTable.meta["blend_centroid_y"][idx] for idx in use_idx
+                    ]
 
                     # Add focusZ to donut table
                     table["focusZ"] = table.meta["visit_info"]["focus_z"]
@@ -447,6 +459,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
             out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
             out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+
+            # Add blend info to the table
+            out.meta["blendInfo"] = blendInfo
 
             pairTables[pair.extra] = out
 
@@ -545,6 +560,10 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         """
         tables = []
         extraDetectorIds = [191, 195, 199, 203]
+        blendInfo = {
+            "blend_centroid_x": list(),
+            "blend_centroid_y": list(),
+        }
 
         for detector in extraDetectorIds:
             det_extra = camera[detector]
@@ -555,9 +574,6 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
             intraDonutTable = donutTables[detector + 1]
             qualityTable = qualityTables[detector]
 
-            if len(qualityTable) == 0:
-                continue
-
             # Get rows of quality table for this exposure
             intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
             extraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
@@ -567,8 +583,17 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 [extraQualityTable, intraQualityTable],
                 [det_extra, det_intra],
             ):
+                if len(qualityTable) == 0:
+                    continue
                 # Select donuts used in Zernike estimation
-                table = donutTable[qualityTable["FINAL_SELECT"]]
+                use_idx = np.where(qualityTable["FINAL_SELECT"])[0]
+                table = donutTable[use_idx]
+                blendInfo["blend_centroid_x"] += [
+                    donutTable.meta["blend_centroid_x"][idx] for idx in use_idx
+                ]
+                blendInfo["blend_centroid_y"] += [
+                    donutTable.meta["blend_centroid_y"][idx] for idx in use_idx
+                ]
 
                 # Add focusZ to donut table
                 offset = 1.5 if det.getId() in extraDetectorIds else -1.5
@@ -624,6 +649,9 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
         out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
         out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+
+        # Add blend info to the table
+        out.meta["blendInfo"] = blendInfo
 
         return out
 
@@ -724,6 +752,12 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                 avg_table[k][w] = np.mean(adt[k][adt["detector"] == det])
 
         raw_table = azr.copy()
+        raw_table.meta["blendInfo"] = {
+            "blend_centroid_x_intra": list(),
+            "blend_centroid_x_extra": list(),
+            "blend_centroid_y_intra": list(),
+            "blend_centroid_y_extra": list(),
+        }
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
         for det in dets:
@@ -757,6 +791,22 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                         raw_table[k + "_extra"] = np.nan
                     raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
                     raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
+                # Add blend information into metadata
+                for blend_key in ["blend_centroid_x", "blend_centroid_y"]:
+                    # Just need to match the items kept from each detector.
+                    det_select = [
+                        adt.meta["blendInfo"][blend_key][idx]
+                        for idx, x in enumerate(wadt)
+                        if x
+                    ]
+                    intra_select = [
+                        det_select[idx] for idx, x in enumerate(wintra) if x
+                    ]
+                    extra_select = [
+                        det_select[idx] for idx, x in enumerate(wextra) if x
+                    ]
+                    raw_table.meta["blendInfo"][f"{blend_key}_intra"] += intra_select
+                    raw_table.meta["blendInfo"][f"{blend_key}_extra"] += extra_select
 
         return avg_table, raw_table
 
@@ -800,6 +850,12 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
 
         # Process raw table
         raw_table = azr.copy()
+        raw_table.meta["blendInfo"] = {
+            "blend_centroid_x_intra": list(),
+            "blend_centroid_x_extra": list(),
+            "blend_centroid_y_intra": list(),
+            "blend_centroid_y_extra": list(),
+        }
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
         for det_extra, det_intra in zip(extraDetectorNames, intraDetectorNames):
@@ -830,6 +886,24 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
                     raw_table[k + "_extra"] = np.nan
                 raw_table[k + "_intra"][w] = adt[k][wintra]
                 raw_table[k + "_extra"][w] = adt[k][wextra]
+
+            # Add blend information into metadata
+            for blend_key in ["blend_centroid_x", "blend_centroid_y"]:
+                # Just need to match the items kept from each detector.
+                extra_select = [
+                    adt.meta["blendInfo"][blend_key][idx]
+                    for idx, x in enumerate(wextra)
+                    if x
+                ]
+                intra_select = [
+                    adt.meta["blendInfo"][blend_key][idx]
+                    for idx, x in enumerate(wintra)
+                    if x
+                ]
+                extra_select = extra_select[: wextra.sum()]  # Match lengths
+                intra_select = intra_select[: wintra.sum()]
+                raw_table.meta["blendInfo"][f"{blend_key}_intra"] += intra_select
+                raw_table.meta["blendInfo"][f"{blend_key}_extra"] += extra_select
 
         return avg_table, raw_table
 
@@ -939,6 +1013,14 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             # Load the quality table and determine which donuts were selected
             intraSelect = quality[quality["DEFOCAL_TYPE"] == "intra"]["FINAL_SELECT"]
             extraSelect = quality[quality["DEFOCAL_TYPE"] == "extra"]["FINAL_SELECT"]
+            intraLen = intraSelect.sum()
+            extraLen = extraSelect.sum()
+            if intraLen.sum() > extraLen.sum():
+                maxLen = extraLen
+            else:
+                maxLen = intraLen
+            if maxLen > self.config.maxDonutsPerDetector:
+                maxLen = self.config.maxDonutsPerDetector
 
             # Extract metadata dictionaries
             intraMeta = intra.metadata.toDict().copy()
@@ -967,28 +1049,32 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
 
             for key in listKeys:
                 intraMetaAll[key].append(
-                    np.array(intraMeta[key])[intraSelect].tolist()[
-                        : self.config.maxDonutsPerDetector
-                    ]
+                    np.array(intraMeta[key])[intraSelect].tolist()[:maxLen]
                 )
                 extraMetaAll[key].append(
-                    np.array(extraMeta[key])[extraSelect].tolist()[
-                        : self.config.maxDonutsPerDetector
-                    ]
+                    np.array(extraMeta[key])[extraSelect].tolist()[:maxLen]
                 )
 
             # Append the requested number of donuts
-            intraStampsList.append(intra[: self.config.maxDonutsPerDetector])
-            extraStampsList.append(extra[: self.config.maxDonutsPerDetector])
+            intraStampsList.append(intra[:maxLen])
+            extraStampsList.append(extra[:maxLen])
 
         for key in listKeys:
-            intraMetaAll[key] = np.ravel(intraMetaAll[key])
-            extraMetaAll[key] = np.ravel(extraMetaAll[key])
+            intraMetaAll[key] = [
+                val for metaList in intraMetaAll[key] for val in metaList
+            ]
+            extraMetaAll[key] = [
+                val for metaList in extraMetaAll[key] for val in metaList
+            ]
         intra._metadata = intra.metadata.from_mapping(intraMetaAll)
         extra._metadata = extra.metadata.from_mapping(extraMetaAll)
 
-        intraStampsListRavel = np.ravel(intraStampsList)
-        extraStampsListRavel = np.ravel(extraStampsList)
+        intraStampsListRavel = [
+            stamp for stampList in intraStampsList for stamp in stampList
+        ]
+        extraStampsListRavel = [
+            stamp for stampList in extraStampsList for stamp in stampList
+        ]
 
         intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=intra._metadata)
         extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extra._metadata)
