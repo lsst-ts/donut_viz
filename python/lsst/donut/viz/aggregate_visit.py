@@ -1060,8 +1060,12 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             extraStampsList.append(extra[:maxLen])
 
         for key in listKeys:
-            intraMetaAll[key] = [val for metaList in intraMetaAll for val in metaList]
-            extraMetaAll[key] = [val for metaList in extraMetaAll for val in metaList]
+            intraMetaAll[key] = [
+                val for metaList in intraMetaAll[key] for val in metaList
+            ]
+            extraMetaAll[key] = [
+                val for metaList in extraMetaAll[key] for val in metaList
+            ]
         intra._metadata = intra.metadata.from_mapping(intraMetaAll)
         extra._metadata = extra.metadata.from_mapping(extraMetaAll)
 
