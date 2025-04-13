@@ -27,8 +27,8 @@ subsets:
     subset:
       - isr
       - generateDonutDirectDetectTask
-      - cutOutDonutsCwfsTask
-      - reassignCwfsCutoutsTask
+      - cutOutDonutsCwfsPairTask
+      - reassignCwfsCutoutsPairTask
       - calcZernikesTask
     description: |
       This step processes the input images with ISR,
