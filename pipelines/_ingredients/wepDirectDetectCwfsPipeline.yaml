@@ -35,7 +35,7 @@ tasks:
     config:
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 20
-  cutOutDonutsCwfsTask:
+  cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       # And here we specify the configuration settings originally defined in
@@ -43,5 +43,5 @@ tasks:
       # Test CWFS pipeline works when specifying instrument parameters.
       donutStampSize: 160
       initialCutoutPadding: 40
-  reassignCwfsCutoutsTask:
+  reassignCwfsCutoutsPairTask:
     class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
