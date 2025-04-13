@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.6
+
+-------------
+1.6.6
+-------------
+
+* Fix pipelines to use cutOutDonutsCwfsPairTask and reassignCwfsCutoutsPairTask names for new connections.
+
 .._lsst.ts.donut.viz-1.6.5
 
 -------------
