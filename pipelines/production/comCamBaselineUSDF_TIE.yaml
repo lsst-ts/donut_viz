@@ -23,6 +23,14 @@ tasks:
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.maxSelect: -1
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: False
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: False
 
 # Define pipeline steps
 subsets:
