@@ -25,6 +25,14 @@ tasks:
             from lsst.ts.wep.task.pairTask import GroupPairer
             config.pairer.retarget(GroupPairer)
         connections.donutTables: "refitWcsDonutTable"
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: false
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: false
 
 # Define pipeline steps
 subsets:

@@ -26,6 +26,14 @@ tasks:
         xtol: 1.0e-3
         gtol: 1.0e-3
       donutStampSelector.maxSelect: -1
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: false
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: false
 
 # Define pipeline steps
 subsets:
