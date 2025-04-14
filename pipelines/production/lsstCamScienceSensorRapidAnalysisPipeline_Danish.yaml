@@ -1,8 +1,8 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectScienceGroupPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
 tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
@@ -27,8 +27,7 @@ subsets:
     subset:
       - isr
       - generateDonutDirectDetectTask
-      - cutOutDonutsCwfsPairTask
-      - reassignCwfsCutoutsPairTask
+      - cutOutDonutsScienceSensorGroupTask
       - calcZernikesTask
     description: |
       This step processes the input images with ISR,
@@ -37,12 +36,11 @@ subsets:
   step2a:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesCwfsTask
-      - aggregateAOSVisitTableCwfsTask
+      - aggregateDonutTablesTask
+      - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask
-      - plotDonutCwfsTask
-      - plotPsfZernTask
+      - plotDonutTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
