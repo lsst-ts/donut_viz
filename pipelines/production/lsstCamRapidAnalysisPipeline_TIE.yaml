@@ -17,6 +17,22 @@ tasks:
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.maxSelect: 5
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: true
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: true
+  plotDonutCwfsTask:
+    class: lsst.donut.viz.PlotDonutCwfsTask
+    config:
+      doRubinTVUpload: true
+  plotPsfZernTask:
+    class: lsst.donut.viz.PlotPsfZernTask
+    config:
+      doRubinTVUpload: true
 
 # Define pipeline steps
 subsets:
@@ -39,6 +55,7 @@ subsets:
       - plotAOSTask
       - aggregateDonutStampsTask
       - plotDonutCwfsTask
+      - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
