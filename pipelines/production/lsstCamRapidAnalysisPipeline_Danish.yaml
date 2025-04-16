@@ -20,7 +20,7 @@ tasks:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
-      estimateZernikes.doDonutStampSelector: False
+      doDonutStampSelector: False
 
 # Define pipeline steps
 subsets:
