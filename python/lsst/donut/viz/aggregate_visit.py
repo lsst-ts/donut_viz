@@ -943,16 +943,30 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             # Extract metadata dictionaries
             intraMeta = intra.metadata.toDict().copy()
             extraMeta = extra.metadata.toDict().copy()
-            listKeys = [
+            # The metadata for donutStamps is a PropertyList
+            # which converts lists on a single object to a scalars
+            # so we check both just in case one is a list
+            # and one is a scalar.
+            listKeys_intra = [
                 key
                 for key, val in intraMeta.items()
                 if (isinstance(val, list) and key != "COMMENT")
             ]
+            listKeys_extra = [
+                key
+                for key, val in extraMeta.items()
+                if (isinstance(val, list) and key != "COMMENT")
+            ]
+            listKeys = set(listKeys_extra).union(set(listKeys_intra))
             singleKeys = set(intraMeta) - set(listKeys)
 
             # Select donuts used in Zernike estimation
-            intra = DonutStamps([intra[i] for i in range(len(intra)) if intraSelect[i]])
-            extra = DonutStamps([extra[i] for i in range(len(extra)) if extraSelect[i]])
+            intra_select = DonutStamps(
+                [intra[i] for i in range(len(intra)) if intraSelect[i]]
+            )
+            extra_select = DonutStamps(
+                [extra[i] for i in range(len(extra)) if extraSelect[i]]
+            )
 
             # Copy over metadata
             if intraMetaAll is None:
@@ -967,30 +981,42 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
 
             for key in listKeys:
                 intraMetaAll[key].append(
-                    np.array(intraMeta[key])[intraSelect].tolist()[
+                    np.array(intra.metadata.getArray(key))[intraSelect].tolist()[
                         : self.config.maxDonutsPerDetector
                     ]
                 )
                 extraMetaAll[key].append(
-                    np.array(extraMeta[key])[extraSelect].tolist()[
+                    np.array(extra.metadata.getArray(key))[extraSelect].tolist()[
                         : self.config.maxDonutsPerDetector
                     ]
                 )
 
             # Append the requested number of donuts
-            intraStampsList.append(intra[: self.config.maxDonutsPerDetector])
-            extraStampsList.append(extra[: self.config.maxDonutsPerDetector])
+            intraStampsList.append(intra_select[: self.config.maxDonutsPerDetector])
+            extraStampsList.append(extra_select[: self.config.maxDonutsPerDetector])
 
         for key in listKeys:
-            intraMetaAll[key] = np.ravel(intraMetaAll[key])
-            extraMetaAll[key] = np.ravel(extraMetaAll[key])
-        intra._metadata = intra.metadata.from_mapping(intraMetaAll)
-        extra._metadata = extra.metadata.from_mapping(extraMetaAll)
+            intraMetaAll[key] = [
+                obj for detList in intraMetaAll[key] for obj in detList
+            ]
+            extraMetaAll[key] = [
+                obj for detList in extraMetaAll[key] for obj in detList
+            ]
+        intra_select._metadata = intra_select.metadata.from_mapping(intraMetaAll)
+        extra_select._metadata = extra_select.metadata.from_mapping(extraMetaAll)
 
-        intraStampsListRavel = np.ravel(intraStampsList)
-        extraStampsListRavel = np.ravel(extraStampsList)
+        intraStampsListRavel = [
+            stamp for stampList in intraStampsList for stamp in stampList
+        ]
+        extraStampsListRavel = [
+            stamp for stampList in extraStampsList for stamp in stampList
+        ]
 
-        intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=intra._metadata)
-        extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extra._metadata)
+        intraStampsRavel = DonutStamps(
+            intraStampsListRavel, metadata=intra_select._metadata
+        )
+        extraStampsRavel = DonutStamps(
+            extraStampsListRavel, metadata=extra_select._metadata
+        )
 
         return intraStampsRavel, extraStampsRavel
