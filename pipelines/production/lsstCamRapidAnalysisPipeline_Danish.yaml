@@ -8,12 +8,13 @@ tasks:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       instConfigFile: policy:instruments/LsstCam.yaml
+      measurementTask.nSigmaDetection: 5.0
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       donutStampSize: 160
       initialCutoutPadding: 40
-      instConfigFile: policy:instruments/LsstCam.yaml      
+      instConfigFile: policy:instruments/LsstCam.yaml
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
