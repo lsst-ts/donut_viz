@@ -552,7 +552,7 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
             )
             xlim = aux_ax.get_xlim()
             ylim = aux_ax.get_ylim()
-            defocal = "intra" if det_name[-3:] == "SW0" else "extra"
+            defocal = "extra" if det_name[-3:] == "SW0" else "intra"
             label = f"{det_name} {defocal}"
             aux_ax.text(
                 xlim[0] + 0.03 * (xlim[1] - xlim[0]),
