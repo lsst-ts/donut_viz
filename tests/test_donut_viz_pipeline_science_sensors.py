@@ -16,6 +16,7 @@ from lsst.donut.viz import (
     PlotPsfZernTask,
     PlotPsfZernTaskConfig,
 )
+from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 from lsst.ts.wep.task.pairTask import ExposurePairer
 from lsst.ts.wep.utils import (
@@ -356,6 +357,37 @@ class TestDonutVizPipeline(TestCase):
         self.assertCountEqual(
             extra_cent_x0, extra_agg_stamps.metadata.toDict()["CENT_X0"]
         )
+
+    def testAggDonutStampsSingleStamp(self):
+        intra_datasets = self.butler.query_datasets(
+            "donutStampsIntra", collections=self.test_run_name
+        )
+        extra_datasets = self.butler.query_datasets(
+            "donutStampsExtra", collections=self.test_run_name
+        )
+        quality_datasets = self.butler.query_datasets(
+            "donutQualityTable", collections=self.test_run_name
+        )
+        donut_stamps_intra = [self.butler.get(dataset) for dataset in intra_datasets]
+        donut_stamps_extra = [self.butler.get(dataset) for dataset in extra_datasets]
+        quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
+
+        # First check that original dataset is length more than 0
+        self.assertEqual(len(quality_tables[0]), 6)
+        # Leave only one DonutStamp in one of the DonutStamps objects
+        quality_tables[0].remove_rows([3, 4])
+        donut_stamps_intra_new = DonutStamps(donut_stamps_intra[0][:1])
+        for key in donut_stamps_intra[0].metadata.keys():
+            donut_stamps_intra_new.metadata[key] = donut_stamps_intra[0].metadata[key]
+        donut_stamps_intra[0] = donut_stamps_intra_new
+
+        # Test that outputs are still created
+        agg_donut_config = AggregateDonutStampsTaskConfig()
+        agg_donut_task = AggregateDonutStampsTask(config=agg_donut_config)
+        task_out = agg_donut_task.run(
+            donut_stamps_intra, donut_stamps_extra, quality_tables
+        )
+        self.assertEqual(len(task_out), 2)
 
     def testAggZernikeTablesRunMissingData(self):
         zernike_tables = self.butler.query_datasets(
