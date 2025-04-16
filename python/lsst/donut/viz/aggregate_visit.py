@@ -937,16 +937,21 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                 continue
 
             # Load the quality table and determine which donuts were selected
-            intraSelect = quality[quality["DEFOCAL_TYPE"] == "intra"]["FINAL_SELECT"]
-            extraSelect = quality[quality["DEFOCAL_TYPE"] == "extra"]["FINAL_SELECT"]
+            intraQualitySelect = quality[quality["DEFOCAL_TYPE"] == "intra"][
+                "FINAL_SELECT"
+            ]
+            extraQualitySelect = quality[quality["DEFOCAL_TYPE"] == "extra"][
+                "FINAL_SELECT"
+            ]
 
             # Extract metadata dictionaries
             intraMeta = intra.metadata.toDict().copy()
             extraMeta = extra.metadata.toDict().copy()
-            # The metadata for donutStamps is a PropertyList
-            # which converts lists on a single object to a scalars
-            # so we check both just in case one is a list
-            # and one is a scalar.
+            # The metadata for donutStamps is a PropertyList.
+            # If there is only a single donutStamp then the PropertyList
+            # converts any lists of length 1 into scalars.
+            # Therefore, we check both just in case one metadata value
+            # is a list and one is a scalar for the same key.
             listKeys_intra = [
                 key
                 for key, val in intraMeta.items()
@@ -961,11 +966,11 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             singleKeys = set(intraMeta) - set(listKeys)
 
             # Select donuts used in Zernike estimation
-            intra_select = DonutStamps(
-                [intra[i] for i in range(len(intra)) if intraSelect[i]]
+            intraStampsSelect = DonutStamps(
+                [intra[i] for i in range(len(intra)) if intraQualitySelect[i]]
             )
-            extra_select = DonutStamps(
-                [extra[i] for i in range(len(extra)) if extraSelect[i]]
+            extraStampsSelect = DonutStamps(
+                [extra[i] for i in range(len(extra)) if extraQualitySelect[i]]
             )
 
             # Copy over metadata
@@ -981,19 +986,23 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
 
             for key in listKeys:
                 intraMetaAll[key].append(
-                    np.array(intra.metadata.getArray(key))[intraSelect].tolist()[
+                    np.array(intra.metadata.getArray(key))[intraQualitySelect].tolist()[
                         : self.config.maxDonutsPerDetector
                     ]
                 )
                 extraMetaAll[key].append(
-                    np.array(extra.metadata.getArray(key))[extraSelect].tolist()[
+                    np.array(extra.metadata.getArray(key))[extraQualitySelect].tolist()[
                         : self.config.maxDonutsPerDetector
                     ]
                 )
 
             # Append the requested number of donuts
-            intraStampsList.append(intra_select[: self.config.maxDonutsPerDetector])
-            extraStampsList.append(extra_select[: self.config.maxDonutsPerDetector])
+            intraStampsList.append(
+                intraStampsSelect[: self.config.maxDonutsPerDetector]
+            )
+            extraStampsList.append(
+                extraStampsSelect[: self.config.maxDonutsPerDetector]
+            )
 
         for key in listKeys:
             intraMetaAll[key] = [
@@ -1002,8 +1011,12 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             extraMetaAll[key] = [
                 obj for detList in extraMetaAll[key] for obj in detList
             ]
-        intra_select._metadata = intra_select.metadata.from_mapping(intraMetaAll)
-        extra_select._metadata = extra_select.metadata.from_mapping(extraMetaAll)
+        intraStampsSelect._metadata = intraStampsSelect.metadata.from_mapping(
+            intraMetaAll
+        )
+        extraStampsSelect._metadata = extraStampsSelect.metadata.from_mapping(
+            extraMetaAll
+        )
 
         intraStampsListRavel = [
             stamp for stampList in intraStampsList for stamp in stampList
@@ -1013,10 +1026,10 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         ]
 
         intraStampsRavel = DonutStamps(
-            intraStampsListRavel, metadata=intra_select._metadata
+            intraStampsListRavel, metadata=intraStampsSelect._metadata
         )
         extraStampsRavel = DonutStamps(
-            extraStampsListRavel, metadata=extra_select._metadata
+            extraStampsListRavel, metadata=extraStampsSelect._metadata
         )
 
         return intraStampsRavel, extraStampsRavel
