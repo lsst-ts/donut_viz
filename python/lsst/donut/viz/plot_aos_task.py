@@ -502,33 +502,40 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
 
         for donut in donutStampsList:
             det_name = donut.detector_name
-            off = 0
             if det_name == "R00_SW0":
-                i = 0 + 0.5
-                j = 1 - 0.5
-            elif det_name == "R00_SW1":
-                i = 1 + 0.5
-                j = 1 - 0.5
-            elif det_name == "R44_SW0":
                 i = 0
                 j = -1
-            elif det_name == "R44_SW1":
+                nrot90 = 2
+            elif det_name == "R00_SW1":
                 i = -1
                 j = -1
+                nrot90 = 0
+            elif det_name == "R44_SW0":
+                i = 0 + 0.5
+                j = 1 - 0.5
+                nrot90 = 0
+            elif det_name == "R44_SW1":
+                i = 1 + 0.5
+                j = 1 - 0.5
+                nrot90 = 2
             elif det_name == "R04_SW0":
-                i = 1
-                j = 0 - 0.5
-            elif det_name == "R04_SW1":
-                i = 1
-                j = -1 - 0.5
-            elif det_name == "R40_SW0":
                 i = -1 + 0.5
                 j = 0
-            elif det_name == "R40_SW1":
+                nrot90 = 3
+            elif det_name == "R04_SW1":
                 i = -1 + 0.5
                 j = 1
-            x = i - off
-            y = off - j
+                nrot90 = 1
+            elif det_name == "R40_SW0":
+                i = 1
+                j = 0 - 0.5
+                nrot90 = 1
+            elif det_name == "R40_SW1":
+                i = 1
+                j = -1 - 0.5
+                nrot90 = 3
+            x = i - 0.25
+            y = -j
             xp = np.cos(rtp) * x + np.sin(rtp) * y
             yp = -np.sin(rtp) * x + np.cos(rtp) * y
 
@@ -544,7 +551,7 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
             arr = donut.stamp_im.image.array
             vmin, vmax = np.quantile(arr, (0.01, 0.99))
             aux_ax.imshow(
-                donut.stamp_im.image.array.T,
+                np.rot90(donut.stamp_im.image.array.T, nrot90),
                 vmin=vmin,
                 vmax=vmax,
                 extent=[0, det_size * 1.25, 0, det_size * 1.25],

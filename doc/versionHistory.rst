@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.2
+
+-------------
+1.6.2
+-------------
+
+* Fix positioning and orientation of stamps in PlotDonutCwfsTask
+
 .._lsst.ts.donut.viz-1.6.1
 
 -------------
