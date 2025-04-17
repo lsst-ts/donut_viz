@@ -188,12 +188,12 @@ class PlotAOSTask(pipeBase.PipelineTask):
         q = aos_raw.meta["parallacticAngle"]
         nollIndices = aos_raw.meta["nollIndices"]
 
-        # check if there is data for four corner sensors
+        # check if there is data for any corner sensor
         if (
             np.sum(
                 ["SW" in detName for detName in np.unique(aos_raw["detector"].value)]
             )
-            > 3
+            > 0
         ):
             # in that case, shift x,y positions
             # towards the center, along the diagonal
@@ -206,8 +206,8 @@ class PlotAOSTask(pipeBase.PipelineTask):
                 x_ccs, y_ccs, detector, rtp, self.config.shiftFactor
             )
             x = x_ocs_shift
-            y = -y_ocs_shift
-        # If it's not CWFS, it's FAM data, which requires no shifting
+            y = -y_ocs_shift  # +y is down on plot
+        # otherwise it's FAM data, which requires no shifting
         else:
             x = aos_raw["thx_OCS"]
             y = -aos_raw["thy_OCS"]  # +y is down on plot
