@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.3
+
+-------------
+1.6.3
+-------------
+
+* Make the Zernike pyramid plots more compact when using CWFS data.
+
 .._lsst.ts.donut.viz-1.6.2
 
 -------------
