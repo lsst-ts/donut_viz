@@ -1,4 +1,5 @@
 import tempfile
+from copy import copy
 from pathlib import Path
 
 import galsim
@@ -89,6 +90,14 @@ class PlotAOSTaskConfig(
         doc="Upload to RubinTV",
         default=False,
     )
+    shiftFactor = pexConfig.Field(
+        dtype=float,
+        doc="A shift to be applied to the x,y position of \
+        the Zernike data plotted for the Zernike pyramid,\
+        expressed as a fraction of the distance from the \
+        corner to the center (i.e. between 0 and 1.0).",
+        default=0.90,
+    )
 
 
 class PlotAOSTask(pipeBase.PipelineTask):
@@ -174,13 +183,34 @@ class PlotAOSTask(pipeBase.PipelineTask):
         # wbad = np.isin(aos_raw['detector'], [7, 8])
         # aos_raw = aos_raw[~wbad]
 
-        x = aos_raw["thx_OCS"]
-        y = -aos_raw["thy_OCS"]  # +y is down on plot
         zk = aos_raw["zk_OCS"].T
         rtp = aos_raw.meta["rotTelPos"]
         q = aos_raw.meta["parallacticAngle"]
         nollIndices = aos_raw.meta["nollIndices"]
 
+        # check if there is data for four corner sensors
+        if (
+            np.sum(
+                ["SW" in detName for detName in np.unique(aos_raw["detector"].value)]
+            )
+            > 3
+        ):
+            # in that case, shift x,y positions
+            # towards the center, along the diagonal
+            # rotate the original CCS into OCS,
+            # and then invert y
+            x_ccs = aos_raw["thx_CCS"].value
+            y_ccs = aos_raw["thy_CCS"].value
+            detector = aos_raw["detector"].value
+            x_ocs_shift, y_ocs_shift = self.shiftAlongDiagonalCwfs(
+                x_ccs, y_ccs, detector, rtp, self.config.shiftFactor
+            )
+            x = x_ocs_shift
+            y = -y_ocs_shift
+        # If it's not CWFS, it's FAM data, which requires no shifting
+        else:
+            x = aos_raw["thx_OCS"]
+            y = -aos_raw["thy_OCS"]  # +y is down on plot
         zkPyramid = self.doPyramid(x, y, zk, rtp, q, nollIndices)
 
         # We want residuals from the intrinsic design too.
@@ -204,6 +234,74 @@ class PlotAOSTask(pipeBase.PipelineTask):
         residPyramid = self.doPyramid(x, y, resid, rtp, q, nollIndices)
 
         return zkPyramid, residPyramid, intrinsicPyramid
+
+    def shiftAlongDiagonalCwfs(
+        self,
+        x_ccs: np.ndarray,
+        y_ccs: np.ndarray,
+        detector: np.ndarray,
+        rtp: float,
+        shift: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """A function to take x,y coordinates in CCS,
+        and depending on which detector they belong to,
+        shift them by a fraction of their mean distance
+        from the coordinate origin (0,0).
+
+        Parameters:
+        -----------
+        x_CCS, y_CCS: np.ndarray
+            Original x,y coordinates in CCS
+        detector: np.ndarray
+            List of detector names
+        rotTelPos: float
+           The rotation angle of the telescope in radians.
+           Rotating CCS counterclockwise by rotTelPos
+           aligns it with OCS.
+        shift: float
+            Amount of shift expressed as a fraction of
+            the mean detector distance from the origin
+            in CCS (i.e. between 0 and 1).
+
+        Returns:
+        --------
+        x_shifted, y_shifted : np.ndarray
+            Shifted x,y coordinates, rotated to OCS
+        """
+
+        x_ccs_shift = copy(x_ccs)
+        y_ccs_shift = copy(y_ccs)
+
+        # Shift x,y coordinates by the
+        # fraction of their mean distance
+        # from the center of the coordinate
+        # system
+        for det in np.unique(detector):
+            rows = detector == det
+            mean_x = np.mean(x_ccs[rows])
+            mean_y = np.mean(y_ccs[rows])
+
+            shift_x = -shift * mean_x
+            shift_y = -shift * mean_y
+
+            x_ccs_shift[rows] = x_ccs[rows] + shift_x
+            y_ccs_shift[rows] = y_ccs[rows] + shift_y
+
+        # Rotate these by rotTelPos
+        R = np.array(
+            [
+                [np.cos(rtp), -np.sin(rtp)],
+                [np.sin(rtp), np.cos(rtp)],
+            ]
+        )
+
+        points_ccs_shift = np.vstack((x_ccs_shift, y_ccs_shift))
+        points_ccs_shift_rotated = R @ points_ccs_shift
+        x_ccs_shift_rot, y_ccs_shift_rot = (
+            points_ccs_shift_rotated[0, :],
+            points_ccs_shift_rotated[1, :],
+        )
+        return x_ccs_shift_rot, y_ccs_shift_rot
 
 
 class PlotDonutTaskConnections(
