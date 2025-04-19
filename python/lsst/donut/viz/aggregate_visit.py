@@ -546,7 +546,10 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         tables = []
         extraDetectorIds = [191, 195, 199, 203]
 
-        for detector in extraDetectorIds:
+        for detector in donutTables.keys():
+            if detector not in extraDetectorIds:
+                continue
+
             det_extra = camera[detector]
             det_intra = camera[detector + 1]
 

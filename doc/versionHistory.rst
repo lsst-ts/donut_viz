@@ -4,6 +4,15 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.4
+
+-------------
+1.6.4
+-------------
+
+* Fix aggregateDonutTablesCwfsTask to work when tables are not present for all wavefront detectors.
+* Fix tests to work with updated ts_wep test data that only has raw data for one pair of wavefront sensors stored.
+
 .._lsst.ts.donut.viz-1.6.3
 
 -------------
