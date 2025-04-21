@@ -1,4 +1,4 @@
-@Library('JenkinsShared')_
+@Library('JenkinsShared@tickets/DM-50359')_
 DevelopPipeline(
     name: "donut_viz",
     module_name: "lsst.donut.viz",
