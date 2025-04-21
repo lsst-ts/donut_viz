@@ -7,14 +7,12 @@ tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
-      instConfigFile: policy:instruments/LsstCam.yaml
       measurementTask.nSigmaDetection: 5.0
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       donutStampSize: 160
       initialCutoutPadding: 40
-      instConfigFile: policy:instruments/LsstCam.yaml
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
@@ -33,7 +31,6 @@ tasks:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
-      estimateZernikes.instConfigFile: policy:instruments/LsstCam.yaml
 
 # Define pipeline steps
 subsets:
