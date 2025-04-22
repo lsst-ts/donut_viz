@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.7
+
+-------------
+1.6.7
+-------------
+
+* Change Jenkinsfile to point back to develop branch of ts_jenkins_shared_library.
+
 .._lsst.ts.donut.viz-1.6.6
 
 -------------
