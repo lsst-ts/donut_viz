@@ -6,7 +6,7 @@ tasks:
     config:
       connections.astromRefCat: "gaia_dr3_20230707"
       connections.photoRefCat: "the_monster_20240904"
-      connections.exposure: "postISRCCD"
+      connections.exposure: "post_isr_image"
       connections.outputExposure: "postFitPostISRCCD"
       connections.fitDonutCatalog: "donutTable"
       connections.donutCatalog: "refitWcsDonutTable"

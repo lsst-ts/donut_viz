@@ -4,6 +4,7 @@ tasks:
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
+      connections.outputExposure: post_isr_image
       # Although we don't have to apply the amp offset corrections, we do want
       # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
       doAmpOffset: True
@@ -17,6 +18,7 @@ tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
+      connections.exposure: post_isr_image
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 20
   cutOutDonutsScienceSensorGroupTask:
@@ -25,6 +27,7 @@ tasks:
       python: |
         from lsst.ts.wep.task.pairTask import GroupPairer
         config.pairer.retarget(GroupPairer)
+      connections.exposures: post_isr_image
       donutStampSize: 200
       initialCutoutPadding: 40
   calcZernikesTask:

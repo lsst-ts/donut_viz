@@ -4,6 +4,7 @@ tasks:
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
+      connections.outputExposure: post_isr_image
       # Although we don't have to apply the amp offset corrections, we do want
       # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
       doAmpOffset: False
@@ -31,11 +32,13 @@ tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
+      connections.exposure: post_isr_image
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 20
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
+      connections.exposure: post_isr_image
       # And here we specify the configuration settings originally defined in
       # CutOutDonutsCwfsTaskConfig.
       # Test CWFS pipeline works when specifying instrument parameters.
