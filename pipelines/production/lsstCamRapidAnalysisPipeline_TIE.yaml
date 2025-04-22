@@ -24,8 +24,8 @@ subsets:
     subset:
       - isr
       - generateDonutDirectDetectTask
-      - cutOutDonutsCwfsTask
-      - reassignCwfsCutoutsTask
+      - cutOutDonutsCwfsPairTask
+      - reassignCwfsCutoutsPairTask
       - calcZernikesTask
     description: |
       This step processes the input images with ISR,
@@ -39,6 +39,7 @@ subsets:
       - plotAOSTask
       - aggregateDonutStampsTask
       - plotDonutCwfsTask
+      - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and

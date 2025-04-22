@@ -52,12 +52,12 @@ tasks:
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:
-      doRubinTVUpload: false
+      doRubinTVUpload: False
   plotDonutTask:
     class: lsst.donut.viz.PlotDonutTask
     config:
-      doRubinTVUpload: false
+      doRubinTVUpload: False
   plotPsfZernTask:
     class: lsst.donut.viz.PlotPsfZernTask
     config:
-      doRubinTVUpload: false
+      doRubinTVUpload: False

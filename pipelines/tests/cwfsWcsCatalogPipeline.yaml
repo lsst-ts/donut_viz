@@ -33,7 +33,7 @@ tasks:
     class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
       donutSelector.unblendedSeparation: 1
-  cutOutDonutsCwfsTask:
+  cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       # And here we specify the configuration settings originally defined in
@@ -41,7 +41,7 @@ tasks:
       # Test CWFS pipeline works when specifying instrument parameters.
       donutStampSize: 160
       initialCutoutPadding: 40
-  reassignCwfsCutoutsTask:
+  reassignCwfsCutoutsPairTask:
     class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
@@ -64,7 +64,7 @@ tasks:
   plotDonutCwfsTask:
     class: lsst.donut.viz.PlotDonutCwfsTask
     config:
-      doRubinTVUpload: false
+      doRubinTVUpload: False
   plotPsfZernTask:
     class: lsst.donut.viz.PlotPsfZernTask
     config:

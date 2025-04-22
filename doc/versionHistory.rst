@@ -4,6 +4,16 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.6
+
+-------------
+1.6.6
+-------------
+
+* Fix pipelines to use cutOutDonutsCwfsPairTask and reassignCwfsCutoutsPairTask names for new connections.
+* Adjust pipelines after testing with initial on-sky commissioning data.
+* Fix donut stamp metadata when only a single donutStamp in donutStamps.
+
 .._lsst.ts.donut.viz-1.6.5
 
 -------------
