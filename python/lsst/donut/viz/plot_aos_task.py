@@ -142,7 +142,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
             ciName = getCiPlotName(
                 locationConfig, "LSSTCam", day_obs, seq_num, "zk_measurement_pyramid"
             )
-            with managedTempFile(suffix=".png", ciOutputName=ciName) as tempFile:
+            with managedTempFile(suffix=".png", ciOutputName=ciName) as (tempFile, cleanupFunc):
                 zkPyramid.savefig(tempFile)
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
@@ -150,12 +150,13 @@ class PlotAOSTask(pipeBase.PipelineTask):
                     dayObs=day_obs,
                     seqNum=seq_num,
                     filename=tempFile,
+                    cleanupFunc=cleanupFunc,
                 )
 
             ciName = getCiPlotName(
                 locationConfig, "LSSTCam", day_obs, seq_num, "zk_residual_pyramid"
             )
-            with managedTempFile(suffix=".png", ciOutputName=ciName) as tempFile:
+            with managedTempFile(suffix=".png", ciOutputName=ciName) as (tempFile, cleanupFunc):
                 residPyramid.savefig(tempFile)
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
@@ -163,6 +164,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
                     dayObs=day_obs,
                     seqNum=seq_num,
                     filename=tempFile,
+                    cleanupFunc=cleanupFunc,
                 )
 
     def doPyramid(self, x, y, zk, rtp, q, nollIndices):
@@ -407,7 +409,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 ciName = getCiPlotName(
                     locationConfig, "LSSTCam", day_obs, seq_num, "fp_donut_gallery"
                 )
-                with managedTempFile(suffix=".png", ciOutputName=ciName) as tempFile:
+                with managedTempFile(suffix=".png", ciOutputName=ciName) as (tempFile, cleanupFunc):
                     fig_dict[defocal_type].savefig(tempFile)
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(inst),
@@ -415,6 +417,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
                         dayObs=day_obs,
                         seqNum=seq_num,
                         filename=tempFile,
+                        cleanupFunc=cleanupFunc,
                     )
 
     @timeMethod
