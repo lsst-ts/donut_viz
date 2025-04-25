@@ -142,7 +142,10 @@ class PlotAOSTask(pipeBase.PipelineTask):
             ciName = getCiPlotName(
                 locationConfig, "LSSTCam", day_obs, seq_num, "zk_measurement_pyramid"
             )
-            with managedTempFile(suffix=".png", ciOutputName=ciName) as (tempFile, cleanupFunc):
+            with managedTempFile(suffix=".png", ciOutputName=ciName) as (
+                tempFile,
+                cleanupFunc,
+            ):
                 zkPyramid.savefig(tempFile)
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
@@ -156,7 +159,10 @@ class PlotAOSTask(pipeBase.PipelineTask):
             ciName = getCiPlotName(
                 locationConfig, "LSSTCam", day_obs, seq_num, "zk_residual_pyramid"
             )
-            with managedTempFile(suffix=".png", ciOutputName=ciName) as (tempFile, cleanupFunc):
+            with managedTempFile(suffix=".png", ciOutputName=ciName) as (
+                tempFile,
+                cleanupFunc,
+            ):
                 residPyramid.savefig(tempFile)
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(instrument),
@@ -409,7 +415,10 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 ciName = getCiPlotName(
                     locationConfig, "LSSTCam", day_obs, seq_num, "fp_donut_gallery"
                 )
-                with managedTempFile(suffix=".png", ciOutputName=ciName) as (tempFile, cleanupFunc):
+                with managedTempFile(suffix=".png", ciOutputName=ciName) as (
+                    tempFile,
+                    cleanupFunc,
+                ):
                     fig_dict[defocal_type].savefig(tempFile)
                     self.uploader.uploadPerSeqNumPlot(
                         instrument=get_instrument_channel_name(inst),
