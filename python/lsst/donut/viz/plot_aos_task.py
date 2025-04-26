@@ -26,11 +26,7 @@ from .zernike_pyramid import zernikePyramid
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
-    from lsst.rubintv.production.utils import (
-        getAutomaticLocationConfig,
-        getCiPlotName,
-        managedTempFile,
-    )
+    from lsst.rubintv.production.utils import getAutomaticLocationConfig, makePlotFile
 except ImportError:
     MultiUploader = None
 
@@ -139,39 +135,31 @@ class PlotAOSTask(pipeBase.PipelineTask):
             visit = inputRefs.aggregateAOSRaw.dataId["visit"]
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
-            ciName = getCiPlotName(
-                locationConfig, "LSSTCam", day_obs, seq_num, "zk_measurement_pyramid"
+            plotName = "zk_measurement_pyramid"
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
             )
-            with managedTempFile(suffix=".png", ciOutputName=ciName) as (
-                tempFile,
-                cleanupFunc,
-            ):
-                zkPyramid.savefig(tempFile)
-                self.uploader.uploadPerSeqNumPlot(
-                    instrument=get_instrument_channel_name(instrument),
-                    plotName="zk_measurement_pyramid",
-                    dayObs=day_obs,
-                    seqNum=seq_num,
-                    filename=tempFile,
-                    cleanupFunc=cleanupFunc,
-                )
+            zkPyramid.savefig(plotFile)
+            self.uploader.uploadPerSeqNumPlot(
+                instrument=get_instrument_channel_name(instrument),
+                plotName=plotName,
+                dayObs=day_obs,
+                seqNum=seq_num,
+                filename=plotFile,
+            )
 
-            ciName = getCiPlotName(
-                locationConfig, "LSSTCam", day_obs, seq_num, "zk_residual_pyramid"
+            plotName = "zk_residual_pyramid"
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
             )
-            with managedTempFile(suffix=".png", ciOutputName=ciName) as (
-                tempFile,
-                cleanupFunc,
-            ):
-                residPyramid.savefig(tempFile)
-                self.uploader.uploadPerSeqNumPlot(
-                    instrument=get_instrument_channel_name(instrument),
-                    plotName="zk_residual_pyramid",
-                    dayObs=day_obs,
-                    seqNum=seq_num,
-                    filename=tempFile,
-                    cleanupFunc=cleanupFunc,
-                )
+            residPyramid.savefig(plotFile)
+            self.uploader.uploadPerSeqNumPlot(
+                instrument=get_instrument_channel_name(instrument),
+                plotName=plotName,
+                dayObs=day_obs,
+                seqNum=seq_num,
+                filename=plotFile,
+            )
 
     def doPyramid(self, x, y, zk, rtp, q, nollIndices):
         fig = zernikePyramid(x, y, zk, nollIndices, cmap="seismic", s=10)
@@ -412,22 +400,23 @@ class PlotDonutTask(pipeBase.PipelineTask):
             ):
                 day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit_id)
 
-                ciName = getCiPlotName(
-                    locationConfig, "LSSTCam", day_obs, seq_num, "fp_donut_gallery"
+                plotName = "fp_donut_gallery"
+                plotFile = makePlotFile(
+                    locationConfig,
+                    "LSSTCam",
+                    day_obs,
+                    seq_num,
+                    plotName,
+                    "png"
                 )
-                with managedTempFile(suffix=".png", ciOutputName=ciName) as (
-                    tempFile,
-                    cleanupFunc,
-                ):
-                    fig_dict[defocal_type].savefig(tempFile)
-                    self.uploader.uploadPerSeqNumPlot(
-                        instrument=get_instrument_channel_name(inst),
-                        plotName="fp_donut_gallery",
-                        dayObs=day_obs,
-                        seqNum=seq_num,
-                        filename=tempFile,
-                        cleanupFunc=cleanupFunc,
-                    )
+                fig_dict[defocal_type].savefig(plotFile)
+                self.uploader.uploadPerSeqNumPlot(
+                    instrument=get_instrument_channel_name(inst),
+                    plotName=plotName,
+                    dayObs=day_obs,
+                    seqNum=seq_num,
+                    filename=plotFile,
+                )
 
     @timeMethod
     def run(
