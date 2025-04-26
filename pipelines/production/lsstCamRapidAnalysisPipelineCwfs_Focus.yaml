@@ -11,12 +11,10 @@ tasks:
       # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
       doAmpOffset: False
       ampOffset.doApplyAmpOffset: False
-      # Turn off slow steps in ISR
+      # Turn off slow steps in ISR but mask saturated pixels
       doBrighterFatter: False
-      # Mask saturated pixels,
-      # but turn off quadratic crosstalk because it's currently broken
-      doSaturation: False # True
-      crosstalk.doQuadraticCrosstalkCorrection: True
+      doSaturation: True
+      crosstalk.doQuadraticCrosstalkCorrection: False
       qa.saveStats: False
       doStandardStatistics: False
       doInterpolate: False
@@ -30,7 +28,7 @@ tasks:
       doLinearize: False
       doSuspect: False
       doSetBadRegions: False
-      doBootstrap: True
+      doBootstrap: False
       doCrosstalk: False
       doITLEdgeBleedMask: False
   generateDonutDirectDetectTask:
@@ -49,4 +47,3 @@ tasks:
     class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
   fitDonutRadiusTask:
     class: lsst.ts.wep.task.fitDonutRadiusTask.FitDonutRadiusTask
-      

@@ -39,6 +39,7 @@ subsets:
       - plotAOSTask
       - aggregateDonutStampsTask
       - plotDonutTask
+      - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
@@ -46,6 +47,6 @@ subsets:
 
 steps:
   - label: step1a-detectors
-    dimensions: [visit, detector]
+    dimensions: [detector]
   - label: step1b-visits
-    dimensions: [visit]
+    dimensions: []
