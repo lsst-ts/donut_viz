@@ -402,12 +402,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
 
                 plotName = "fp_donut_gallery"
                 plotFile = makePlotFile(
-                    locationConfig,
-                    "LSSTCam",
-                    day_obs,
-                    seq_num,
-                    plotName,
-                    "png"
+                    locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
                 )
                 fig_dict[defocal_type].savefig(plotFile)
                 self.uploader.uploadPerSeqNumPlot(
