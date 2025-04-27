@@ -20,7 +20,7 @@ tasks:
 
 # Define pipeline steps
 subsets:
-  step1:
+  step1a-detectors:
     subset:
       - isr
       - generateDonutDirectDetectTask
@@ -31,7 +31,7 @@ subsets:
       This step processes the input images with ISR,
       finds and cuts out the donut stamps,
       and estimates the Zernike coefficients from the donut pairs.
-  step2a:
+  step1b-visits:
     subset:
       - aggregateZernikeTablesTask
       - aggregateDonutTablesCwfsTask
@@ -44,3 +44,9 @@ subsets:
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
       tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-visits
+    dimensions: [visit]

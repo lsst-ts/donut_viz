@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.8
+
+-------------
+1.6.8
+-------------
+
+* Switch to post_isr_image and (in some pipelines) v2 steps
+
 .._lsst.ts.donut.viz-1.6.7
 
 -------------
