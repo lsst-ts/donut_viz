@@ -4,6 +4,15 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.6.9
+
+-------------
+1.6.9
+-------------
+
+* Change binning to 2x in rapid analysis Danish pipeline
+* Selecting only 4 donuts for Zernike estimation in rapid analysis Danish pipeline. This is to take max advantage of parllelization on the summit.
+
 .._lsst.ts.donut.viz-1.6.8
 
 -------------
