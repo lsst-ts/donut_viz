@@ -929,11 +929,10 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         intraStamps: typing.List,
         extraStamps: typing.List,
         qualityTables: typing.List,
-    ) -> tuple[typing.List, typing.List, dafBase.PropertyList, dafBase.PropertyList]:
+    ) -> tuple[typing.List, typing.List]:
         intraStampsList = []
         extraStampsList = []
-        intraMetaAll = None
-        extraMetaAll = None
+        stampsMetadata = None
         for intra, extra, quality in zip(intraStamps, extraStamps, qualityTables):
             # Skip if quality table is empty.
             if len(quality) == 0:
@@ -947,27 +946,6 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                 "FINAL_SELECT"
             ]
 
-            # Extract metadata dictionaries
-            intraMeta = intra.metadata.toDict().copy()
-            extraMeta = extra.metadata.toDict().copy()
-            # The metadata for donutStamps is a PropertyList.
-            # If there is only a single donutStamp then the PropertyList
-            # converts any lists of length 1 into scalars.
-            # Therefore, we check both just in case one metadata value
-            # is a list and one is a scalar for the same key.
-            listKeys_intra = [
-                key
-                for key, val in intraMeta.items()
-                if (isinstance(val, list) and key != "COMMENT")
-            ]
-            listKeys_extra = [
-                key
-                for key, val in extraMeta.items()
-                if (isinstance(val, list) and key != "COMMENT")
-            ]
-            listKeys = set(listKeys_extra).union(set(listKeys_intra))
-            singleKeys = set(intraMeta) - set(listKeys)
-
             # Select donuts used in Zernike estimation
             intraStampsSelect = DonutStamps(
                 [intra[i] for i in range(len(intra)) if intraQualitySelect[i]]
@@ -976,28 +954,25 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                 [extra[i] for i in range(len(extra)) if extraQualitySelect[i]]
             )
 
-            # Copy over metadata
-            if intraMetaAll is None:
-                intraMetaAll = dict()
-                extraMetaAll = dict()
-                for key in singleKeys:
-                    intraMetaAll[key] = intraMeta[key]
-                    extraMetaAll[key] = extraMeta[key]
-                for key in listKeys:
-                    intraMetaAll[key] = list()
-                    extraMetaAll[key] = list()
-
-            for key in listKeys:
-                intraMetaAll[key].append(
-                    np.array(intra.metadata.getArray(key))[intraQualitySelect].tolist()[
-                        : self.config.maxDonutsPerDetector
-                    ]
-                )
-                extraMetaAll[key].append(
-                    np.array(extra.metadata.getArray(key))[extraQualitySelect].tolist()[
-                        : self.config.maxDonutsPerDetector
-                    ]
-                )
+            if stampsMetadata is None:
+                # Create metadata for stamps
+                # Only keep the visit level data
+                # For stamp-level metadata look at the
+                # metadata of the individual stamps
+                stampsMetadata = dafBase.PropertyList()
+                visitKeys = [
+                    "VISIT",
+                    "BORESIGHT_ROT_ANGLE_RAD",
+                    "BORESIGHT_PAR_ANGLE_RAD",
+                    "BORESIGHT_ALT_RAD",
+                    "BORESIGHT_AZ_RAD",
+                    "BORESIGHT_RA_RAD",
+                    "BORESIGHT_DEC_RAD",
+                    "MJD",
+                    "BANDPASS",
+                ]
+                for key in visitKeys:
+                    stampsMetadata[key] = intra.metadata[key]
 
             # Append the requested number of donuts
             intraStampsList.append(
@@ -1007,20 +982,6 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                 extraStampsSelect[: self.config.maxDonutsPerDetector]
             )
 
-        for key in listKeys:
-            intraMetaAll[key] = [
-                obj for detList in intraMetaAll[key] for obj in detList
-            ]
-            extraMetaAll[key] = [
-                obj for detList in extraMetaAll[key] for obj in detList
-            ]
-        intraStampsSelect._metadata = intraStampsSelect.metadata.from_mapping(
-            intraMetaAll
-        )
-        extraStampsSelect._metadata = extraStampsSelect.metadata.from_mapping(
-            extraMetaAll
-        )
-
         intraStampsListRavel = [
             stamp for stampList in intraStampsList for stamp in stampList
         ]
@@ -1028,11 +989,7 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             stamp for stampList in extraStampsList for stamp in stampList
         ]
 
-        intraStampsRavel = DonutStamps(
-            intraStampsListRavel, metadata=intraStampsSelect._metadata
-        )
-        extraStampsRavel = DonutStamps(
-            extraStampsListRavel, metadata=extraStampsSelect._metadata
-        )
+        intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=stampsMetadata)
+        extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=stampsMetadata)
 
         return intraStampsRavel, extraStampsRavel
