@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.7.0
+
+-------------
+1.6.9
+-------------
+
+* Fix donut_viz test ISR configs to use default ISR calibration configs.
+
 .._lsst.ts.donut.viz-1.6.9
 
 -------------
