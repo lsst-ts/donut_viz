@@ -955,12 +955,13 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                 [extra[i] for i in range(len(extra)) if extraQualitySelect[i]]
             )
 
-            if stampsMetadata is None:
+            if intraStampsMetadata is None or extraStampsMetadata is None:
                 # Create metadata for stamps
                 # Only keep the visit level data
                 # For stamp-level metadata look at the
                 # metadata of the individual stamps
-                stampsMetadata = dafBase.PropertyList()
+                intraStampsMetadata = dafBase.PropertyList()
+                extraStampsMetadata = dafBase.PropertyList()
                 visitKeys = [
                     "VISIT",
                     "BORESIGHT_ROT_ANGLE_RAD",
