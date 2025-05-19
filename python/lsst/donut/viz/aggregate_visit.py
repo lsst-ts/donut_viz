@@ -932,7 +932,8 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
     ) -> tuple[typing.List, typing.List]:
         intraStampsList = []
         extraStampsList = []
-        stampsMetadata = None
+        intraStampsMetadata = None
+        extraStampsMetadata = None
         for intra, extra, quality in zip(intraStamps, extraStamps, qualityTables):
             # Skip if quality table is empty.
             if len(quality) == 0:
@@ -972,7 +973,8 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                     "BANDPASS",
                 ]
                 for key in visitKeys:
-                    stampsMetadata[key] = intra.metadata[key]
+                    intraStampsMetadata[key] = intra.metadata[key]
+                    extraStampsMetadata[key] = extra.metadata[key]
 
             # Append the requested number of donuts
             intraStampsList.append(
@@ -989,7 +991,7 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             stamp for stampList in extraStampsList for stamp in stampList
         ]
 
-        intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=stampsMetadata)
-        extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=stampsMetadata)
+        intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=intraStampsMetadata)
+        extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extraStampsMetadata)
 
         return intraStampsRavel, extraStampsRavel
