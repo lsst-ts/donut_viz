@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.7.1
+
+-------------
+1.7.0
+-------------
+
+* Fix upload bug for remote uploads to RubinTV.
+
 .._lsst.ts.donut.viz-1.7.0
 
 -------------
