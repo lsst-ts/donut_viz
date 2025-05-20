@@ -727,19 +727,22 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                 avg_table[k][w] = np.mean(adt[k][adt["detector"] == det])
 
         raw_table = azr.copy()
+        single_sided = False
+        visit_fzmin = adt["focusZ"].min()
+        visit_fzmax = adt["focusZ"].max()
+        if visit_fzmin == visit_fzmax:
+            single_sided = True
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
         for det in dets:
             w = raw_table["detector"] == det
             wadt = adt["detector"] == det
-            fzmin = adt["focusZ"].min()
-            fzmax = adt["focusZ"].max()
-            if fzmin == fzmax:  # single-sided Zernike estimates
+            if single_sided:  # single-sided Zernike estimates
                 for k in avg_keys:
                     raw_table[k][w] = adt[k][wadt]
             else:  # double-sided Zernike estimates
-                wintra = adt[wadt]["focusZ"] == fzmin
-                wextra = adt[wadt]["focusZ"] == fzmax
+                wintra = adt[wadt]["focusZ"] == visit_fzmin
+                wextra = adt[wadt]["focusZ"] == visit_fzmax
                 for k in avg_keys:
                     # If one table has more rows than the other,
                     # trim the longer one
