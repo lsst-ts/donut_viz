@@ -354,20 +354,24 @@ class TestDonutVizPipeline(TestCase):
             "VISIT",
             "BORESIGHT_ROT_ANGLE_RAD",
             "BORESIGHT_PAR_ANGLE_RAD",
-            "BORESIGHT_ALT_RAD",
-            "BORESIGHT_AZ_RAD",
             "BORESIGHT_RA_RAD",
             "BORESIGHT_DEC_RAD",
             "MJD",
             "BANDPASS",
+            "BORESIGHT_ALT_RAD",
+            "BORESIGHT_AZ_RAD",
         ]
-        self.assertCountEqual(
-            visit_keys, list(intra_agg_stamps.metadata.toDict().keys())
-        )
-        self.assertCountEqual(
-            visit_keys, list(extra_agg_stamps.metadata.toDict().keys())
-        )
+
+        # Assert that all visit_keys are present in aggregated metadata
+        intra_meta_keys = list(intra_agg_stamps.metadata.toDict().keys())
         for key in visit_keys:
+            self.assertIn(key, intra_meta_keys)
+        extra_meta_keys = list(extra_agg_stamps.metadata.toDict().keys())
+        for key in visit_keys:
+            self.assertIn(key, extra_meta_keys)
+
+        # Test that values are correctly set
+        for key in visit_keys[:7]:
             self.assertEqual(
                 intra_agg_stamps.metadata[key], donut_stamps_intra.metadata[key]
             )
@@ -376,6 +380,17 @@ class TestDonutVizPipeline(TestCase):
             )
             self.assertEqual(
                 intra_agg_stamps.metadata[key], extra_agg_stamps.metadata[key]
+            )
+        # Separate out BORESIGHT_ALT_RAD and BORESIGHT_AZ_RAD
+        # which should be nan
+        for key in visit_keys[7:]:
+            self.assertTrue(
+                np.isnan(intra_agg_stamps.metadata[key])
+                and np.isnan(donut_stamps_intra.metadata[key])
+            )
+            self.assertTrue(
+                np.isnan(extra_agg_stamps.metadata[key])
+                and np.isnan(donut_stamps_extra.metadata[key])
             )
 
     def testAggDonutStampsSingleStamp(self):

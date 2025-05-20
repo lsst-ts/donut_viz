@@ -732,8 +732,8 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         for det in dets:
             w = raw_table["detector"] == det
             wadt = adt["detector"] == det
-            fzmin = adt[wadt]["focusZ"].min()
-            fzmax = adt[wadt]["focusZ"].max()
+            fzmin = adt["focusZ"].min()
+            fzmax = adt["focusZ"].max()
             if fzmin == fzmax:  # single-sided Zernike estimates
                 for k in avg_keys:
                     raw_table[k][w] = adt[k][wadt]
@@ -992,7 +992,11 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
             stamp for stampList in extraStampsList for stamp in stampList
         ]
 
-        intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=intraStampsMetadata)
-        extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extraStampsMetadata)
+        intraStampsRavel = DonutStamps(
+            intraStampsListRavel, metadata=intraStampsMetadata
+        )
+        extraStampsRavel = DonutStamps(
+            extraStampsListRavel, metadata=extraStampsMetadata
+        )
 
         return intraStampsRavel, extraStampsRavel
