@@ -1,4 +1,3 @@
-import tempfile
 from copy import copy
 from pathlib import Path
 
@@ -574,16 +573,19 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
 
         if self.config.doRubinTVUpload:
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
-            with tempfile.TemporaryDirectory() as tmpdir:
-                donut_gallery_fn = Path(tmpdir) / f"fp_donut_gallery_{visit}.png"
-                fig.savefig(donut_gallery_fn)
-                self.uploader.uploadPerSeqNumPlot(
-                    instrument=get_instrument_channel_name(inst),
-                    plotName="fp_donut_gallery",
-                    dayObs=day_obs,
-                    seqNum=seq_num,
-                    filename=donut_gallery_fn,
-                )
+
+            plotName = "fp_donut_gallery"
+            plotFile = makePlotFile(
+                self.locationConfig, self.instrument, day_obs, seq_num, plotName, "png"
+            )
+            fig.savefig(plotFile)
+            self.uploader.uploadPerSeqNumPlot(
+                instrument=get_instrument_channel_name(inst),
+                plotName=plotName,
+                dayObs=day_obs,
+                seqNum=seq_num,
+                filename=plotFile,
+            )
 
     @timeMethod
     def run(
@@ -746,17 +748,19 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             instrument = inputRefs.zernikes[0].dataId["instrument"]
             visit = inputRefs.zernikes[0].dataId["visit"]
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
-            with tempfile.TemporaryDirectory() as tmpdir:
-                psf_zk_panel = Path(tmpdir) / "psf_zk_panel.png"
-                zkPanel.savefig(psf_zk_panel)
 
-                self.uploader.uploadPerSeqNumPlot(
-                    instrument=get_instrument_channel_name(instrument),
-                    plotName="psf_zk_panel",
-                    dayObs=day_obs,
-                    seqNum=seq_num,
-                    filename=psf_zk_panel,
-                )
+            plotName = "psf_zk_panel"
+            plotFile = makePlotFile(
+                self.locationConfig, self.instrument, day_obs, seq_num, plotName, "png"
+            )
+            zkPanel.savefig(plotFile)
+            self.uploader.uploadPerSeqNumPlot(
+                instrument=get_instrument_channel_name(instrument),
+                plotName="psf_zk_panel",
+                dayObs=day_obs,
+                seqNum=seq_num,
+                filename=plotFile,
+            )
 
     def run(self, zernikes, **kwargs) -> plt.figure:
         """Run the PlotPsfZern AOS task.
