@@ -727,11 +727,16 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                 avg_table[k][w] = np.mean(adt[k][adt["detector"] == det])
 
         raw_table = azr.copy()
+        # Use focusZ to learn about contents of the table
         single_sided = False
+        adt["focusZ"] = np.round(adt["focusZ"], decimals=4)
         visit_fzmin = adt["focusZ"].min()
         visit_fzmax = adt["focusZ"].max()
+        # If entire donut table has a single focusZ value, then
+        # we can assume single-sided Zernike estimates
         if visit_fzmin == visit_fzmax:
             single_sided = True
+        # Create the final table
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
         for det in dets:
