@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.7.2
+
+-------------
+1.7.1
+-------------
+
+* Remove calls to plt.Figure to fix memory leak
+
 .._lsst.ts.donut.viz-1.7.1
 
 -------------
