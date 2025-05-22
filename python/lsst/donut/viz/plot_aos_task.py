@@ -12,6 +12,7 @@ from astropy import units as u
 from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.utils import convertZernikesToPsfWidth
 from lsst.utils.timer import timeMethod
+from lsst.utils.plotting.figures import make_figure
 
 from .psf_from_zern import psfPanel
 from .utilities import (
@@ -451,7 +452,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
             [donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]
         ):
 
-            fig = plt.figure(figsize=(11, 8.5))
+            fig = make_figure(figsize=(11, 8.5))
             aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
             for donut in donutStampSet:
                 det_name = donut.detector_name
@@ -609,7 +610,8 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
         fp_size = 0.7
         nacross = 4
         det_size = fp_size / nacross
-        fig = plt.figure(figsize=(11, 8.5))
+        fig = make_figure(figsize=(11, 8.5))
+
         aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
 
         for donut in donutStampsList:
@@ -819,7 +821,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             for det in zs
         ]
 
-        fig = plt.figure(**kwargs)
+        fig = make_figure(**kwargs)
         fig.suptitle(
             f"PSF from Zernikes\nvisit: {zernikes[-1].meta['extra']['visit']}",
             fontsize="xx-large",
