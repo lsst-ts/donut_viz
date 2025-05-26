@@ -11,8 +11,8 @@ import yaml
 from astropy import units as u
 from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.utils import convertZernikesToPsfWidth
-from lsst.utils.timer import timeMethod
 from lsst.utils.plotting.figures import make_figure
+from lsst.utils.timer import timeMethod
 
 from .psf_from_zern import psfPanel
 from .utilities import (
