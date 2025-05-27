@@ -348,20 +348,50 @@ class TestDonutVizPipeline(TestCase):
             "donutStampsExtraVisit", collections=self.test_run_name
         )
         extra_agg_stamps = self.butler.get(extra_agg_datasets[0])
-        donut_stamps_intra = [self.butler.get(dataset) for dataset in intra_datasets]
-        donut_stamps_extra = [self.butler.get(dataset) for dataset in extra_datasets]
-        intra_cent_x0 = [
-            ds.metadata.toDict()["CENT_X0"][0] for ds in donut_stamps_intra
+        donut_stamps_intra = self.butler.get(intra_datasets[0])
+        donut_stamps_extra = self.butler.get(extra_datasets[0])
+        visit_keys = [
+            "VISIT",
+            "BORESIGHT_ROT_ANGLE_RAD",
+            "BORESIGHT_PAR_ANGLE_RAD",
+            "BORESIGHT_RA_RAD",
+            "BORESIGHT_DEC_RAD",
+            "MJD",
+            "BANDPASS",
+            "BORESIGHT_ALT_RAD",
+            "BORESIGHT_AZ_RAD",
         ]
-        extra_cent_x0 = [
-            ds.metadata.toDict()["CENT_X0"][0] for ds in donut_stamps_extra
-        ]
-        self.assertEqual(
-            intra_cent_x0[0], intra_agg_stamps.metadata.toDict()["CENT_X0"]
-        )
-        self.assertEqual(
-            extra_cent_x0[0], extra_agg_stamps.metadata.toDict()["CENT_X0"]
-        )
+
+        # Assert that all visit_keys are present in aggregated metadata
+        intra_meta_keys = list(intra_agg_stamps.metadata.toDict().keys())
+        for key in visit_keys:
+            self.assertIn(key, intra_meta_keys)
+        extra_meta_keys = list(extra_agg_stamps.metadata.toDict().keys())
+        for key in visit_keys:
+            self.assertIn(key, extra_meta_keys)
+
+        # Test that values are correctly set
+        for key in visit_keys[:7]:
+            self.assertEqual(
+                intra_agg_stamps.metadata[key], donut_stamps_intra.metadata[key]
+            )
+            self.assertEqual(
+                extra_agg_stamps.metadata[key], donut_stamps_extra.metadata[key]
+            )
+            self.assertEqual(
+                intra_agg_stamps.metadata[key], extra_agg_stamps.metadata[key]
+            )
+        # Separate out BORESIGHT_ALT_RAD and BORESIGHT_AZ_RAD
+        # which should be nan
+        for key in visit_keys[7:]:
+            self.assertTrue(
+                np.isnan(intra_agg_stamps.metadata[key])
+                and np.isnan(donut_stamps_intra.metadata[key])
+            )
+            self.assertTrue(
+                np.isnan(extra_agg_stamps.metadata[key])
+                and np.isnan(donut_stamps_extra.metadata[key])
+            )
 
     def testAggDonutStampsSingleStamp(self):
         intra_datasets = self.butler.query_datasets(

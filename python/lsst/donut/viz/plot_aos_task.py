@@ -573,11 +573,12 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
         visit = donutStampsIntra.metadata.getArray("VISIT")[0]
 
         if self.config.doRubinTVUpload:
+            locationConfig = getAutomaticLocationConfig()
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "fp_donut_gallery"
             plotFile = makePlotFile(
-                self.locationConfig, self.instrument, day_obs, seq_num, plotName, "png"
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
             )
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
@@ -747,13 +748,14 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         butlerQC.put(zkPanel, outputRefs.psfFromZernPanel)
 
         if self.config.doRubinTVUpload:
+            locationConfig = getAutomaticLocationConfig()
             instrument = inputRefs.zernikes[0].dataId["instrument"]
             visit = inputRefs.zernikes[0].dataId["visit"]
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "psf_zk_panel"
             plotFile = makePlotFile(
-                self.locationConfig, self.instrument, day_obs, seq_num, plotName, "png"
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
             )
             zkPanel.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(

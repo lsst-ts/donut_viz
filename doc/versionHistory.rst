@@ -4,10 +4,18 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.8.0
+
+-------------
+1.8.0
+-------------
+
+* Simplify aggregate donut stamps metadata to only include visit level info.
+
 .._lsst.ts.donut.viz-1.7.2
 
 -------------
-1.7.1
+1.7.2
 -------------
 
 * Remove calls to plt.Figure to fix memory leak
@@ -15,7 +23,7 @@ Version History
 .._lsst.ts.donut.viz-1.7.1
 
 -------------
-1.7.0
+1.7.1
 -------------
 
 * Fix upload bug for remote uploads to RubinTV.
@@ -23,7 +31,7 @@ Version History
 .._lsst.ts.donut.viz-1.7.0
 
 -------------
-1.6.9
+1.7.0
 -------------
 
 * Fix donut_viz test ISR configs to use default ISR calibration configs.
@@ -36,6 +44,14 @@ Version History
 
 * Change binning to 2x in rapid analysis Danish pipeline
 * Selecting only 4 donuts for Zernike estimation in rapid analysis Danish pipeline. This is to take max advantage of parllelization on the summit.
+
+.._lsst.ts.donut.viz-1.6.8
+
+-------------
+1.6.8
+-------------
+
+* When aggregating donut stamps, only keep the visit level metadata.
 
 .._lsst.ts.donut.viz-1.6.8
 
