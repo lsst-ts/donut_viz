@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.8.1
+
+-------------
+1.8.1
+-------------
+
+* Updated TIE RA pipeline to match Danish.
+
 .._lsst.ts.donut.viz-1.8.0
 
 -------------
