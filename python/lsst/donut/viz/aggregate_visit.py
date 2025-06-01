@@ -1,4 +1,5 @@
 import typing
+from copy import copy
 
 import galsim
 import lsst.daf.base as dafBase
@@ -93,6 +94,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         raw_tables = []
         avg_tables = []
         table_meta = None
+        estimator_meta = dict()
 
         for zernike_table in zernike_tables:
             if len(zernike_table) == 0:
@@ -117,6 +119,11 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             # just get any one, they're all the same
             if table_meta is None:
                 table_meta = zernike_table.meta
+            if "estimatorInfo" in zernike_table.meta.keys():
+                for key, val in zernike_table.meta["estimatorInfo"].items():
+                    if key not in estimator_meta:
+                        estimator_meta[key] = []
+                    estimator_meta[key].append(val)
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
 
@@ -148,13 +155,16 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         rot_OCS = galsim.zernike.zernikeRotMatrix(jmax, -rtp)[4:, 4:]
         rot_NW = galsim.zernike.zernikeRotMatrix(jmax, -q)[4:, 4:]
         for cat in (out_raw, out_avg):
-            cat.meta = meta
+            cat.meta = copy(meta)
             full_zk_ccs = np.zeros((len(cat), jmax - jmin + 1))
             full_zk_ccs[:, noll_indices - 4] = cat["zk_CCS"]
             cat["zk_OCS"] = full_zk_ccs @ rot_OCS
             cat["zk_NW"] = full_zk_ccs @ rot_NW
             cat["zk_OCS"] = cat["zk_OCS"][:, noll_indices - 4]
             cat["zk_NW"] = cat["zk_NW"][:, noll_indices - 4]
+        # Add wavefront estimation metadata for individual donuts
+        # to the raw table.
+        out_raw.meta["estimatorInfo"] = estimator_meta
 
         return out_raw, out_avg
 

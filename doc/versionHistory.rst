@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-1.9.0
+
+-------------
+1.9.0
+-------------
+
+* Add wavefront estimation algorithm metadata into the Aggregate Zernikes Raw and AOS Raw Visit table metadata.
+
 .._lsst.ts.donut.viz-1.8.1
 
 -------------
