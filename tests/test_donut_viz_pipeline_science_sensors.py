@@ -108,7 +108,9 @@ class TestDonutVizPipeline(TestCase):
         self.assertCountEqual(
             agg_zern_raw["detector"], ["R22_S10"] * 3 + ["R22_S11"] * 3
         )
-        self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys)
+        self.assertCountEqual(
+            agg_zern_raw.meta.keys(), self.meta_keys + ["estimatorInfo"]
+        )
 
     def testAggregateDonuts(self):
         donut_table_list = list(
@@ -170,7 +172,9 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(raw_visit_table_list), 1)
         self.assertEqual(raw_visit_table_list[0].dataId["visit"], 4021123106001)
         raw_visit_table = self.butler.get(raw_visit_table_list[0])
-        self.assertCountEqual(raw_visit_table.meta.keys(), self.meta_keys)
+        self.assertCountEqual(
+            raw_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo"]
+        )
         raw_zern_table = self.butler.get(
             "aggregateZernikesRaw",
             dataId=raw_visit_table_list[0].dataId,
