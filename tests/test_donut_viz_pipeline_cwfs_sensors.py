@@ -11,11 +11,14 @@ from lsst.donut.viz import (
     AggregateDonutTablesCwfsTaskConfig,
     AggregateZernikeTablesTask,
     AggregateZernikeTablesTaskConfig,
+    PlotCwfsPairingTask,
+    PlotCwfsPairingTaskConfig,
     PlotDonutCwfsTask,
     PlotDonutCwfsTaskConfig,
     PlotPsfZernTask,
     PlotPsfZernTaskConfig,
 )
+from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 from lsst.ts.wep.utils import (
@@ -248,6 +251,40 @@ class TestDonutVizPipeline(TestCase):
         )
         self.assertEqual(len(residual_dataset_list), 1)
         self.assertEqual(residual_dataset_list[0].dataId["visit"], 4021123106000)
+
+    def testPlotCwfsPairingTask(self):
+        # Test that plots exist in butler
+        dataset_list = list(
+            self.butler.query_datasets("pairingPlot", collections=self.test_run_name)
+        )
+        self.assertEqual(len(dataset_list), 1)
+        self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
+
+    def testPlotCwfsPairingTaskRunMissingData(self):
+        # Get only one detector
+        dataset_list = list(
+            self.butler.query_datasets("post_isr_image", collections=self.test_run_name)
+        )
+
+        images = {}
+        # pick just one of two available detectors
+        for dataset in dataset_list[:1]:
+            det = dataset.dataId["detector"]
+            images[det] = self.butler.get(dataset).image.array
+        table = self.butler.get(
+            self.butler.query_datasets(
+                "aggregateAOSVisitTableRaw", collections=self.test_run_name
+            )[0]
+        )
+        visit = dataset_list[0].dataId["exposure"]
+
+        # Run the plotting task
+        config = PlotCwfsPairingTaskConfig()
+        config.doRubinTVUpload = False
+        camera = LsstCam().getCamera()
+        task = PlotCwfsPairingTask(config=config)
+        taskOut = task.run(images, table, camera, visit)
+        self.assertIsInstance(taskOut, matplotlib.figure.Figure)
 
     def testPlotDonutCwfsTask(self):
         # Test that plots exist in butler
