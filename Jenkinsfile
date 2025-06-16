@@ -4,7 +4,7 @@ DevelopPipeline(
     module_name: "lsst.donut.viz",
     idl_names: [],
     build_all_idl: false,
-    extra_packages: ["lsst-ts/ts_wep"],
+    extra_packages: ["lsst-ts/ts_wep","lsst-sitcom/summit_utils@main"],
     kickoff_jobs: [],
     slack_build_channel: "aos-builds",
     has_doc_site: false,
