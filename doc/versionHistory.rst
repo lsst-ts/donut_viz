@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.0.0
+
+-------------
+2.0.0
+-------------
+
+* Add PlotCwfsPairingTask, update ISR connections to post_isr_image
+
 .._lsst.ts.donut.viz-1.9.0
 
 -------------
