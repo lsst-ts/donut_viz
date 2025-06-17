@@ -10,6 +10,7 @@ tasks:
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
+      connections.outputExposure: post_isr_image
       python: |
         from lsst.cp.pipe import configureIsrTaskLSSTForCalibrations
 
@@ -19,13 +20,12 @@ tasks:
   generateDonutCatalogWcsTask:
     class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
+      connections.exposure: post_isr_image
       donutSelector.unblendedSeparation: 1
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
-      # And here we specify the configuration settings originally defined in
-      # CutOutDonutsCwfsTaskConfig.
-      # Test CWFS pipeline works when specifying instrument parameters.
+      connections.exposure: post_isr_image
       donutStampSize: 160
       initialCutoutPadding: 40
   reassignCwfsCutoutsPairTask:
@@ -50,6 +50,10 @@ tasks:
       doRubinTVUpload: False
   plotDonutCwfsTask:
     class: lsst.donut.viz.PlotDonutCwfsTask
+    config:
+      doRubinTVUpload: False
+  plotCwfsPairingTask:
+    class: lsst.donut.viz.PlotCwfsPairingTask
     config:
       doRubinTVUpload: False
   plotPsfZernTask:

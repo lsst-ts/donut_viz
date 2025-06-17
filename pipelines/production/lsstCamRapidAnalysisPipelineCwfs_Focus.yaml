@@ -6,7 +6,6 @@ tasks:
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
-      connections.outputExposure: post_isr_image
       # Although we don't have to apply the amp offset corrections, we do want
       # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
       doAmpOffset: False
@@ -45,5 +44,4 @@ tasks:
       initialCutoutPadding: 40
   reassignCwfsCutoutsPairTask:
     class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
-  fitDonutRadiusTask:
-    class: lsst.ts.wep.task.fitDonutRadiusTask.FitDonutRadiusTask
+
