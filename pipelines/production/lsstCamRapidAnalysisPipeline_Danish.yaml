@@ -54,6 +54,7 @@ subsets:
       - plotAOSTask
       - aggregateDonutStampsTask
       - plotDonutCwfsTask
+      - plotPairingTask
       - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
