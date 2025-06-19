@@ -3,6 +3,13 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.0.1
+
+-------------
+2.0.1
+-------------
+
+* Update pipelines with pairingPlot, turn on Flat for CWFS ISR, turn off maxPowerGrad
 
 .._lsst.ts.donut.viz-2.0.0
 
