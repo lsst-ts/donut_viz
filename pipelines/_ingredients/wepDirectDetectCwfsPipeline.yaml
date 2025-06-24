@@ -21,7 +21,7 @@ tasks:
       doDefect: False
       doApplyGains: False
       doBias: False
-      doFlat: False
+      doFlat: True
       doDark: False
       doLinearize: False
       doSuspect: False

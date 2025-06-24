@@ -17,6 +17,7 @@ tasks:
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.maxSelect: 5
+      donutStampSelector.selectWithMaxPowerGrad: False
 
 
 # Define pipeline steps

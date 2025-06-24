@@ -818,8 +818,11 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
                 is_extra = k % 2 == 1
                 extra_det = k if is_extra else (k - 1)
                 nquarter = camera[k].getOrientation().getNQuarter() % 4
+                # handle negative regions in the image for plotting
+                arr = np.copy(images[k])
+                arr[np.where(arr < 0)] = 0
                 ax.imshow(
-                    np.rot90(stretchDataMidTone(images[k]), -nquarter).T, cmap="Greys_r"
+                    np.rot90(stretchDataMidTone(arr), -nquarter).T, cmap="Greys_r"
                 )
                 if is_extra:
                     dettable = table[table["detector"] == camera[extra_det].getName()]

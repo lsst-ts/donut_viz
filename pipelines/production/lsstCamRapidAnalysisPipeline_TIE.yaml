@@ -28,6 +28,7 @@ tasks:
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.useCustomSnLimit: True
       donutStampSelector.minSignalToNoise: 100
+      donutStampSelector.selectWithMaxPowerGrad: False
 
 # Define pipeline steps
 subsets:
@@ -50,6 +51,7 @@ subsets:
       - plotAOSTask
       - aggregateDonutStampsTask
       - plotDonutCwfsTask
+      - plotPairingTask
       - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
