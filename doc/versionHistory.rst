@@ -3,6 +3,14 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.0.2
+
+-------------
+2.0.2
+-------------
+
+* Add average danish fwhm values into metadata of average table.
+
 .._lsst.ts.donut.viz-2.0.1
 
 -------------
