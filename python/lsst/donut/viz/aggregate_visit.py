@@ -165,6 +165,12 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Add wavefront estimation metadata for individual donuts
         # to the raw table.
         out_raw.meta["estimatorInfo"] = estimator_meta
+        # Add average danish fwhm values into metadata of average table.
+        if "fwhm" in out_raw.meta["estimatorInfo"].keys():
+            out_avg.meta["estimatorInfo"] = dict()
+            out_avg.meta["estimatorInfo"]["fwhm"] = np.median(
+                out_raw.meta["estimatorInfo"]["fwhm"]
+            )
 
         return out_raw, out_avg
 

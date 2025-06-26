@@ -3,6 +3,15 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.0.2
+
+-------------
+2.0.2
+-------------
+
+* Add average danish fwhm values into metadata of average table.
+* Change science sensor tests to use post_isr_image.
+
 .._lsst.ts.donut.viz-2.0.1
 
 -------------
