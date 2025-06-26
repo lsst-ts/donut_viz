@@ -10,6 +10,7 @@ tasks:
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
+      connections.outputExposure: post_isr_image
       python: |
         from lsst.cp.pipe import configureIsrTaskLSSTForCalibrations
 
@@ -19,9 +20,12 @@ tasks:
   generateDonutCatalogWcsTask:
     class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
+      connections.exposure: post_isr_image
       donutSelector.unblendedSeparation: 1
   cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask
+    config:
+      connections.exposures: post_isr_image
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
