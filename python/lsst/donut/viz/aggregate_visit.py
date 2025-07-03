@@ -123,7 +123,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                 for key, val in zernike_table.meta["estimatorInfo"].items():
                     if key not in estimator_meta:
                         estimator_meta[key] = []
-                    estimator_meta[key].append(val)
+                    estimator_meta[key] += val
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
 

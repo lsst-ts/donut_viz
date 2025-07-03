@@ -3,6 +3,14 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.0.3
+
+-------------
+2.0.3
+-------------
+
+* Fix how we aggregate estimatorInfo metadata in average AggregateZernikes tables.
+
 .._lsst.ts.donut.viz-2.0.2
 
 -------------
