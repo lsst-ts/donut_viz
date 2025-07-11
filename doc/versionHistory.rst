@@ -3,6 +3,14 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.0.4
+
+-------------
+2.0.4
+-------------
+
+* Fix importing convertDictToVisitInfo after changes in ts_wep.
+
 .._lsst.ts.donut.viz-2.0.3
 
 -------------

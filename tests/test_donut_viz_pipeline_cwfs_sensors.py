@@ -20,8 +20,8 @@ from lsst.donut.viz import (
 )
 from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task import DonutStamps
-from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 from lsst.ts.wep.utils import (
+    convertDictToVisitInfo,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,
