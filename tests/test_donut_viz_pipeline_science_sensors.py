@@ -17,9 +17,9 @@ from lsst.donut.viz import (
     PlotPsfZernTaskConfig,
 )
 from lsst.ts.wep.task import DonutStamps
-from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 from lsst.ts.wep.task.pairTask import ExposurePairer
 from lsst.ts.wep.utils import (
+    convertDictToVisitInfo,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,

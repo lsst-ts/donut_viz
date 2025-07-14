@@ -12,8 +12,8 @@ from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.geom import Point2D, radians
 from lsst.pipe.base import connectionTypes as ct
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 from lsst.ts.wep.task.pairTask import ExposurePairer
+from lsst.ts.wep.utils import convertDictToVisitInfo
 from lsst.utils.timer import timeMethod
 
 __all__ = [
