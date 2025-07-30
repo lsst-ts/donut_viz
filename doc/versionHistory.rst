@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.2.3
+
+-------------
+2.2.3
+-------------
+
+* Add latest USDF pipelines.
+
 .._lsst.ts.donut.viz-2.2.2
 
 -------------
