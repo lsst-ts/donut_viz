@@ -53,20 +53,21 @@ tasks:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+    config:
+      maxDonutsPerDetector: 20
 
 # Define pipeline steps
 subsets:
-  step1a-detectors:
+  step1b-visits:
     subset:
-      # - isr
-      # - generateDonutDirectDetectTask
-      # - cutOutDonutsScienceSensorGroupTask
       - calcZernikesTask
     description: |
       This step processes the input images with ISR,
       finds and cuts out the donut stamps,
       and estimates the Zernike coefficients from the donut pairs.
-  step1b-visits:
+  step2-visits:
     subset:
       - aggregateZernikeTablesTask
       - aggregateDonutTablesGroupTask
@@ -81,7 +82,7 @@ subsets:
       tables for the AOS visit.
 
 steps:
-  - label: step1a-detectors
-    dimensions: [detector]
   - label: step1b-visits
+    dimensions: []
+  - label: step2-visits
     dimensions: []
