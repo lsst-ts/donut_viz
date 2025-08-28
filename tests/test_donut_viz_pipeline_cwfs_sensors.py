@@ -286,6 +286,14 @@ class TestDonutVizPipeline(TestCase):
         taskOut = task.run(images, table, camera, visit)
         self.assertIsInstance(taskOut, matplotlib.figure.Figure)
 
+    def testPlotDonutFitsTask(self):
+        # Test that plots exist in butler
+        dataset_list = list(
+            self.butler.query_datasets("donutFits", collections=self.test_run_name)
+        )
+        self.assertEqual(len(dataset_list), 1)
+        self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
+
     def testPlotDonutCwfsTask(self):
         # Test that plots exist in butler
         dataset_list = list(
