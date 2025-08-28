@@ -60,3 +60,7 @@ tasks:
     class: lsst.donut.viz.PlotPsfZernTask
     config:
       doRubinTVUpload: False
+  plotDonutFitsTask:
+    class: lsst.donut.viz.PlotDonutFitsTask
+    config:
+      doRubinTVUpload: False
