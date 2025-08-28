@@ -25,3 +25,7 @@ tasks:
     class: lsst.donut.viz.PlotPsfZernTask
     config:
       doRubinTVUpload: True
+  plotDonutFitsTask:
+    class: lsst.donut.viz.PlotDonutFitsTask
+    config:
+      doRubinTVUpload: True
