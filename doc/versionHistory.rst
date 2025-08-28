@@ -3,6 +3,14 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.1.0
+
+-------------
+2.1.0
+-------------
+
+* Add plotDonutFitsTask.
+
 .._lsst.ts.donut.viz-2.0.4
 
 -------------
