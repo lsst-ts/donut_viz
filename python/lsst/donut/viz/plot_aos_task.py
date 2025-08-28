@@ -1,22 +1,29 @@
 from copy import copy
 from pathlib import Path
 
+import batoid
+import danish
 import galsim
 import lsst.afw
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
-import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 from astropy import units as u
 from astropy.table import Table
+from astropy.time import Time
+from lsst.summit.utils.efdUtils import getMostRecentRowWithDataBefore, makeEfdClient
 from lsst.summit.utils.plotting import stretchDataMidTone
 from lsst.ts.wep.task import DonutStamps
-from lsst.ts.wep.utils import convertZernikesToPsfWidth
+from lsst.ts.wep.utils import convertZernikesToPsfWidth, getTaskInstrument
 from lsst.utils.plotting.figures import make_figure
 from lsst.utils.timer import timeMethod
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.figure import Figure
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import ConnectionPatch
+from scipy.optimize import least_squares
 
 from .psf_from_zern import psfPanel
 from .utilities import (
@@ -50,6 +57,9 @@ __all__ = [
     "PlotPsfZernTaskConnections",
     "PlotPsfZernTaskConfig",
     "PlotPsfZernTask",
+    "PlotDonutFitsTaskConnections",
+    "PlotDonutFitsTaskConfig",
+    "PlotDonutFitsTask",
 ]
 
 
@@ -191,7 +201,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
     def plotZernikePyramids(
         self,
         aos_raw,
-    ) -> plt.Figure:
+    ) -> Figure:
         # Cut out R30 for coordinate system check
         # wbad = np.isin(aos_raw['detector'], range(117, 126))
         # Cut out ComCam 'S21' and 'S22'
@@ -955,7 +965,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
                 filename=plotFile,
             )
 
-    def run(self, zernikes, **kwargs) -> plt.figure:
+    def run(self, zernikes, **kwargs) -> Figure:
         """Run the PlotPsfZern AOS task.
 
         This task create a 3x3 grid of subplots,
@@ -1022,5 +1032,490 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
 
         # draw rose
         add_coordinate_roses(fig, rtp, q, [(0.15, 0.94), (0.85, 0.94)])
+
+        return fig
+
+
+class PlotDonutFitsTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "instrument"),
+):
+    aggregateAOSRaw = ct.Input(
+        doc="AOS raw catalog",
+        dimensions=("visit", "instrument"),
+        storageClass="AstropyTable",
+        name="aggregateAOSVisitTableRaw",
+    )
+    donutStampsIntraVisit = ct.Input(
+        doc="Intrafocal Donut Stamps",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsIntraVisit",
+    )
+    donutStampsExtraVisit = ct.Input(
+        doc="Extrafocal Donut Stamps",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsExtraVisit",
+    )
+    camera = ct.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
+    )
+    donutFits = ct.Output(
+        doc="Donut Fits",
+        dimensions=("visit", "instrument"),
+        storageClass="Plot",
+        name="donutFits",
+    )
+
+
+class PlotDonutFitsTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=PlotDonutFitsTaskConnections,
+):
+    doRubinTVUpload = pexConfig.Field(
+        dtype=bool,
+        doc="Upload to RubinTV",
+        default=False,
+    )
+
+
+class PlotDonutFitsTask(pipeBase.PipelineTask):
+    ConfigClass = PlotDonutFitsTaskConfig
+    _DefaultName = "plotDonutFitsTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
+
+        mask_params_fn = Path(danish.datadir) / "RubinObsc.yaml"
+        with open(mask_params_fn) as f:
+            self.mask_params = yaml.safe_load(f)
+        instConfigFile = None
+        self.instrument = getTaskInstrument(
+            "LSSTCam",
+            "R00_SW0",
+            instConfigFile,
+        )
+        self.obsc = self.instrument.obscuration
+        self.fL = self.instrument.focalLength
+        self.R_outer = self.instrument.radius
+        self.wavelengths = self.instrument.wavelength
+        self.pixel_scale = self.instrument.pixelSize
+        self.factory = danish.DonutFactory(
+            R_outer=self.R_outer,
+            R_inner=self.R_outer * self.obsc,
+            mask_params=self.mask_params,
+            focal_length=self.fL,
+            pixel_scale=self.pixel_scale,
+        )
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ) -> None:
+        # Get the inputs
+        aos_raw = butlerQC.get(inputRefs.aggregateAOSRaw)
+        donutStampsIntra = butlerQC.get(inputRefs.donutStampsIntraVisit)
+        donutStampsExtra = butlerQC.get(inputRefs.donutStampsExtraVisit)
+        camera = butlerQC.get(inputRefs.camera)
+        visit = inputRefs.aggregateAOSRaw.dataId["visit"]
+        inputRefs.donutStampsIntraVisit.dataId.records["visit"]
+        record = inputRefs.aggregateAOSRaw.dataId.records["visit"]
+        startTime = record.timespan.begin
+
+        day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+        fig = self.run(
+            aos_raw,
+            donutStampsIntra,
+            donutStampsExtra,
+            camera,
+            day_obs,
+            seq_num,
+            startTime,
+        )
+
+        butlerQC.put(fig, outputRefs.donutFits)
+
+        if self.config.doRubinTVUpload:
+            locationConfig = getAutomaticLocationConfig()
+            instrument = inputRefs.aggregateAOSRaw.dataId["instrument"]
+            plotName = "donut_fits"
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
+            fig.savefig(plotFile)
+            self.uploader.uploadPerSeqNumPlot(
+                instrument=get_instrument_channel_name(instrument),
+                plotName=plotName,
+                dayObs=day_obs,
+                seqNum=seq_num,
+                filename=plotFile,
+            )
+
+    def getModel(self, telescope, defocused_telescope, row, img, wavelength, inex):
+        thx = row[f"thx_CCS_{inex}"]
+        thy = row[f"thy_CCS_{inex}"]
+        zk_CCS = row["zk_CCS"]
+        nollIndices = row.meta["nollIndices"]
+
+        z_intrinsic = (
+            batoid.zernikeGQ(
+                telescope,
+                thx,
+                thy,
+                wavelength,
+                jmax=28,
+                eps=self.obsc,
+            )
+            * wavelength
+        )
+        z_ref = (
+            batoid.zernikeTA(
+                defocused_telescope,
+                thx,
+                thy,
+                wavelength,
+                jmax=78,
+                eps=self.obsc,
+                focal_length=self.fL,
+            )
+            * wavelength
+        )
+        zk = z_ref.copy()
+        for ij, j in enumerate(nollIndices):
+            zk[j] += zk_CCS[ij] * 1e-6 - z_intrinsic[j]
+
+        fitter = danish.SingleDonutModel(
+            self.factory,
+            z_ref=zk,
+            z_terms=tuple(),  # only fitting x/y/fwhm
+            thx=thx,
+            thy=thy,
+            npix=img.shape[0],
+        )
+
+        guess = [0.0, 0.0, 0.7]
+        sky_level = 10000  # What!?
+        result = least_squares(
+            fitter.chi,
+            guess,
+            jac=fitter.jac,
+            ftol=1e-3,
+            xtol=1e-3,
+            gtol=1e-3,
+            args=(img, sky_level),
+        )
+        dx, dy, fwhm = result.x
+
+        model = fitter.model(*result.x, [])
+        return model, fwhm
+
+    def plotResults(self, axs, imgs, models, row):
+        colors = [
+            (0.0, 0.0, 1.0),  # Blue
+            (1.0, 1.0, 1.0),  # White
+            (1.0, 0.0, 0.0),  # Red
+        ]
+        positions = [0.0, 1 / 11, 1.0]
+        cmap = LinearSegmentedColormap.from_list(
+            "cyan_white_magenta", list(zip(positions, colors))
+        )
+
+        vmax = np.nanquantile(imgs[0], 0.99)
+        axs[0].imshow(imgs[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        axs[1].imshow(models[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        axs[2].imshow(imgs[0] - models[0], cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
+        axs[3].imshow(imgs[1], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        axs[4].imshow(models[1], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        axs[5].imshow(imgs[1] - models[1], cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
+        axs[6].bar(row.meta["nollIndices"], row["zk_CCS"], color="k")
+        axs[6].axhline(0, color="k", lw=0.5)
+        axs[6].set_ylim(-2.5, 2.5)
+        axs[6].set_xlim(3.5, 28.5)
+        axs[6].scatter(
+            [4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=10, lw=0.5
+        )
+        axs[6].scatter([7, 17], [2.2] * 2, marker="$\u2191$", c="k", s=10, lw=0.5)
+        axs[6].scatter([8, 16], [2.2] * 2, marker="$\u2192$", c="k", s=10, lw=0.5)
+        axs[6].scatter([5, 13, 23], [2.2] * 3, marker=(2, 2, 45), c="k", s=10, lw=0.5)
+        axs[6].scatter([6, 12, 24], [2.2] * 3, marker=(2, 2, 90), c="k", s=10, lw=0.5)
+
+        axs[6].scatter([9, 19], [2.2] * 2, marker=(3, 2, 60), c="k", s=10, lw=0.5)
+        axs[6].scatter([10, 18], [2.2] * 2, marker=(3, 2, 30), c="k", s=10, lw=0.5)
+
+        axs[6].scatter([14, 26], [2.2] * 2, marker=(4, 2), c="k", s=10, lw=0.5)
+        axs[6].scatter([15, 25], [2.2] * 2, marker=(4, 2, 22.5), c="k", s=10, lw=0.5)
+
+        axs[6].scatter([20], [2.2], marker=(5, 2, -18), c="k", s=10, lw=0.5)
+        axs[6].scatter([21], [2.2], marker=(5, 2), c="k", s=10, lw=0.5)
+
+        axs[6].scatter([27], [2.2], marker=(6, 2, 15), c="k", s=10, lw=0.5)
+        axs[6].scatter([28], [2.2], marker=(6, 2), c="k", s=10, lw=0.5)
+
+        for j in [4, 11, 22]:
+            axs[6].axvspan(j - 0.5, j + 0.5, color="red", alpha=0.2, ec="none")
+        for j in [5, 12, 23]:
+            axs[6].axvspan(j - 0.5, j + 1.5, color="orange", alpha=0.2, ec="none")
+        for j in [7, 16]:
+            axs[6].axvspan(j - 0.5, j + 1.5, color="yellow", alpha=0.2, ec="none")
+        for j in [9, 18]:
+            axs[6].axvspan(j - 0.5, j + 1.5, color="green", alpha=0.2, ec="none")
+        for j in [14, 25]:
+            axs[6].axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
+        axs[6].axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
+        axs[6].axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
+
+    def run(
+        self,
+        aos_raw,
+        donutStampsIntra,
+        donutStampsExtra,
+        camera,
+        day_obs,
+        seq_num,
+        startTime,
+    ) -> Figure:
+        """Run the PlotDonutFits AOS task.
+
+        Creates a figure of donuts / models / and residuals.
+
+        Parameters
+        ----------
+        aos_raw: Astropy Table
+            The AOS raw catalog.
+        donutStampsIntra: DonutStamps
+            The intra-focal donut stamps.
+        donutStampsExtra: DonutStamps
+            The extra-focal donut stamps.
+        camera: Camera
+            The camera object to get detector information.
+        day_obs: int
+            The day of observation.
+        seq_num: int
+            The sequence number of the observation.
+        startTime: astropy.time.Time
+            The start time of the observation.
+
+        Returns
+        -------
+        fig: matplotlib.pyplot.figure
+            The figure.
+        """
+        intra_x = [pos.x for pos in donutStampsIntra.getCentroidPositions()]
+        intra_y = [pos.y for pos in donutStampsIntra.getCentroidPositions()]
+        extra_x = [pos.x for pos in donutStampsExtra.getCentroidPositions()]
+        extra_y = [pos.y for pos in donutStampsExtra.getCentroidPositions()]
+
+        bandpass = donutStampsIntra.getBandpasses()[0]
+        assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
+        assert all([bandpass == bp for bp in donutStampsExtra.getBandpasses()])
+
+        wavelength = self.wavelengths[bandpass]
+        telescope = batoid.Optic.fromYaml(f"LSST_{bandpass}.yaml")
+        intra_telescope = telescope.withGloballyShiftedOptic(
+            "Detector", [0, 0, -1.5e-3]
+        )
+        extra_telescope = telescope.withGloballyShiftedOptic(
+            "Detector", [0, 0, +1.5e-3]
+        )
+
+        # Get the trim from EFD: applied corrections
+        efd_client = makeEfdClient()
+        efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
+        event = getMostRecentRowWithDataBefore(
+            efd_client,
+            efd_topic,
+            timeToLookBefore=Time(startTime, scale="utc"),
+        )
+        states_val = np.empty(
+            50,
+        )
+        for i in range(50):
+            states_val[i] = event[f"aggregatedDoF{i}"]
+
+        # Prepare figure
+        fig = make_figure(figsize=(16, 11))
+        axdict = {}
+        gs0 = GridSpec(
+            nrows=3,
+            ncols=2,
+            left=0.03,
+            right=0.97,
+            bottom=0.03,
+            top=0.95,
+            wspace=0.04,
+            hspace=0.12,
+            height_ratios=[2, 2, 1],
+        )
+        for i, j, raft in [(0, 0, "R00"), (0, 1, "R40"), (1, 0, "R04"), (1, 1, "R44")]:
+            gs1 = GridSpecFromSubplotSpec(
+                nrows=4,
+                ncols=1,
+                subplot_spec=gs0[i, j],
+                wspace=0.0,
+                hspace=0.0,
+            )
+            axdict[raft] = []
+            for k in range(4):
+                gs2 = GridSpecFromSubplotSpec(
+                    nrows=1,
+                    ncols=7,
+                    subplot_spec=gs1[k],
+                    wspace=0.0,
+                    hspace=0.0,
+                    width_ratios=[1, 1, 1, 1, 1, 1, 2],
+                )
+                axs = []
+                for ls in range(7):
+                    ax = fig.add_subplot(gs2[0, ls])
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    axs.append(ax)
+                axdict[raft].append(axs)
+
+        bottom_ax = fig.add_subplot(gs0[2, :])
+        bottom_ax.set_xticks([])
+        bottom_ax.set_yticks([])
+
+        # Proceed raft by raft
+        for iraft, raft in enumerate(["R00", "R04", "R40", "R44"]):
+            detname = raft + "_SW0"
+            rows = aos_raw[aos_raw["detector"] == detname]
+            if len(rows) == 0:
+                continue
+            det = camera[detname]
+            nquarter = det.getOrientation().getNQuarter() % 4
+
+            for irow, row in enumerate(rows[:4]):
+                # intra
+                dists = np.hypot(
+                    intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"]
+                )
+                idx = np.argmin(dists)
+                intra_stamp = donutStampsIntra[idx]
+                intra_img = np.rot90(
+                    intra_stamp.stamp_im.image.array[1:, 1:], -nquarter + 2
+                ).T
+                intra_model, intra_fwhm = self.getModel(
+                    telescope, intra_telescope, row, intra_img, wavelength, "intra"
+                )
+
+                intra_img /= np.sum(intra_img)
+                intra_model /= np.sum(intra_model)
+
+                # extra
+                dists = np.hypot(
+                    extra_x - row["centroid_x_extra"], extra_y - row["centroid_y_extra"]
+                )
+                idx = np.argmin(dists)
+                extra_stamp = donutStampsExtra[idx]
+                extra_img = np.rot90(
+                    extra_stamp.stamp_im.image.array[1:, 1:], -nquarter
+                ).T
+                extra_model, extra_fwhm = self.getModel(
+                    telescope, extra_telescope, row, extra_img, wavelength, "extra"
+                )
+
+                extra_img /= np.sum(extra_img)
+                extra_model /= np.sum(extra_model)
+
+                self.plotResults(
+                    axs=axdict[raft][irow],
+                    imgs=[intra_img, extra_img],
+                    models=[intra_model, extra_model],
+                    row=row,
+                )
+        # Plot the trim from EFD
+        groups = [
+            (0, 0, 0, "M2 dz (mm)"),
+            (1, 2, 0, "M2 dx,dy (mm)"),
+            (3, 4, 0, "M2 rx,ry (arcsec)"),
+            (5, 5, 0, "Camera dz (mm)"),
+            (6, 7, 0, "Camera dx,dy (mm)"),
+            (8, 9, 0, "Camera rx,ry (arcsec)"),
+            (10, 29, 1, "M1M3 bending modes (mm)"),
+            (30, 49, 2, "M2 bending modes (mm)"),
+        ]
+
+        bottom_ax.set_frame_on(False)
+        bottom_ax.set_title(
+            f"{day_obs} seq{seq_num}: corrections applied  (trim = {efd_topic})"
+        )
+
+        # Layout for 3 columns
+        col_xpos = [0.0, 0.3, 0.66]  # relative x positions in axes coords
+        y_start = 0.8
+        y_step = 0.07  # tighter spacing so we can fit more
+        wrap_width = 4  # values per line when wrapping
+
+        # Track y position per column separately
+        ypos = {0: y_start, 1: y_start, 2: y_start}
+
+        def chunked(iterable, n):
+            """Yield successive n-sized chunks from iterable."""
+            for i in range(0, len(iterable), n):
+                yield iterable[i : i + n]
+
+        for start, end, col, label in groups:
+            vals = states_val[start : end + 1]
+
+            # Special case: bending modes
+            if "bending modes" in label:
+                # Indexing starts at 1 for bending modes
+                # Format bending modes with fixed width
+                bvals = [f"b{i+1:<2}={v:+10.3e}" for i, v in enumerate(vals)]
+                bottom_ax.text(
+                    col_xpos[col],
+                    ypos[col] + 0.05,
+                    label,
+                    transform=bottom_ax.transAxes,
+                    fontsize=9,
+                    va="top",
+                    ha="left",
+                    weight="bold",
+                )
+                ypos[col] -= y_step
+
+                for chunk in chunked(bvals, wrap_width):
+                    line = ", ".join(chunk)
+                    bottom_ax.text(
+                        col_xpos[col],
+                        ypos[col],
+                        line,
+                        transform=bottom_ax.transAxes,
+                        fontsize=9,
+                        va="top",
+                        ha="left",
+                        family="monospace",
+                    )
+                    ypos[col] -= y_step
+
+            else:
+                # Normal groups: just print the label and values
+                val_strs = [f"{v:+.3e}" for v in vals]
+                txt = f"{label}: " + ", ".join(val_strs)
+                bottom_ax.text(
+                    col_xpos[col],
+                    ypos[col],
+                    txt,
+                    transform=bottom_ax.transAxes,
+                    fontsize=9,
+                    va="top",
+                    ha="left",
+                    family="monospace",
+                )
+                ypos[col] -= y_step
 
         return fig
