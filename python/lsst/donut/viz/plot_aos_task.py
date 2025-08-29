@@ -1276,6 +1276,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             axs[6].axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
         axs[6].axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
         axs[6].axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
+        if not row["used"]:
+            for spine in axs[6].spines.values():
+                spine.set_edgecolor("red")
+                spine.set_linewidth(2)
 
     def run(
         self,
@@ -1398,6 +1402,14 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             det = camera[detname]
             nquarter = det.getOrientation().getNQuarter() % 4
 
+            # add title to each corner
+            for defocal, sw, col in zip(["intra", "extra"], ["SW1", "SW0"], [0, 3]):
+                raftName = f"{raft}_{sw}"
+                detId = camera.get(raftName).getId()
+                axdict[raft][0][col].set_title(
+                    f"{defocal} {raftName} ({detId})", x=0.95
+                )
+
             for irow, row in enumerate(rows[:4]):
                 # intra
                 dists = np.hypot(
@@ -1437,84 +1449,135 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     models=[intra_model, extra_model],
                     row=row,
                 )
-        # Plot the trim from EFD
-        groups = [
-            (0, 0, 0, "M2 dz (mm)"),
-            (1, 2, 0, "M2 dx,dy (mm)"),
-            (3, 4, 0, "M2 rx,ry (arcsec)"),
-            (5, 5, 0, "Camera dz (mm)"),
-            (6, 7, 0, "Camera dx,dy (mm)"),
-            (8, 9, 0, "Camera rx,ry (arcsec)"),
-            (10, 29, 1, "M1M3 bending modes (mm)"),
-            (30, 49, 2, "M2 bending modes (mm)"),
+
+        def format_group(
+            vals, label, wrap_width=2, rigid=False, label_width=20, prec=3, max_int=None
+        ):
+            """
+            Format DOF group for rigid-body or bending modes.
+            """
+            rows = []
+
+            if rigid:
+                # Single-value rigid-body row (decimal-aligned)
+                formatted = f"{vals[0]:.{prec}f}"
+                ip, fp = formatted.split(".")
+                if max_int is None:
+                    max_int = len(ip)
+                row = f"{label:<{label_width}} {ip:>{max_int}}.{fp}"
+                rows.append(row)
+
+            else:
+                # Bending-mode formatting (column-major)
+                n = len(vals)
+                labels = [f"b{i+1}" for i in range(n)]
+                formatted = [f"{v:.{prec}f}" for v in vals]
+                int_parts = [f.split(".")[0] for f in formatted]
+                frac_parts = [f.split(".")[1] for f in formatted]
+                max_int_local = max(len(ip) for ip in int_parts)
+                max_frac_local = max(len(fp) for fp in frac_parts)
+
+                tokens = [
+                    f"{lbl:<3} {ip:>{max_int_local}}.{fp:<{max_frac_local}}"
+                    for lbl, ip, fp in zip(labels, int_parts, frac_parts)
+                ]
+
+                nrows = int(np.ceil(n / wrap_width))
+                padded = tokens + [""] * (nrows * wrap_width - n)
+                arr = np.array(padded).reshape(nrows, wrap_width, order="F")
+
+                rows.append(label + ":")
+                for row_arr in arr:
+                    rows.append("  ".join(f"{cell:<15}" for cell in row_arr).rstrip())
+
+            return rows
+
+        # --- Define groups ---
+        rigid_groups = [
+            ("M2 dz (microns)", [0]),
+            ("M2 dx (microns)", [1]),
+            ("M2 dy (microns)", [2]),
+            ("M2 rx (deg)", [3]),
+            ("M2 ry (deg)", [4]),
+            ("Camera dz (microns)", [5]),
+            ("Camera dx (microns)", [6]),
+            ("Camera dy (microns)", [7]),
+            ("Camera rx (deg)", [8]),
+            ("Camera ry (deg)", [9]),
+        ]
+
+        bending_groups = [
+            ("M1M3 bending modes (microns)", list(range(10, 30))),
+            ("M2 bending modes (microns)", list(range(30, 50))),
         ]
 
         bottom_ax.set_frame_on(False)
-        bottom_ax.set_title(
-            f"{day_obs} seq{seq_num}: corrections applied  (trim = {efd_topic})"
-        )
+        bottom_ax.set_title(f"{day_obs} seq{seq_num}: current offset from lookup table")
 
         # Layout for 3 columns
-        col_xpos = [0.0, 0.3, 0.66]  # relative x positions in axes coords
+        col_xpos = [0.05, 0.42, 0.78]  # relative x positions in axes coords
         y_start = 0.8
         y_step = 0.07  # tighter spacing so we can fit more
-        wrap_width = 4  # values per line when wrapping
+
+        # --- Precompute max integer width for rigid-body numbers ---
+        rigid_vals = [states_val[i] for _, idxs in rigid_groups for i in idxs]
+        formatted_all = [f"{v:.3f}" for v in rigid_vals]
+        int_parts = [f.split(".")[0] for f in formatted_all]
+        max_int_rigid = max(len(ip) for ip in int_parts)
 
         # Track y position per column separately
         ypos = {0: y_start, 1: y_start, 2: y_start}
 
-        def chunked(iterable, n):
-            """Yield successive n-sized chunks from iterable."""
-            for i in range(0, len(iterable), n):
-                yield iterable[i : i + n]
+        # --- Render rigid-body groups in column 0 ---
+        bottom_ax.text(
+            col_xpos[0],
+            ypos[0],
+            "Rigid body motions",
+            transform=bottom_ax.transAxes,
+            fontsize=9,
+            va="top",
+            ha="left",
+            family="monospace",
+            weight="bold",
+        )
 
-        for start, end, col, label in groups:
-            vals = states_val[start : end + 1]
+        ypos[0] -= y_step
 
-            # Special case: bending modes
-            if "bending modes" in label:
-                # Indexing starts at 1 for bending modes
-                # Format bending modes with fixed width
-                bvals = [f"b{i+1:<2}={v:+10.3e}" for i, v in enumerate(vals)]
+        # --- Render rigid-body group in first column
+        for label, idxs in rigid_groups:
+            val = states_val[idxs[0]]
+            lines = format_group([val], label, rigid=True, max_int=max_int_rigid)
+            for line in lines:
                 bottom_ax.text(
-                    col_xpos[col],
-                    ypos[col] + 0.05,
-                    label,
-                    transform=bottom_ax.transAxes,
-                    fontsize=9,
-                    va="top",
-                    ha="left",
-                    weight="bold",
-                )
-                ypos[col] -= y_step
-
-                for chunk in chunked(bvals, wrap_width):
-                    line = ", ".join(chunk)
-                    bottom_ax.text(
-                        col_xpos[col],
-                        ypos[col],
-                        line,
-                        transform=bottom_ax.transAxes,
-                        fontsize=9,
-                        va="top",
-                        ha="left",
-                        family="monospace",
-                    )
-                    ypos[col] -= y_step
-
-            else:
-                # Normal groups: just print the label and values
-                val_strs = [f"{v:+.3e}" for v in vals]
-                txt = f"{label}: " + ", ".join(val_strs)
-                bottom_ax.text(
-                    col_xpos[col],
-                    ypos[col],
-                    txt,
+                    col_xpos[0],
+                    ypos[0],
+                    line,
                     transform=bottom_ax.transAxes,
                     fontsize=9,
                     va="top",
                     ha="left",
                     family="monospace",
+                )
+                ypos[0] -= y_step
+
+        # --- Render bending-mode groups in remaining columns ---
+        for i, (label, idxs) in enumerate(bending_groups):
+            col = i + 1  # start from column 1
+            vals = [states_val[j] for j in idxs]
+            lines = format_group(vals, label, wrap_width=2)
+            for j, line in enumerate(lines):
+                # Bold only the first line (the label)
+                is_title = j == 0
+                bottom_ax.text(
+                    col_xpos[col],
+                    ypos[col],
+                    line,
+                    transform=bottom_ax.transAxes,
+                    fontsize=9,
+                    va="top",
+                    ha="left",
+                    family="monospace",
+                    weight="bold" if is_title else "normal",
                 )
                 ypos[col] -= y_step
 
