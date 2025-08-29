@@ -111,6 +111,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             noll_indices = np.array(noll_indices)
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
             raw_table["detector"] = zernike_table.meta["extra"]["det_name"]
+            raw_table["used"] = zernike_table["used"][1:]
             raw_tables.append(raw_table)
             avg_table = Table()
             avg_table["zk_CCS"] = np.atleast_2d(zernikes_merged[0])
