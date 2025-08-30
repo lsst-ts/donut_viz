@@ -13,7 +13,11 @@ import yaml
 from astropy import units as u
 from astropy.table import Table
 from astropy.time import Time
-from lsst.summit.utils.efdUtils import getMostRecentRowWithDataBefore, makeEfdClient
+from lsst.summit.utils.efdUtils import (
+    getEfdData,
+    getMostRecentRowWithDataBefore,
+    makeEfdClient,
+)
 from lsst.summit.utils.plotting import stretchDataMidTone
 from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.utils import convertZernikesToPsfWidth, getTaskInstrument
@@ -1133,7 +1137,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         visit = inputRefs.aggregateAOSRaw.dataId["visit"]
         inputRefs.donutStampsIntraVisit.dataId.records["visit"]
         record = inputRefs.aggregateAOSRaw.dataId.records["visit"]
-        startTime = record.timespan.begin
 
         day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
         fig = self.run(
@@ -1143,7 +1146,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             camera,
             day_obs,
             seq_num,
-            startTime,
+            record,
         )
 
         butlerQC.put(fig, outputRefs.donutFits)
@@ -1222,7 +1225,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         model = fitter.model(*result.x, [])
         return model, fwhm
 
-    def plotResults(self, axs, imgs, models, row):
+    def plotResults(self, axs, imgs, models, row, blur):
         colors = [
             (0.0, 0.0, 1.0),  # Blue
             (1.0, 1.0, 1.0),  # White
@@ -1235,6 +1238,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         vmax = np.nanquantile(imgs[0], 0.99)
         axs[0].imshow(imgs[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        axs[0].text(5, 150, f"blur: {blur:5.3f}")
         axs[1].imshow(models[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
         axs[2].imshow(imgs[0] - models[0], cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
         axs[3].imshow(imgs[1], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
@@ -1276,10 +1280,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             axs[6].axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
         axs[6].axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
         axs[6].axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
-        if not row["used"]:
-            for spine in axs[6].spines.values():
-                spine.set_edgecolor("red")
-                spine.set_linewidth(2)
+        color = "green" if row["used"] else "red"
+        axs[6].spines["right"].set_edgecolor(color)
+        axs[6].spines["right"].set_linewidth(3)
 
     def run(
         self,
@@ -1289,7 +1292,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         camera,
         day_obs,
         seq_num,
-        startTime,
+        record,
     ) -> Figure:
         """Run the PlotDonutFits AOS task.
 
@@ -1309,8 +1312,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             The day of observation.
         seq_num: int
             The sequence number of the observation.
-        startTime: astropy.time.Time
-            The start time of the observation.
+        record: lsst.daf.butler.dimensions._records.visit.RecordClass
+            The butler exposure level record
 
         Returns
         -------
@@ -1336,6 +1339,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         )
 
         # Get the trim from EFD: applied corrections
+        startTime = record.timespan.begin
+        endTime = record.timespan.end
         efd_client = makeEfdClient()
         efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
         event = getMostRecentRowWithDataBefore(
@@ -1348,6 +1353,14 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         )
         for i in range(50):
             states_val[i] = event[f"aggregatedDoF{i}"]
+
+        # Get the rotator angle
+        rotData = getEfdData(
+            client=efd_client,
+            topic="lsst.sal.MTRotator.rotation",
+            begin=startTime,
+            end=endTime,
+        )
 
         # Prepare figure
         fig = make_figure(figsize=(16, 11))
@@ -1392,11 +1405,14 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         bottom_ax = fig.add_subplot(gs0[2, :])
         bottom_ax.set_xticks([])
         bottom_ax.set_yticks([])
-
+        # a single value per donut
+        donut_blur = np.array(aos_raw.meta["estimatorInfo"].get("fwhm"))
         # Proceed raft by raft
         for iraft, raft in enumerate(["R00", "R04", "R40", "R44"]):
             detname = raft + "_SW0"
-            rows = aos_raw[aos_raw["detector"] == detname]
+            selected_rows = aos_raw["detector"] == detname
+            rows = aos_raw[selected_rows]
+            blur = donut_blur[selected_rows]
             if len(rows) == 0:
                 continue
             det = camera[detname]
@@ -1448,6 +1464,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     imgs=[intra_img, extra_img],
                     models=[intra_model, extra_model],
                     row=row,
+                    blur=blur[irow],
                 )
 
         def format_group(
@@ -1514,8 +1531,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         bottom_ax.set_frame_on(False)
         bottom_ax.set_title(f"{day_obs} seq{seq_num}: current offset from lookup table")
 
-        # Layout for 3 columns
-        col_xpos = [0.05, 0.42, 0.78]  # relative x positions in axes coords
+        # Layout for 4 columns
+        col_xpos = [0.05, 0.28, 0.51, 0.72]  # relative x positions in axes coords
         y_start = 0.8
         y_step = 0.07  # tighter spacing so we can fit more
 
@@ -1526,7 +1543,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         max_int_rigid = max(len(ip) for ip in int_parts)
 
         # Track y position per column separately
-        ypos = {0: y_start, 1: y_start, 2: y_start}
+        ypos = {0: y_start, 1: y_start, 2: y_start, 3: y_start}
 
         # --- Render rigid-body groups in column 0 ---
         bottom_ax.text(
@@ -1580,5 +1597,46 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     weight="bold" if is_title else "normal",
                 )
                 ypos[col] -= y_step
+
+        # Plot the exposure record data
+        records = {
+            "filter": record.physical_filter,
+            "observation reason": record.observation_reason,
+            "science program": record.science_program,
+            "elevation": 90 - record.zenith_angle,
+            "azimuth": record.azimuth,
+            "rotator": rotData["actualPosition"].values.mean(),
+        }
+        col = 3
+
+        # Decide which keys are floats that should be decimal-aligned
+        float_keys = {"elevation", "azimuth", "rotator"}
+
+        # Format values so floats are aligned
+        formatted_records = {}
+        for k, v in records.items():
+            if k in float_keys:
+                # Format floats with consistent width + alignment to decimal
+                formatted_records[k] = f"{v:7.3f}"
+            else:
+                formatted_records[k] = str(v)
+
+        # Figure out widest key string for alignment
+        key_width = max(len(k) for k in formatted_records.keys())
+
+        for key, val in formatted_records.items():
+            # Pad key names to same width, keep monospace look
+            txt = f"{key.ljust(key_width)} : {val}"
+            bottom_ax.text(
+                col_xpos[col],
+                ypos[col],
+                txt,
+                transform=bottom_ax.transAxes,
+                fontsize=9,
+                va="top",
+                ha="left",
+                family="monospace",
+            )
+            ypos[col] -= y_step
 
         return fig
