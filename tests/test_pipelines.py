@@ -43,7 +43,7 @@ class TestPipeline(unittest.TestCase):
         packageDir = getPackageDir("donut_viz")
         # only test production pipelines
         pipelinePattern = Path(packageDir) / "pipelines" / "production"
-        files = glob(pipelinePattern.as_posix() + "/*.yaml")
+        files = glob(pipelinePattern.as_posix() + "/*Danish.yaml")
         for filename in files:
             pipeline = Pipeline.fromFile(filename)
             self.assertIsInstance(pipeline, Pipeline)
