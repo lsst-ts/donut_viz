@@ -1320,11 +1320,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         fig: matplotlib.pyplot.figure
             The figure.
         """
-        intra_x = [pos.x for pos in donutStampsIntra.getCentroidPositions()]
-        intra_y = [pos.y for pos in donutStampsIntra.getCentroidPositions()]
-        extra_x = [pos.x for pos in donutStampsExtra.getCentroidPositions()]
-        extra_y = [pos.y for pos in donutStampsExtra.getCentroidPositions()]
-
         bandpass = donutStampsIntra.getBandpasses()[0]
         assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
         assert all([bandpass == bp for bp in donutStampsExtra.getBandpasses()])
@@ -1425,6 +1420,24 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 axdict[raft][0][col].set_title(
                     f"{defocal} {raftName} ({detId})", x=0.95
                 )
+
+            # get donuts corresponding to a given corner from
+            # aggregatedDonutStamps
+            idxToAggIntra = (
+                np.array(donutStampsIntra.metadata.getArray("DET_NAME"))
+                == f"{raft}_SW1"
+            )
+            donutStampsIntraSel = np.array(donutStampsIntra)[idxToAggIntra]
+            intra_x = [stamp.centroid_position.x for stamp in donutStampsIntraSel]
+            intra_y = [stamp.centroid_position.y for stamp in donutStampsIntraSel]
+
+            idxToAggExtra = (
+                np.array(donutStampsExtra.metadata.getArray("DET_NAME"))
+                == f"{raft}_SW0"
+            )
+            donutStampsExtraSel = np.array(donutStampsExtra)[idxToAggExtra]
+            extra_x = [stamp.centroid_position.x for stamp in donutStampsExtraSel]
+            extra_y = [stamp.centroid_position.y for stamp in donutStampsExtraSel]
 
             for irow, row in enumerate(rows[:4]):
                 # intra
