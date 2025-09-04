@@ -1338,16 +1338,19 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         endTime = record.timespan.end
         efd_client = makeEfdClient()
         efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
-        event = getMostRecentRowWithDataBefore(
-            efd_client,
-            efd_topic,
-            timeToLookBefore=Time(startTime, scale="utc"),
-        )
         states_val = np.empty(
             50,
         )
-        for i in range(50):
-            states_val[i] = event[f"aggregatedDoF{i}"]
+        # catch test data that may have historic day_obs
+        if day_obs > 20250101:
+            event = getMostRecentRowWithDataBefore(
+                efd_client,
+                efd_topic,
+                timeToLookBefore=Time(startTime, scale="utc"),
+            )
+
+            for i in range(50):
+                states_val[i] = event[f"aggregatedDoF{i}"]
 
         # Get the rotator angle
         rotData = getEfdData(
@@ -1401,7 +1404,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         bottom_ax.set_xticks([])
         bottom_ax.set_yticks([])
         # a single value per donut
-        donut_blur = np.array(aos_raw.meta["estimatorInfo"].get("fwhm"))
+        donut_blur = np.zeros(len(aos_raw))
+        if "fwhm" in aos_raw.meta["estimatorInfo"].keys():
+            donut_blur = np.array(aos_raw.meta["estimatorInfo"].get("fwhm"))
+
         # Proceed raft by raft
         for iraft, raft in enumerate(["R00", "R04", "R40", "R44"]):
             detname = raft + "_SW0"
@@ -1616,9 +1622,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "filter": record.physical_filter,
             "observation reason": record.observation_reason,
             "science program": record.science_program,
-            "elevation": 90 - record.zenith_angle,
-            "azimuth": record.azimuth,
-            "rotator": rotData["actualPosition"].values.mean(),
+            "elevation": (
+                90 if record.zenith_angle is None else 90 - record.zenith_angle
+            ),
+            "azimuth": 0 if record.azimuth is None else record.azimuth,
+            "rotator": (
+                0 if len(rotData) == 0 else rotData["actualPosition"].values.mean()
+            ),
         }
         col = 3
 
