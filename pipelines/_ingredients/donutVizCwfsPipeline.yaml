@@ -7,6 +7,8 @@ tasks:
     class: lsst.donut.viz.AggregateDonutTablesCwfsTask
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
+    config:
+      maxDonutsPerDetector: 4
   aggregateAOSVisitTableCwfsTask:
     class: lsst.donut.viz.AggregateAOSVisitTableCwfsTask
   plotAOSTask:
@@ -23,9 +25,5 @@ tasks:
       doRubinTVUpload: True
   plotPsfZernTask:
     class: lsst.donut.viz.PlotPsfZernTask
-    config:
-      doRubinTVUpload: True
-  plotDonutFitsTask:
-    class: lsst.donut.viz.PlotDonutFitsTask
     config:
       doRubinTVUpload: True
