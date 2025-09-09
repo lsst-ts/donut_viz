@@ -622,11 +622,18 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
         rtp = q - rotAngle - np.pi / 2
 
         # Combine all donuts into one list
+        # We make sure to pick the first, i.e.
+        # the brightest, donut for each detector
+        detectorsRead = []
         donutStampsList = []
         for stamp in donutStampsExtra:
-            donutStampsList.append(stamp)
+            if stamp.detector_name not in detectorsRead:
+                donutStampsList.append(stamp)
+                detectorsRead.append(stamp.detector_name)
         for stamp in donutStampsIntra:
-            donutStampsList.append(stamp)
+            if stamp.detector_name not in detectorsRead:
+                donutStampsList.append(stamp)
+                detectorsRead.append(stamp.detector_name)
 
         fp_center = 0.5, 0.475
         fp_size = 0.7
