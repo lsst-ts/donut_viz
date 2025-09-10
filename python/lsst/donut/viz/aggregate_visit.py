@@ -1006,6 +1006,17 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
                 raw_table[k + "_intra"][w] = adt[k][wintra]
                 raw_table[k + "_extra"][w] = adt[k][wextra]
 
+            # donut id can't be averaged like coordinates or centroids,
+            # so we process it separately
+            k = "donut_id"
+            if k in adt.colnames():  # safeguard against older data
+                nrows = len(raw_table)
+                dtype = adt[k].dtype
+                if k + "_intra" not in raw_table.colnames:
+                    raw_table[k + "_intra"] = np.full(nrows, "", dtype=dtype)
+                    raw_table[k + "_extra"] = np.full(nrows, "", dtype=dtype)
+                raw_table[k + "_intra"][w] = adt[k][wintra]
+                raw_table[k + "_extra"][w] = adt[k][wextra]
         return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
 
