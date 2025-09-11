@@ -4,6 +4,10 @@ imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectScienceGroupPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
 tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      measurementTask.nSigmaDetection: 5.0
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
