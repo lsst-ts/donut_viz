@@ -1348,6 +1348,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         states_val = np.empty(
             50,
         )
+        visit_logevent = 0
         # catch test data that may have historic day_obs
         if day_obs > 20250101:
             event = getMostRecentRowWithDataBefore(
@@ -1358,6 +1359,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
             for i in range(50):
                 states_val[i] = event[f"aggregatedDoF{i}"]
+            visit_logevent = event["visitId"]
 
         # Get the rotator angle
         rotData = getEfdData(
@@ -1557,7 +1559,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         ]
 
         bottom_ax.set_frame_on(False)
-        bottom_ax.set_title(f"{day_obs} seq{seq_num}: current offset from lookup table")
+        bottom_ax.set_title(
+            f"{day_obs} seq{seq_num}: current offset from lookup table (based on seq{visit_logevent})"
+        )
 
         # Layout for 4 columns
         col_xpos = [0.05, 0.28, 0.51, 0.72]  # relative x positions in axes coords
