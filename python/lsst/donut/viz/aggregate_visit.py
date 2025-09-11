@@ -23,6 +23,8 @@ __all__ = [
     "AggregateDonutTablesTaskConnections",
     "AggregateDonutTablesTaskConfig",
     "AggregateDonutTablesTask",
+    "AggregateDonutTablesUnpairedCwfsTaskConfig",
+    "AggregateDonutTablesUnpairedCwfsTask",
     "AggregateDonutTablesCwfsTaskConnections",
     "AggregateDonutTablesCwfsTaskConfig",
     "AggregateDonutTablesCwfsTask",
@@ -30,9 +32,13 @@ __all__ = [
     "AggregateAOSVisitTableTaskConfig",
     "AggregateAOSVisitTableTask",
     "AggregateAOSVisitTableCwfsTask",
+    "AggregateUnpairedAOSVisitTableCwfsTask",
     "AggregateDonutStampsTaskConnections",
     "AggregateDonutStampsTaskConfig",
     "AggregateDonutStampsTask",
+    "AggregateDonutStampsUnpairedTaskConnections",
+    "AggregateDonutStampsUnpairedTaskConfig",
+    "AggregateDonutStampsUnpairedTask",
 ]
 
 
@@ -97,6 +103,17 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         for zernike_table in zernike_tables:
             if len(zernike_table) == 0:
                 continue
+            det_meta = None
+            unpaired_det_type = None
+            # Check for empty dictionaries when unpaired task runs
+            if not zernike_table.meta["intra"]:
+                det_meta = zernike_table.meta["extra"]
+                unpaired_det_type = "extra"
+            elif not zernike_table.meta["extra"]:
+                det_meta = zernike_table.meta["intra"]
+                unpaired_det_type = "intra"
+            else:
+                det_meta = zernike_table.meta["extra"]
             raw_table = Table()
             zernikes_merged = []
             noll_indices = []
@@ -108,16 +125,17 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             zernikes_merged = np.array(zernikes_merged).T
             noll_indices = np.array(noll_indices)
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
-            raw_table["detector"] = zernike_table.meta["extra"]["det_name"]
+            raw_table["detector"] = det_meta["det_name"]
             raw_table["used"] = zernike_table["used"][1:]
             raw_tables.append(raw_table)
             avg_table = Table()
             avg_table["zk_CCS"] = np.atleast_2d(zernikes_merged[0])
-            avg_table["detector"] = zernike_table.meta["extra"]["det_name"]
+            avg_table["detector"] = det_meta["det_name"]
             avg_tables.append(avg_table)
             # just get any one, they're all the same
             if table_meta is None:
                 table_meta = zernike_table.meta
+
             if "estimatorInfo" in zernike_table.meta.keys():
                 for key, val in zernike_table.meta["estimatorInfo"].items():
                     if key not in estimator_meta:
@@ -129,21 +147,24 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # TODO: Swap parallactic angle for pseudo parallactic angle.
         #       See SMTN-019 for details.
         meta = {}
-        meta["visit"] = table_meta["extra"]["visit"]
-        meta["parallacticAngle"] = table_meta["extra"]["boresight_par_angle_rad"]
-        meta["rotAngle"] = table_meta["extra"]["boresight_rot_angle_rad"]
+        meta["visit"] = det_meta["visit"]
+        meta["parallacticAngle"] = det_meta["boresight_par_angle_rad"]
+        meta["rotAngle"] = det_meta["boresight_rot_angle_rad"]
         rtp = (
             meta["parallacticAngle"] * radians - meta["rotAngle"] * radians - (np.pi / 2 * radians)
         ).asRadians()
         meta["rotTelPos"] = rtp
-        meta["ra"] = table_meta["extra"]["boresight_ra_rad"]
-        meta["dec"] = table_meta["extra"]["boresight_dec_rad"]
-        meta["az"] = table_meta["extra"]["boresight_az_rad"]
-        meta["alt"] = table_meta["extra"]["boresight_alt_rad"]
-        meta["band"] = table_meta["extra"]["band"]
-
+        meta["ra"] = det_meta["boresight_ra_rad"]
+        meta["dec"] = det_meta["boresight_dec_rad"]
+        meta["az"] = det_meta["boresight_az_rad"]
+        meta["alt"] = det_meta["boresight_alt_rad"]
         # Average mjds
-        meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
+        if unpaired_det_type is None:
+            meta["mjd"] = 0.5 * (
+                table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"]
+            )
+        else:
+            meta["mjd"] = det_meta["mjd"]
         meta["nollIndices"] = noll_indices
 
         q = meta["parallacticAngle"]
@@ -167,7 +188,9 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Add average danish fwhm values into metadata of average table.
         if "fwhm" in out_raw.meta["estimatorInfo"].keys():
             out_avg.meta["estimatorInfo"] = dict()
-            out_avg.meta["estimatorInfo"]["fwhm"] = np.median(out_raw.meta["estimatorInfo"]["fwhm"])
+            out_avg.meta["estimatorInfo"]["fwhm"] = np.nanmedian(
+                out_raw.meta["estimatorInfo"]["fwhm"]
+            )
 
         return out_raw, out_avg
 
@@ -621,6 +644,117 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         return out
 
 
+class AggregateDonutTablesUnpairedCwfsTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=AggregateDonutTablesCwfsTaskConnections,
+):
+    pass
+
+
+class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
+    ConfigClass = AggregateDonutTablesUnpairedCwfsTaskConfig
+    _DefaultName = "AggregateDonutTablesUnpairedCwfs"
+
+    @timeMethod
+    def run(
+        self,
+        camera,
+        donutTables: dict,
+        qualityTables: dict,
+    ) -> typing.List[QTable]:
+        """Aggregate donut tables for a set of visits.
+
+        Parameters
+        ----------
+        camera : lsst.afw.cameraGeom.Camera
+            The camera object.
+        donutTables : dict
+            Dictionary of donut tables keyed by detector.
+        qualityTables : dict
+            Dictionary of quality tables keyed by detector.
+
+        Returns
+        -------
+        dict of astropy.table.QTable
+            Dict of aggregated donut tables, keyed on extra-focal visit.
+        """
+        tables = []
+        extraDetectorIds = [191, 195, 199, 203]
+
+        for detector in donutTables.keys():
+
+            if detector not in qualityTables.keys():
+                continue
+
+            det = camera[detector]
+
+            # Load the donut catalog table, and the donut quality table
+            donutTable = donutTables[detector]
+            qualityTable = qualityTables[detector]
+
+            if len(qualityTable) == 0:
+                continue
+
+            table = donutTable[qualityTable["FINAL_SELECT"]]
+
+            # Add focusZ to donut table
+            offset = 1.5 if det.getId() in extraDetectorIds else -1.5
+            table["focusZ"] = table.meta["visit_info"]["focus_z"] + offset * u.mm
+
+            # Get pixels -> field angle transform for this detector
+            tform = det.getTransform(PIXELS, FIELD_ANGLE)
+
+            # Add field angle in CCS to the table
+            pts = tform.applyForward(
+                [
+                    Point2D(x, y)
+                    for x, y in zip(table["centroid_x"], table["centroid_y"])
+                ]
+            )
+            table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
+            table["thy_CCS"] = [pt.x for pt in pts]
+            table["detector"] = det.getName()
+
+            tables.append(table)
+
+        # Grab visitInfo. The last one will do since all should be the same.
+        visitInfo = convertDictToVisitInfo(table.meta["visit_info"])
+
+        # Don't attempt to stack metadata
+        for table in tables:
+            table.meta = {}
+
+        out = vstack(tables)
+
+        # Add metadata for extra and intra focal exposures
+        # TODO: Swap parallactic angle for pseudo parallactic angle.
+        #       See SMTN-019 for details.
+        out.meta["visitInfo"] = {
+            "visit": visitInfo.id,
+            "focusZ": visitInfo.focusZ,
+            "parallacticAngle": visitInfo.boresightParAngle.asRadians(),
+            "rotAngle": visitInfo.boresightRotAngle.asRadians(),
+            "rotTelPos": visitInfo.boresightParAngle.asRadians()
+            - visitInfo.boresightRotAngle.asRadians()
+            - np.pi / 2,
+            "ra": visitInfo.boresightRaDec.getRa().asRadians(),
+            "dec": visitInfo.boresightRaDec.getDec().asRadians(),
+            "az": visitInfo.boresightAzAlt.getLongitude().asRadians(),
+            "alt": visitInfo.boresightAzAlt.getLatitude().asRadians(),
+            "mjd": visitInfo.date.toAstropy().mjd,
+        }
+
+        # Calculate coordinates in different reference frames
+        q = out.meta["visitInfo"]["parallacticAngle"]
+        rtp = out.meta["visitInfo"]["rotTelPos"]
+        out["thx_OCS"] = np.cos(rtp) * out["thx_CCS"] - np.sin(rtp) * out["thy_CCS"]
+        out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
+        out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
+        out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+
+        return out
+
+
 class AggregateAOSVisitTableTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=(
@@ -691,9 +825,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         butlerQC.put(raw_table, outputRefs.aggregateAOSRaw)
 
     @timeMethod
-    def run(
-        self, adt: typing.List[Table], azr: typing.List[Table], aza: typing.List[Table]
-    ) -> tuple[Table, Table]:
+    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
         dets = np.unique(adt["detector"])
         avg_table = aza.copy()
         avg_keys = [
@@ -761,9 +893,7 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
     _DefaultName = "AggregateAOSVisitTableCwfs"
 
     @timeMethod
-    def run(
-        self, adt: typing.List[Table], azr: typing.List[Table], aza: typing.List[Table]
-    ) -> tuple[Table, Table]:
+    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
         extraDetectorNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         intraDetectorNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
         # Only take extra focal detector names
@@ -821,6 +951,54 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
                     raw_table[k + "_extra"] = np.nan
                 raw_table[k + "_intra"][w] = adt[k][wintra]
                 raw_table[k + "_extra"][w] = adt[k][wextra]
+
+        return avg_table, raw_table
+
+
+class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
+    ConfigClass = AggregateAOSVisitTableTaskConfig
+    _DefaultName = "AggregateUnpairedAOSVisitTableCwfs"
+
+    @timeMethod
+    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
+        dets = np.unique(adt["detector"])
+        # Only take extra focal detector names
+        avg_table = aza.copy()
+        avg_keys = [
+            "coord_ra",
+            "coord_dec",
+            "centroid_x",
+            "centroid_y",
+            "thx_CCS",
+            "thy_CCS",
+            "thx_OCS",
+            "thy_OCS",
+            "th_N",
+            "th_W",
+        ]
+        for k in avg_keys:
+            avg_table[k] = np.nan  # Allocate
+
+        # Process average table
+        for det in dets:
+            w = avg_table["detector"] == det
+            for k in avg_keys:
+                avg_table[k][w] = np.mean(adt[k][adt["detector"] == det])
+
+        # Process raw table
+        raw_table = azr.copy()
+        for k in avg_keys:
+            raw_table[k] = np.nan  # Allocate
+        for det in dets:
+            w = raw_table["detector"] == det
+            wadt = adt["detector"] == det
+            # Check if there are any matching rows
+            if not np.any(wadt):
+                continue
+
+            for k in avg_keys:
+                # ought to be the same length now
+                raw_table[k][w] = adt[k][wadt]
 
         return avg_table, raw_table
 
@@ -965,3 +1143,111 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extraStampsMetadata)
 
         return intraStampsRavel, extraStampsRavel
+
+
+class AggregateDonutStampsUnpairedTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("instrument", "visit"),
+):
+    donutStampsIn = ct.Input(
+        doc="Extrafocal Donut Stamps",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="donutStamps",
+        multiple=True,
+        deferGraphConstraint=True,
+    )
+    qualityTables = ct.Input(
+        doc="Donut quality tables",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutQualityTable",
+        multiple=True,
+        deferGraphConstraint=True,
+    )
+    donutStampsUnpairedVisit = ct.Output(
+        doc="All Donut Stamps for unpaired estimation",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsUnpairedVisit",
+    )
+
+
+class AggregateDonutStampsUnpairedTaskConfig(
+    AggregateDonutStampsTaskConfig,
+    pipelineConnections=AggregateDonutStampsUnpairedTaskConnections,
+):
+    pass
+
+
+class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
+    ConfigClass = AggregateDonutStampsUnpairedTaskConfig
+    _DefaultName = "AggregateDonutStampsUnpaired"
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ) -> None:
+
+        stampsOut = self.run(
+            butlerQC.get(inputRefs.donutStampsIn),
+            butlerQC.get(inputRefs.qualityTables),
+        )
+
+        butlerQC.put(
+            stampsOut,
+            outputRefs.donutStampsUnpairedVisit,
+        )
+
+    @timeMethod
+    def run(
+        self,
+        stampsIn: typing.List,
+        qualityTables: typing.List,
+    ) -> tuple[typing.List, typing.List]:
+        stampsList = []
+        stampsMetadata = None
+        for stamps, quality in zip(stampsIn, qualityTables):
+            # Skip if quality table is empty.
+            if len(quality) == 0:
+                continue
+
+            # Load the quality table and determine which donuts were selected
+            qualitySelect = quality["FINAL_SELECT"]
+
+            # Select donuts used in Zernike estimation
+            stampsSelect = DonutStamps(
+                [stamps[i] for i in range(len(stamps)) if qualitySelect[i]]
+            )
+
+            if stampsMetadata is None:
+                # Create metadata for stamps
+                # Only keep the visit level data
+                # For stamp-level metadata look at the
+                # metadata of the individual stamps
+                stampsMetadata = dafBase.PropertyList()
+                visitKeys = [
+                    "VISIT",
+                    "BORESIGHT_ROT_ANGLE_RAD",
+                    "BORESIGHT_PAR_ANGLE_RAD",
+                    "BORESIGHT_ALT_RAD",
+                    "BORESIGHT_AZ_RAD",
+                    "BORESIGHT_RA_RAD",
+                    "BORESIGHT_DEC_RAD",
+                    "MJD",
+                    "BANDPASS",
+                ]
+                for key in visitKeys:
+                    stampsMetadata[key] = stamps.metadata[key]
+
+            # Append the requested number of donuts
+            stampsList.append(stampsSelect[: self.config.maxDonutsPerDetector])
+
+        stampsListRavel = [stamp for stampList in stampsList for stamp in stampList]
+
+        stampsRavel = DonutStamps(stampsListRavel, metadata=stampsMetadata)
+
+        return stampsRavel
