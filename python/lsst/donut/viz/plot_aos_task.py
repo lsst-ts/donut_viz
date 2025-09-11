@@ -1458,7 +1458,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"]
                 )
                 idx = np.argmin(dists)
-                intra_stamp = donutStampsIntra[idx]
+                # select stamps from the subset of aggregated donuts
+                # corresponding to current corner
+                intra_stamp = donutStampsIntraSel[idx]
                 intra_img = np.rot90(
                     intra_stamp.stamp_im.image.array[1:, 1:], -nquarter + 2
                 ).T
@@ -1474,7 +1476,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     extra_x - row["centroid_x_extra"], extra_y - row["centroid_y_extra"]
                 )
                 idx = np.argmin(dists)
-                extra_stamp = donutStampsExtra[idx]
+                extra_stamp = donutStampsExtraSel[idx]
                 extra_img = np.rot90(
                     extra_stamp.stamp_im.image.array[1:, 1:], -nquarter
                 ).T
