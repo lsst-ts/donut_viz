@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.3.0
+
+-------------
+2.3.0
+-------------
+
+* Added AiDonut RA pipeline.
+
 .._lsst.ts.donut.viz-2.2.2
 
 -------------
