@@ -10,10 +10,10 @@ tasks:
       python: |
         from lsst.ts.wep.task import EstimateZernikesDanishTask
         config.estimateZernikes.retarget(EstimateZernikesDanishTask)
-      donutStampSelector.maxSelect: 4
+      donutStampSelector.maxSelect: 20
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.useCustomSnLimit: True
-      donutStampSelector.minSignalToNoise: 100
+      donutStampSelector.minSignalToNoise: 0
       donutStampSelector.selectWithMaxPowerGrad: False
       estimateZernikes.binning: 2
       estimateZernikes.nollIndices:
@@ -27,6 +27,10 @@ tasks:
     class: lsst.donut.viz.AggregateDonutTablesCwfsTask
     config:
       connections.donutTables: refitWcsDonutTable
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+    config:
+      maxDonutsPerDetector: 20
 
 # Define pipeline steps
 subsets:
@@ -44,16 +48,15 @@ subsets:
       This step processes the input images with ISR,
       finds and cuts out the donut stamps,
       and estimates the Zernike coefficients from the donut pairs.
-  step1b-visits:
+  step2-visits:
     subset:
       - aggregateZernikeTablesTask
       - aggregateDonutTablesCwfsTask
       - aggregateAOSVisitTableCwfsTask
-      - plotAOSTask
+      # - plotAOSTask
       - aggregateDonutStampsTask
-      - plotDonutCwfsTask
-      - plotPairingTask
-      - plotPsfZernTask
+      # - plotDonutCwfsTask
+      # - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
@@ -66,3 +69,4 @@ steps:
     dimensions: [visit, detector]
   - label: step2-visits
     dimensions: [visit]
+

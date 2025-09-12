@@ -53,10 +53,10 @@ tasks:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
-  aggregateDonutStampsTask:
-    class: lsst.donut.viz.AggregateDonutStampsTask
-    config:
-      maxDonutsPerDetector: 20
+  # aggregateDonutStampsTask:
+  #   class: lsst.donut.viz.AggregateDonutStampsTask
+  #   config:
+  #     maxDonutsPerDetector: 20
 
 # Define pipeline steps
 subsets:
