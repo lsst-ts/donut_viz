@@ -1,0 +1,73 @@
+description: wep refitWCS pipeline for wavefront sensors
+
+tasks:
+  isr:
+    class: lsst.ip.isr.IsrTaskLSST
+    config:
+      connections.outputExposure: post_isr_image
+      # Although we don't have to apply the amp offset corrections, we do want
+      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
+      doAmpOffset: False
+      ampOffset.doApplyAmpOffset: False
+      # Turn off slow steps in ISR but mask saturated pixels
+      doBrighterFatter: False
+      doSaturation: True
+      crosstalk.doQuadraticCrosstalkCorrection: False
+      qa.saveStats: False
+      doStandardStatistics: False
+      doInterpolate: False
+      doVariance: False
+      doDeferredCharge: False
+      doDefect: False
+      doApplyGains: False
+      doBias: False
+      doFlat: True
+      doDark: False
+      doLinearize: False
+      doSuspect: False
+      doSetBadRegions: False
+      doBootstrap: False
+      doCrosstalk: False
+      doITLEdgeBleedMask: False
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      connections.exposure: post_isr_image
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 40
+  generateDonutFromRefitWcsTask:
+    class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
+    config:
+      connections.astromRefCat: "the_monster_20250219"
+      connections.photoRefCat: "the_monster_20250219"
+      connections.exposure: "post_isr_image"
+      connections.outputExposure: "post_fit_post_isr_image"
+      connections.fitDonutCatalog: "donutTable"
+      connections.donutCatalog: "refitWcsDonutTable"
+      donutSelector.useCustomMagLimit: True
+      astromRefFilter: "monster_ComCam_r"
+      photoRefFilterPrefix: "monster_ComCam"
+      catalogFilterList: ["monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r", "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y"]
+      astromTask.referenceSelector.doMagLimit: True
+      astromTask.referenceSelector.magLimit.maximum: 24.0
+      astromTask.referenceSelector.magLimit.fluxField: "monster_ComCam_r_flux"
+      astromTask.maxIter: 3
+      astromTask.matcher.maxOffsetPix: 2000
+      astromTask.matcher.maxRotationDeg: 3.0
+      failTask: False
+      # Settings to use to add blended donuts
+      # donutSelector.unblendedSeparation: 160
+      # donutSelector.minBlendedSeparation: 80
+      donutSelector.sourceLimit: 40
+  cutOutDonutsCwfsPairTask:
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    config:
+      connections.exposure: post_fit_post_isr_image
+      connections.donutCatalog: refitWcsDonutTable
+      # And here we specify the configuration settings originally defined in
+      # CutOutDonutsCwfsTaskConfig.
+      # Test CWFS pipeline works when specifying instrument parameters.
+      donutStampSize: 160
+      initialCutoutPadding: 40
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask

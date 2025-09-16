@@ -3,6 +3,14 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.2.0
+
+-------------
+2.2.0
+-------------
+
+* Add refitWCS pipeline for Danish and LSSTCam CWFS data.
+
 .._lsst.ts.donut.viz-2.1.1
 
 -------------
