@@ -43,8 +43,9 @@ class TestPipeline(unittest.TestCase):
         packageDir = getPackageDir("donut_viz")
         # only test production pipelines
         pipelinePattern = Path(packageDir) / "pipelines" / "production"
-        files = glob(pipelinePattern.as_posix() + "/*Danish.yaml")
+        files = glob(pipelinePattern.as_posix() + "/*.yaml")
         for filename in files:
+            print(f"Testing pipeline from file: {filename}")
             pipeline = Pipeline.fromFile(filename)
             self.assertIsInstance(pipeline, Pipeline)
             pipeline = pipeline.to_graph(registry=self.butler.registry)
