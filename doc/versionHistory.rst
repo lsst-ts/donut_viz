@@ -3,6 +3,14 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.1.1
+
+-------------
+2.1.1
+-------------
+
+* Fix bug where key is used regardless of whether it exists
+
 .._lsst.ts.donut.viz-2.1.0
 
 -------------
