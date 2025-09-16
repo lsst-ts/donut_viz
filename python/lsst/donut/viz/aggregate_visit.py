@@ -36,6 +36,9 @@ __all__ = [
     "AggregateDonutStampsTaskConnections",
     "AggregateDonutStampsTaskConfig",
     "AggregateDonutStampsTask",
+    "AggregateDonutStampsUnpairedTaskConnections",
+    "AggregateDonutStampsUnpairedTaskConfig",
+    "AggregateDonutStampsUnpairedTask",
 ]
 
 
@@ -121,12 +124,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             zernikes_merged = np.array(zernikes_merged).T
             noll_indices = np.array(noll_indices)
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
-<<<<<<< HEAD
-            raw_table["detector"] = zernike_table.meta["extra"]["det_name"]
-            raw_table["used"] = zernike_table["used"][1:]
-=======
             raw_table["detector"] = det_meta["det_name"]
->>>>>>> 401e34b (Add unpaired tasks.)
             raw_tables.append(raw_table)
             avg_table = Table()
             avg_table["zk_CCS"] = np.atleast_2d(zernikes_merged[0])
@@ -190,7 +188,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Add average danish fwhm values into metadata of average table.
         if "fwhm" in out_raw.meta["estimatorInfo"].keys():
             out_avg.meta["estimatorInfo"] = dict()
-            out_avg.meta["estimatorInfo"]["fwhm"] = np.median(
+            out_avg.meta["estimatorInfo"]["fwhm"] = np.nanmedian(
                 out_raw.meta["estimatorInfo"]["fwhm"]
             )
 
@@ -995,7 +993,7 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
 
 class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
     ConfigClass = AggregateAOSVisitTableTaskConfig
-    _DefaultName = "AggregateAOSVisitTableCwfs"
+    _DefaultName = "AggregateAOSVisitTableUnpairedCwfs"
 
     @timeMethod
     def run(
@@ -1206,3 +1204,117 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         )
 
         return intraStampsRavel, extraStampsRavel
+
+
+class AggregateDonutStampsUnpairedTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("instrument", "visit"),
+):
+    donutStampsIn = ct.Input(
+        doc="Extrafocal Donut Stamps",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="donutStamps",
+        multiple=True,
+        deferGraphConstraint=True,
+    )
+    qualityTables = ct.Input(
+        doc="Donut quality tables",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutQualityTable",
+        multiple=True,
+        deferGraphConstraint=True,
+    )
+    donutStampsUnpairedVisit = ct.Output(
+        doc="All Donut Stamps for unpaired estimation",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsUnpairedVisit",
+    )
+
+
+class AggregateDonutStampsUnpairedTaskConfig(
+    AggregateDonutStampsTaskConfig,
+    pipelineConnections=AggregateDonutStampsUnpairedTaskConnections,
+):
+    pass
+
+
+class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
+    ConfigClass = AggregateDonutStampsUnpairedTaskConfig
+    _DefaultName = "AggregateDonutStampsUnpaired"
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ) -> None:
+
+        stampsOut = self.run(
+            butlerQC.get(inputRefs.donutStampsIn),
+            butlerQC.get(inputRefs.qualityTables),
+        )
+
+        butlerQC.put(
+            stampsOut,
+            outputRefs.donutStampsUnpairedVisit,
+        )
+
+    @timeMethod
+    def run(
+        self,
+        stampsIn: typing.List,
+        qualityTables: typing.List,
+    ) -> tuple[typing.List, typing.List]:
+        stampsList = []
+        stampsMetadata = None
+        for stamps, quality in zip(stampsIn, qualityTables):
+            # Skip if quality table is empty.
+            if len(quality) == 0:
+                continue
+
+            # Load the quality table and determine which donuts were selected
+            qualitySelect = quality["FINAL_SELECT"]
+
+            # Select donuts used in Zernike estimation
+            stampsSelect = DonutStamps(
+                [stamps[i] for i in range(len(stamps)) if qualitySelect[i]]
+            )
+
+            if stampsMetadata is None:
+                # Create metadata for stamps
+                # Only keep the visit level data
+                # For stamp-level metadata look at the
+                # metadata of the individual stamps
+                stampsMetadata = dafBase.PropertyList()
+                visitKeys = [
+                    "VISIT",
+                    "BORESIGHT_ROT_ANGLE_RAD",
+                    "BORESIGHT_PAR_ANGLE_RAD",
+                    "BORESIGHT_ALT_RAD",
+                    "BORESIGHT_AZ_RAD",
+                    "BORESIGHT_RA_RAD",
+                    "BORESIGHT_DEC_RAD",
+                    "MJD",
+                    "BANDPASS",
+                ]
+                for key in visitKeys:
+                    stampsMetadata[key] = stamps.metadata[key]
+
+            # Append the requested number of donuts
+            stampsList.append(
+                stampsSelect[: self.config.maxDonutsPerDetector]
+            )
+
+        stampsListRavel = [
+            stamp for stampList in stampsList for stamp in stampList
+        ]
+
+        stampsRavel = DonutStamps(
+            stampsListRavel, metadata=stampsMetadata
+        )
+
+        return stampsRavel
