@@ -6,9 +6,9 @@ tasks:
     class: lsst.ts.wep.task.calcZernikesNeuralTask.CalcZernikesNeuralTask
     config:
       # Model paths set to null for testing (task will use random weights)
-      wavenetPath: /sdf/home/p/peterma2/Rubin_AO_ML/training/finetune_logs/lightning_logs/version_0/checkpoints/best_finetuned_wavennet.ckpt
-      alignetPath: /sdf/home/p/peterma2/Rubin_AO_ML/training/alignnet_logs/lightning_logs/version_0/checkpoints/best_alignnet_120.ckpt
-      aggregatornetPath: /sdf/home/p/peterma2/Rubin_AO_ML/training/aggregator_logs/lightning_logs/version_0/checkpoints/best_aggregator.ckpt
+      wavenetPath: /project/rubintv/TARTS/best_finetuned_wavennet.ckpt
+      alignetPath: /project/rubintv/TARTS/best_alignnet_120.ckpt
+      aggregatornetPath: /project/rubintv/TARTS/best_aggregator.ckpt
       # Path to dataset parameters YAML file (will be created in test)
       datasetParamPath: /sdf/home/p/peterma2/TARTS/TARTS/dataset_params.yaml
       # Use CPU for testing
