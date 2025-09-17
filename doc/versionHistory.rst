@@ -3,6 +3,15 @@
 ##################
 Version History
 ##################
+
+.._lsst.ts.donut.viz-2.2.1
+
+-------------
+2.2.1
+-------------
+
+* Update title text in plotDonutFits
+
 .._lsst.ts.donut.viz-2.2.0
 
 -------------
