@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.2.2
+
+-------------
+2.2.2
+-------------
+
+* Fix steps in refitWCS pipeline for RA.
+
 .._lsst.ts.donut.viz-2.2.1
 
 -------------
