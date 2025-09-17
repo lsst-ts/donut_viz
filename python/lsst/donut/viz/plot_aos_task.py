@@ -1561,7 +1561,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         bottom_ax.set_frame_on(False)
         bottom_ax.set_title(
-            f"{day_obs} seq{seq_num}: current offset from lookup table (based on seq{visit_logevent})"
+            f"{day_obs} seq{seq_num}: current offset from lookup table (based on seq={visit_logevent})"
         )
 
         # Layout for 4 columns
