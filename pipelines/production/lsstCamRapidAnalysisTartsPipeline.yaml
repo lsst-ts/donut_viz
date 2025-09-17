@@ -5,7 +5,7 @@ tasks:
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:
-      doRubinTVUpload: False
+      doRubinTVUpload: True
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
