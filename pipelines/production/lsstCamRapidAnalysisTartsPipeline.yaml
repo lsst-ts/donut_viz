@@ -2,6 +2,38 @@ description: test pipeline for LSSTCam using neural network-based Zernike estima
 instrument: lsst.obs.lsst.LsstCam
 
 tasks:
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: False
+  isr:
+    class: lsst.ip.isr.IsrTaskLSST
+    config:
+      connections.outputExposure: post_isr_image
+      # Although we don't have to apply the amp offset corrections, we do want
+      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
+      doAmpOffset: False
+      ampOffset.doApplyAmpOffset: False
+      # Turn off slow steps in ISR but mask saturated pixels
+      doBrighterFatter: False
+      doSaturation: True
+      crosstalk.doQuadraticCrosstalkCorrection: False
+      qa.saveStats: False
+      doStandardStatistics: False
+      doInterpolate: False
+      doVariance: False
+      doDeferredCharge: False
+      doDefect: False
+      doApplyGains: False
+      doBias: False
+      doFlat: True
+      doDark: False
+      doLinearize: False
+      doSuspect: False
+      doSetBadRegions: False
+      doBootstrap: False
+      doCrosstalk: False
+      doITLEdgeBleedMask: False
   calcZernikesNeuralTask:
     class: lsst.ts.wep.task.calcZernikesNeuralTask.CalcZernikesNeuralTask
     config:
@@ -9,7 +41,7 @@ tasks:
       wavenetPath: /project/rubintv/TARTS/best_finetuned_wavennet.ckpt
       alignetPath: /project/rubintv/TARTS/best_alignnet_120.ckpt
       aggregatornetPath: /project/rubintv/TARTS/best_aggregator.ckpt
-      # Path to dataset parameters YAML file (will be created in test)
+      # Path to dawtaset parameters YAML file (will be created in test)
       datasetParamPath: /sdf/home/p/peterma2/TARTS/TARTS/dataset_params.yaml
       # Use CPU for testing
       device: "cpu"
@@ -20,13 +52,22 @@ tasks:
 subsets:
   step1-detectors:
     subset:
+      - isr
       - calcZernikesNeuralTask
     description: |
       This step processes the input images with ISR and directly estimates
       Zernike coefficients using the TARTS neural network system.
       No intermediate donut detection or cutting is required.
-
+  step1b-visits:
+    subset:
+      - plotAOSTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
 steps:
   - label: step1-detectors
     dimensions: [exposure, detector, instrument]
+  - label: step1b-visits
+    dimensions: [exposure]
 
