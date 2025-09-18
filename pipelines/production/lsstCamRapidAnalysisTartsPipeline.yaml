@@ -38,11 +38,11 @@ tasks:
     class: lsst.ts.wep.task.calcZernikesNeuralTask.CalcZernikesNeuralTask
     config:
       # Model paths set to null for testing (task will use random weights)
-      wavenetPath: /project/rubintv/TARTS/best_finetuned_wavennet.ckpt
-      alignetPath: /project/rubintv/TARTS/best_alignnet_120.ckpt
-      aggregatornetPath: /project/rubintv/TARTS/best_aggregator.ckpt
+      wavenetPath: $TARTS_DATA_DIR/best_finetuned_wavennet.ckpt
+      alignetPath: $TARTS_DATA_DIR/best_alignnet_120.ckpt
+      aggregatornetPath: $TARTS_DATA_DIR/best_aggregator.ckpt
       # Path to dawtaset parameters YAML file (will be created in test)
-      datasetParamPath: /sdf/home/p/peterma2/TARTS/TARTS/dataset_params.yaml
+      datasetParamPath: $TARTS_DIR/python/tarts/dataset_params.yaml
       # Use CPU for testing
       device: "cpu"
       # Noll indices for Zernike coefficients (Z4-Z28, excluding piston/tip/tilt)
