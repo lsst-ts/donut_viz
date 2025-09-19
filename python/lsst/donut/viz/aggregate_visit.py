@@ -107,7 +107,11 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                 continue
             det_meta = None
             unpaired_det_type = None
-            if len(zernike_table.meta["intra"]) == 0:
+            if (len(zernike_table.meta["intra"]) >= 0) and (
+                len(zernike_table.meta["extra"]) >= 0
+            ):
+                det_meta = zernike_table.meta["extra"]
+            elif len(zernike_table.meta["intra"]) == 0:
                 det_meta = zernike_table.meta["extra"]
                 unpaired_det_type = "extra"
             else:
@@ -125,6 +129,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             noll_indices = np.array(noll_indices)
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
             raw_table["detector"] = det_meta["det_name"]
+            raw_table["used"] = zernike_table["used"][1:]
             raw_tables.append(raw_table)
             avg_table = Table()
             avg_table["zk_CCS"] = np.atleast_2d(zernikes_merged[0])
@@ -137,7 +142,6 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             if unpaired_det_type is not None:
                 if len(table_meta[unpaired_det_type]) == 0:
                     table_meta[unpaired_det_type] = det_meta
-            print(table_meta)
 
             if "estimatorInfo" in zernike_table.meta.keys():
                 for key, val in zernike_table.meta["estimatorInfo"].items():
@@ -666,6 +670,7 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
 
         return out
 
+
 class AggregateDonutTablesUnpairedCwfsTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=AggregateDonutTablesCwfsTaskConnections,
@@ -847,9 +852,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         butlerQC.put(raw_table, outputRefs.aggregateAOSRaw)
 
     @timeMethod
-    def run(
-        self, adt: Table, azr: Table, aza: Table
-    ) -> tuple[Table, Table]:
+    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
         dets = np.unique(adt["detector"])
         avg_table = aza.copy()
         avg_keys = [
@@ -923,9 +926,7 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
     _DefaultName = "AggregateAOSVisitTableCwfs"
 
     @timeMethod
-    def run(
-        self, adt: Table, azr: Table, aza: Table
-    ) -> tuple[Table, Table]:
+    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
         extraDetectorNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         intraDetectorNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
         # Only take extra focal detector names
@@ -996,9 +997,7 @@ class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
     _DefaultName = "AggregateAOSVisitTableUnpairedCwfs"
 
     @timeMethod
-    def run(
-        self, adt: Table, azr: Table, aza: Table
-    ) -> tuple[Table, Table]:
+    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
         dets = np.unique(adt["detector"])
         # Only take extra focal detector names
         avg_table = aza.copy()
@@ -1305,16 +1304,10 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
                     stampsMetadata[key] = stamps.metadata[key]
 
             # Append the requested number of donuts
-            stampsList.append(
-                stampsSelect[: self.config.maxDonutsPerDetector]
-            )
+            stampsList.append(stampsSelect[: self.config.maxDonutsPerDetector])
 
-        stampsListRavel = [
-            stamp for stampList in stampsList for stamp in stampList
-        ]
+        stampsListRavel = [stamp for stampList in stampsList for stamp in stampList]
 
-        stampsRavel = DonutStamps(
-            stampsListRavel, metadata=stampsMetadata
-        )
+        stampsRavel = DonutStamps(stampsListRavel, metadata=stampsMetadata)
 
         return stampsRavel
