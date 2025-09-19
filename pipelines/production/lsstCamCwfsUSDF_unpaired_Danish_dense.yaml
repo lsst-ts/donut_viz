@@ -35,9 +35,10 @@ tasks:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
-  aggregateDonutStampsTask:
-    class: lsst.donut.viz.AggregateDonutStampsTask
+  aggregateDonutStampsUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
     config:
+      connections.donutStampsIn: "donutStampsCwfs"
       maxDonutsPerDetector: 20
   aggregateDonutTablesUnpairedCwfsTask:
     class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
@@ -63,11 +64,11 @@ subsets:
       and estimates the Zernike coefficients from the donut pairs.
   step2-visits:
     subset:
-      - aggregateZernikeTablesTask
-      - aggregateDonutTablesUnpairedCwfsTask
-      - aggregateUnpairedAOSVisitTableCwfsTask
+      # - aggregateZernikeTablesTask
+      # - aggregateDonutTablesUnpairedCwfsTask
+      # - aggregateUnpairedAOSVisitTableCwfsTask
       # - plotAOSTask
-      - aggregateDonutStampsTask
+      - aggregateDonutStampsUnpairedTask
       # - plotDonutCwfsTask
       # - plotPsfZernTask
     description: |

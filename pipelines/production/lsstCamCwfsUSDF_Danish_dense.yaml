@@ -10,6 +10,7 @@ tasks:
       measurementTask.nSigmaDetection: 5.0
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 40
+      donutSelector.maxFieldDist: 1.78
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
