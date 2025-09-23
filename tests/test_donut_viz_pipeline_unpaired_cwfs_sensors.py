@@ -99,8 +99,7 @@ class TestDonutVizPipeline(TestCase):
         agg_zern_avg = self.butler.get(average_dataset_list[0])
         self.assertEqual(len(agg_zern_avg), 2)
         self.assertCountEqual(
-            agg_zern_avg["detector"],
-            self.extraDetectorNames + self.intraDetectorNames
+            agg_zern_avg["detector"], self.extraDetectorNames + self.intraDetectorNames
         )
         self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys)
 
@@ -302,7 +301,9 @@ class TestDonutVizPipeline(TestCase):
         quality_datasets = self.butler.query_datasets(
             "donutQualityTable", collections=self.test_run_name
         )
-        donut_stamps_unpaired = [self.butler.get(dataset) for dataset in unpaired_datasets]
+        donut_stamps_unpaired = [
+            self.butler.get(dataset) for dataset in unpaired_datasets
+        ]
         quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
 
         donut_stamps_unpaired = [copy(donut_stamps_unpaired[0]) for i in range(4)]
@@ -313,9 +314,7 @@ class TestDonutVizPipeline(TestCase):
 
         # Test that outputs are still created with only 3 detectors
         agg_donut_task = AggregateDonutStampsUnpairedTask()
-        unpaired_stamps_miss = agg_donut_task.run(
-            donut_stamps_unpaired, quality_tables
-        )
+        unpaired_stamps_miss = agg_donut_task.run(donut_stamps_unpaired, quality_tables)
         self.assertEqual(len(unpaired_stamps_miss), 3)
 
         # Run the plotting task
@@ -341,7 +340,9 @@ class TestDonutVizPipeline(TestCase):
         quality_datasets = self.butler.query_datasets(
             "donutQualityTable", collections=self.test_run_name
         )
-        donut_stamps_unpaired = [self.butler.get(dataset) for dataset in unpaired_datasets]
+        donut_stamps_unpaired = [
+            self.butler.get(dataset) for dataset in unpaired_datasets
+        ]
         quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
         donut_stamps_unpaired = [copy(donut_stamps_unpaired[0]) for i in range(4)]
         quality_tables = [copy(quality_tables[0]) for i in range(4)]
@@ -353,9 +354,7 @@ class TestDonutVizPipeline(TestCase):
 
         # Test that outputs are still created
         agg_donut_task = AggregateDonutStampsUnpairedTask()
-        task_out = agg_donut_task.run(
-            donut_stamps_unpaired, quality_tables
-        )
+        task_out = agg_donut_task.run(donut_stamps_unpaired, quality_tables)
         # Should still have output from 3 sets of stamps
         # while skipping the one with no quality rows
         self.assertEqual(len(task_out), 3)
@@ -407,7 +406,9 @@ class TestDonutVizPipeline(TestCase):
         quality_datasets = self.butler.query_datasets(
             "donutQualityTable", collections=self.test_run_name
         )
-        donut_stamps_unpaired = [self.butler.get(dataset) for dataset in unpaired_datasets]
+        donut_stamps_unpaired = [
+            self.butler.get(dataset) for dataset in unpaired_datasets
+        ]
         quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
 
         # First check that original dataset is length more than 0
@@ -416,14 +417,14 @@ class TestDonutVizPipeline(TestCase):
         quality_tables[0].remove_rows(1)
         donut_stamps_intra_new = DonutStamps(donut_stamps_unpaired[0][:1])
         for key in donut_stamps_unpaired[0].metadata.keys():
-            donut_stamps_intra_new.metadata[key] = donut_stamps_unpaired[0].metadata[key]
+            donut_stamps_intra_new.metadata[key] = donut_stamps_unpaired[0].metadata[
+                key
+            ]
         donut_stamps_unpaired[0] = donut_stamps_intra_new
 
         # Test that outputs are still created
         agg_donut_task = AggregateDonutStampsUnpairedTask()
-        task_out = agg_donut_task.run(
-            donut_stamps_unpaired, quality_tables
-        )
+        task_out = agg_donut_task.run(donut_stamps_unpaired, quality_tables)
         self.assertEqual(len(task_out), 2)
 
     def testAggZernikeTablesRunMissingData(self):
