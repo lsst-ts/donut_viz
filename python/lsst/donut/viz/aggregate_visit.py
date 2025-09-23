@@ -107,16 +107,15 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                 continue
             det_meta = None
             unpaired_det_type = None
-            if (len(zernike_table.meta["intra"]) >= 0) and (
-                len(zernike_table.meta["extra"]) >= 0
-            ):
-                det_meta = zernike_table.meta["extra"]
-            elif len(zernike_table.meta["intra"]) == 0:
+            # Check for empty dictionaries when unpaired task runs
+            if not zernike_table.meta["intra"]:
                 det_meta = zernike_table.meta["extra"]
                 unpaired_det_type = "extra"
-            else:
+            elif not zernike_table.meta["extra"]:
                 det_meta = zernike_table.meta["intra"]
                 unpaired_det_type = "intra"
+            else:
+                det_meta = zernike_table.meta["extra"]
             raw_table = Table()
             zernikes_merged = []
             noll_indices = []
@@ -128,6 +127,9 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             zernikes_merged = np.array(zernikes_merged).T
             noll_indices = np.array(noll_indices)
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
+            print(zernike_table.meta)
+            print(det_meta)
+            print(unpaired_det_type)
             raw_table["detector"] = det_meta["det_name"]
             raw_table["used"] = zernike_table["used"][1:]
             raw_tables.append(raw_table)
@@ -138,10 +140,6 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             # just get any one, they're all the same
             if table_meta is None:
                 table_meta = zernike_table.meta
-
-            if unpaired_det_type is not None:
-                if len(table_meta[unpaired_det_type]) == 0:
-                    table_meta[unpaired_det_type] = det_meta
 
             if "estimatorInfo" in zernike_table.meta.keys():
                 for key, val in zernike_table.meta["estimatorInfo"].items():
@@ -154,21 +152,24 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # TODO: Swap parallactic angle for pseudo parallactic angle.
         #       See SMTN-019 for details.
         meta = {}
-        meta["visit"] = table_meta["extra"]["visit"]
-        meta["parallacticAngle"] = table_meta["extra"]["boresight_par_angle_rad"]
-        meta["rotAngle"] = table_meta["extra"]["boresight_rot_angle_rad"]
+        meta["visit"] = det_meta["visit"]
+        meta["parallacticAngle"] = det_meta["boresight_par_angle_rad"]
+        meta["rotAngle"] = det_meta["boresight_rot_angle_rad"]
         rtp = (
             meta["parallacticAngle"] * radians
             - meta["rotAngle"] * radians
             - (np.pi / 2 * radians)
         ).asRadians()
         meta["rotTelPos"] = rtp
-        meta["ra"] = table_meta["extra"]["boresight_ra_rad"]
-        meta["dec"] = table_meta["extra"]["boresight_dec_rad"]
-        meta["az"] = table_meta["extra"]["boresight_az_rad"]
-        meta["alt"] = table_meta["extra"]["boresight_alt_rad"]
+        meta["ra"] = det_meta["boresight_ra_rad"]
+        meta["dec"] = det_meta["boresight_dec_rad"]
+        meta["az"] = det_meta["boresight_az_rad"]
+        meta["alt"] = det_meta["boresight_alt_rad"]
         # Average mjds
-        meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
+        if unpaired_det_type is None:
+            meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
+        else:
+            meta["mjd"] = det_meta["mjd"]
         meta["nollIndices"] = noll_indices
 
         q = meta["parallacticAngle"]
