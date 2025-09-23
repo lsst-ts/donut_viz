@@ -274,16 +274,6 @@ class TestDonutVizPipeline(TestCase):
         taskOut = task.run(unpaired_stamps_miss, inst)
         self.assertIsInstance(taskOut, matplotlib.figure.Figure)
 
-    # def testPlotPsfZernTask(self):
-    #     # Test that plots exist in butler
-    #     psf_zern_dataset_list = list(
-    #         self.butler.query_datasets(
-    #             "psfFromZernPanel", collections=self.test_run_name
-    #         )
-    #     )
-    #     self.assertEqual(len(psf_zern_dataset_list), 1)
-    #     self.assertEqual(psf_zern_dataset_list[0].dataId["visit"], 4021123106000)
-
     def testAggDonutStampsRunMissingData(self):
         unpaired_datasets = self.butler.query_datasets(
             "donutStamps", collections=self.test_run_name
