@@ -22,3 +22,4 @@
 from .aggregate_visit import *
 from .plot_aos_task import *
 from .plot_donut_fits_unpaired_task import *
+from .hartmann import *
