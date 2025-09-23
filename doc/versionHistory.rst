@@ -11,6 +11,7 @@ Version History
 -------------
 
 * Added AiDonut RA pipeline.
+* Add unpaired aggregation tasks.
 
 .._lsst.ts.donut.viz-2.2.2
 
