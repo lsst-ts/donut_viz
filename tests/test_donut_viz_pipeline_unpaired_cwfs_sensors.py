@@ -12,15 +12,8 @@ from lsst.donut.viz import (
     AggregateZernikeTablesTask,
     AggregateZernikeTablesTaskConfig,
     AggregateDonutStampsUnpairedTask,
-    PlotCwfsPairingTask,
-    PlotCwfsPairingTaskConfig,
-    PlotDonutCwfsTask,
     PlotDonutUnpairedCwfsTask,
-    PlotDonutCwfsTaskConfig,
-    PlotPsfZernTask,
-    PlotPsfZernTaskConfig,
 )
-from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.utils import (
     convertDictToVisitInfo,
