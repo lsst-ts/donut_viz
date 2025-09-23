@@ -46,8 +46,8 @@ tasks:
     class: lsst.donut.viz.PlotAOSTask
     config:
       doRubinTVUpload: False
-  plotDonutCwfsTask:
-    class: lsst.donut.viz.PlotDonutCwfsTask
+  plotDonutUnpairedCwfsTask:
+    class: lsst.donut.viz.PlotDonutUnpairedCwfsTask
     config:
       doRubinTVUpload: False
   # plotCwfsPairingTask:
