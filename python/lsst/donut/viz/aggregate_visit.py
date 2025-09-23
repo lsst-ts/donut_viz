@@ -167,7 +167,9 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         meta["alt"] = det_meta["boresight_alt_rad"]
         # Average mjds
         if unpaired_det_type is None:
-            meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
+            meta["mjd"] = 0.5 * (
+                table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"]
+            )
         else:
             meta["mjd"] = det_meta["mjd"]
         meta["nollIndices"] = noll_indices

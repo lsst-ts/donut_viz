@@ -746,6 +746,7 @@ class PlotDonutUnpairedCwfsTaskConfig(
 ):
     pass
 
+
 class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
     ConfigClass = PlotDonutUnpairedCwfsTaskConfig
     _DefaultName = "plotDonutUnpairedCwfsTask"
@@ -794,9 +795,7 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
             )
 
     @timeMethod
-    def run(
-        self, donutStampsUnpaired: DonutStamps, inst: str
-    ):
+    def run(self, donutStampsUnpaired: DonutStamps, inst: str):
 
         visit = donutStampsUnpaired.metadata.getArray("VISIT")[0]
         # LSST detector layout
