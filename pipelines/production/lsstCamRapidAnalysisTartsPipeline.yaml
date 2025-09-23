@@ -6,6 +6,18 @@ tasks:
     class: lsst.donut.viz.PlotAOSTask
     config:
       doRubinTVUpload: True
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutTablesUnpairedCwfsTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
+  aggregateDonutStampsUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
+  aggregateUnpairedAOSVisitTableCwfsTask:
+    class: lsst.donut.viz.AggregateUnpairedAOSVisitTableCwfsTask
+  plotDonutUnpairedCwfsTask:
+    class: lsst.donut.viz.PlotDonutUnpairedCwfsTask
+    config:
+      doRubinTVUpload: False
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
@@ -60,7 +72,12 @@ subsets:
       No intermediate donut detection or cutting is required.
   step1b-visits:
     subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesUnpairedCwfsTask
+      - aggregateDonutStampsUnpairedTask
+      - aggregateUnpairedAOSVisitTableCwfsTask
       - plotAOSTask
+      - plotDonutUnpairedCwfsTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
