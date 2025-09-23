@@ -7,11 +7,11 @@ from lsst.daf.butler import Butler
 from lsst.donut.viz import (
     AggregateDonutStampsTask,
     AggregateDonutStampsTaskConfig,
+    AggregateDonutStampsUnpairedTask,
     AggregateDonutTablesCwfsTask,
     AggregateDonutTablesCwfsTaskConfig,
     AggregateZernikeTablesTask,
     AggregateZernikeTablesTaskConfig,
-    AggregateDonutStampsUnpairedTask,
     PlotDonutUnpairedCwfsTask,
 )
 from lsst.ts.wep.task import DonutStamps
@@ -234,48 +234,6 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(residual_dataset_list), 1)
         self.assertEqual(residual_dataset_list[0].dataId["visit"], 4021123106000)
 
-    # def testPlotCwfsPairingTask(self):
-    #     # Test that plots exist in butler
-    #     dataset_list = list(
-    #         self.butler.query_datasets("pairingPlot", collections=self.test_run_name)
-    #     )
-    #     self.assertEqual(len(dataset_list), 1)
-    #     self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
-
-    # def testPlotCwfsPairingTaskRunMissingData(self):
-    #     # Get only one detector
-    #     dataset_list = list(
-    #         self.butler.query_datasets("post_isr_image", collections=self.test_run_name)
-    #     )
-
-    #     images = {}
-    #     # pick just one of two available detectors
-    #     for dataset in dataset_list[:1]:
-    #         det = dataset.dataId["detector"]
-    #         images[det] = self.butler.get(dataset).image.array
-    #     table = self.butler.get(
-    #         self.butler.query_datasets(
-    #             "aggregateAOSVisitTableRaw", collections=self.test_run_name
-    #         )[0]
-    #     )
-    #     visit = dataset_list[0].dataId["exposure"]
-
-    #     # Run the plotting task
-    #     config = PlotCwfsPairingTaskConfig()
-    #     config.doRubinTVUpload = False
-    #     camera = LsstCam().getCamera()
-    #     task = PlotCwfsPairingTask(config=config)
-    #     taskOut = task.run(images, table, camera, visit)
-    #     self.assertIsInstance(taskOut, matplotlib.figure.Figure)
-
-    # def testPlotDonutFitsTask(self):
-    #     # Test that plots exist in butler
-    #     dataset_list = list(
-    #         self.butler.query_datasets("donutFits", collections=self.test_run_name)
-    #     )
-    #     self.assertEqual(len(dataset_list), 1)
-    #     self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
-
     def testPlotDonutUnpairedCwfsTask(self):
         # Test that plots exist in butler
         dataset_list = list(
@@ -474,20 +432,3 @@ class TestDonutVizPipeline(TestCase):
         task = AggregateDonutTablesCwfsTask(config=AggregateDonutTablesCwfsTaskConfig())
         agg_donut_table = task.run(camera, donutTables, qualityTables)
         self.assertEqual(len(agg_donut_table), 2)
-
-    # def testPlotPsfZernTaskMissingData(self):
-    #     # Test that if detectors have different numbers of zernikes
-    #     # the plot still gets made.
-    #     zernike_datasets = self.butler.query_datasets(
-    #         "zernikes", collections=self.test_run_name
-    #     )
-    #     zernikes = [self.butler.get(dataset) for dataset in zernike_datasets]
-    #     zernikes = [copy(zernikes[0]) for i in range(4)]
-    #     zernikes_missing_data = copy(zernikes)
-    #     zernikes_missing_data[0].remove_rows(np.arange(len(zernikes_missing_data[0])))
-    #     task = PlotPsfZernTask(config=PlotPsfZernTaskConfig())
-    #     for input_data in [zernikes, zernikes_missing_data]:
-    #         try:
-    #             task.run(zernikes)
-    #         except Exception:
-    #             self.fail(f"Unexpected exception raised with input {input_data}")
