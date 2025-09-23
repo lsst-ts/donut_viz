@@ -127,9 +127,6 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             zernikes_merged = np.array(zernikes_merged).T
             noll_indices = np.array(noll_indices)
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
-            print(zernike_table.meta)
-            print(det_meta)
-            print(unpaired_det_type)
             raw_table["detector"] = det_meta["det_name"]
             raw_table["used"] = zernike_table["used"][1:]
             raw_tables.append(raw_table)
@@ -997,7 +994,7 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
 
 class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
     ConfigClass = AggregateAOSVisitTableTaskConfig
-    _DefaultName = "AggregateAOSVisitTableUnpairedCwfs"
+    _DefaultName = "AggregateUnpairedAOSVisitTableCwfs"
 
     @timeMethod
     def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
