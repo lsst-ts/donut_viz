@@ -7,11 +7,10 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
 
 from lsst.afw.table import SourceTable
-from lsst.ip.isr import IsrTask
+from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import SourceDetectionTask, SubtractBackgroundTask
 from lsst.meas.algorithms.installGaussianPsf import InstallGaussianPsfTask
 from lsst.meas.base import IdGenerator, SingleFrameMeasurementTask
-from lsst.summit.utils.quickLook import QuickLookIsrTask
 from lsst.utils import getPackageDir
 
 __all__ = [
@@ -83,6 +82,10 @@ class HartmannSensitivityAnalysisConfig(
         doc="Bin size for running initial detection",
         default=16,
     )
+    isr = pexConfig.ConfigurableField(
+        target=IsrTaskLSST,
+        doc="Instrument signature removal task",
+    )
     installPsf = pexConfig.ConfigurableField(
         target=InstallGaussianPsfTask,
         doc="Install a PSF model",
@@ -100,6 +103,29 @@ class HartmannSensitivityAnalysisConfig(
     )
 
     def setDefaults(self):
+        self.isr.doAmpOffset = False
+        self.isr.ampOffset.doApplyAmpOffset = False
+        # Turn off slow steps in ISR but mask saturated pixels
+        self.isr.doBrighterFatter = False
+        self.isr.doSaturation = True
+        self.isr.crosstalk.doQuadraticCrosstalkCorrection = False
+        self.isr.qa.saveStats = False
+        self.isr.doStandardStatistics = False
+        self.isr.doInterpolate = False
+        self.isr.doVariance = False
+        self.isr.doDeferredCharge = False
+        self.isr.doDefect = False
+        self.isr.doApplyGains = False
+        self.isr.doBias = False
+        self.isr.doFlat = True
+        self.isr.doDark = False
+        self.isr.doLinearize = False
+        self.isr.doSuspect = False
+        self.isr.doSetBadRegions = False
+        self.isr.doBootstrap = False
+        self.isr.doCrosstalk = False
+        self.isr.doITLEdgeBleedMask = False
+
         self.installPsf.fwhm = 5.0
         self.installPsf.width = 21
 
@@ -131,6 +157,7 @@ class HartmannSensitivityAnalysis(
         super().__init__(config=config, **kwargs)
 
         self.schema = SourceTable.makeMinimalSchema()
+        self.makeSubtask("isr")
         self.makeSubtask("installPsf")
         self.makeSubtask("background")
         self.makeSubtask("detection", schema=self.schema)
@@ -145,28 +172,24 @@ class HartmannSensitivityAnalysis(
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        exposures = [butlerQC.get(ref) for ref in inputRefs.exposures]
-        results = self.run(exposures)
+        inputs = butlerQC.get(inputRefs)
+        results = self.run(**inputs)
 
-    def run_ISR(self, exposure):
-        isrConfig = IsrTask.ConfigClass()
-        packageDir = getPackageDir("summit_utils")
-        isrConfig.load(Path(packageDir) / "config" / "quickLookIsr.py")
-        quickLookIsrConfig = QuickLookIsrTask.ConfigClass()
-        quickLookIsrConfig.doRepairCosmics = False
-        quickLookIsrTask = QuickLookIsrTask(config=quickLookIsrConfig)
-        return quickLookIsrTask.run(exposure, isrBaseConfig=isrConfig).outputExposure
+    def run_ISR(self, exposure, **kwargs):
+        out = self.isr.run(exposure, **kwargs)
+        return out.exposure
 
     def run(
         self,
         exposures,
         skip_isr=False,
+        **isr_kwargs
     ):
         config = self.config
 
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
         if not skip_isr:
-            exposures = [self.run_ISR(exp) for exp in exposures]
+            exposures = [self.run_ISR(exp, **isr_kwargs) for exp in exposures]
         ref_index = config.ref_index
         if ref_index < 0:
             ref_index = len(exposures) + ref_index
