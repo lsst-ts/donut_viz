@@ -80,4 +80,3 @@ steps:
     dimensions: [visit, detector]
   - label: step1b-visits
     dimensions: [visit]
-
