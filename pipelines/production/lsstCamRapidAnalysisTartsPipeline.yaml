@@ -54,7 +54,7 @@ tasks:
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:
-      doRubinTVUpload: False
+      doRubinTVUpload: True
 # Define pipeline steps
 subsets:
   step1a-detectors:
