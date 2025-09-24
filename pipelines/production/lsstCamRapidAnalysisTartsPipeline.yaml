@@ -2,22 +2,6 @@ description: test pipeline for LSSTCam using neural network-based Zernike estima
 instrument: lsst.obs.lsst.LsstCam
 
 tasks:
-  plotAOSTask:
-    class: lsst.donut.viz.PlotAOSTask
-    config:
-      doRubinTVUpload: True
-  aggregateZernikeTablesTask:
-    class: lsst.donut.viz.AggregateZernikeTablesTask
-  aggregateDonutTablesUnpairedCwfsTask:
-    class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
-  aggregateDonutStampsUnpairedTask:
-    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
-  aggregateUnpairedAOSVisitTableCwfsTask:
-    class: lsst.donut.viz.AggregateUnpairedAOSVisitTableCwfsTask
-  plotDonutUnpairedCwfsTask:
-    class: lsst.donut.viz.PlotDonutUnpairedCwfsTask
-    config:
-      doRubinTVUpload: False
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
@@ -49,20 +33,31 @@ tasks:
   calcZernikesNeuralTask:
     class: lsst.ts.wep.task.calcZernikesNeuralTask.CalcZernikesNeuralTask
     config:
+      connections.exposure: post_isr_image
       # Model paths set to null for testing (task will use random weights)
-      wavenetPath: $TARTS_DATA_DIR/best_finetuned_wavennet.ckpt
-      alignetPath: $TARTS_DATA_DIR/best_alignnet_120.ckpt
-      aggregatornetPath: $TARTS_DATA_DIR/best_aggregator.ckpt
-      # Path to dawtaset parameters YAML file (will be created in test)
-      datasetParamPath: $TARTS_DIR/python/tarts/dataset_params.yaml
+      wavenetPath: /sdf/home/p/peterma2/Rubin_AO_ML/training/finetune_logs/lightning_logs/version_0/checkpoints/best_finetuned_wavennet.ckpt
+      alignetPath: /sdf/home/p/peterma2/Rubin_AO_ML/training/alignnet_logs/lightning_logs/version_0/checkpoints/best_alignnet_120.ckpt
+      aggregatornetPath: /sdf/home/p/peterma2/Rubin_AO_ML/training/aggregator_logs/lightning_logs/version_0/checkpoints/best_aggregator.ckpt
+      datasetParamPath: /sdf/home/p/peterma2/TARTS/python/tarts/dataset_params.yaml
       # Use CPU for testing
       device: "cpu"
       # Noll indices for Zernike coefficients (Z4-Z28, excluding piston/tip/tilt)
       nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 27, 28]
-
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutStampsUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
+  aggregateDonutTablesUnpairedCwfsTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
+  # aggregateUnpairedAOSVisitTableCwfsTask:
+  #   class: lsst.donut.viz.AggregateUnpairedAOSVisitTableCwfsTask
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: False
 # Define pipeline steps
 subsets:
-  step1-detectors:
+  step1a-detectors:
     subset:
       - isr
       - calcZernikesNeuralTask
@@ -73,18 +68,16 @@ subsets:
   step1b-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesUnpairedCwfsTask
       - aggregateDonutStampsUnpairedTask
-      - aggregateUnpairedAOSVisitTableCwfsTask
+      - aggregateDonutTablesUnpairedCwfsTask
+      # - aggregateUnpairedAOSVisitTableCwfsTask
       - plotAOSTask
-      - plotDonutUnpairedCwfsTask
     description: |
-      AOS Donut visualization plotting tasks. This step generates plots
-      (including the pyramid residual and donut gallery) and
-      tables for the AOS visit.
+      AOS visualization tasks. This step generates tables
+      for the AOS visit using neural network-based Zernike estimates.
 steps:
-  - label: step1-detectors
-    dimensions: [exposure, detector, instrument]
+  - label: step1a-detectors
+    dimensions: [visit, detector]
   - label: step1b-visits
-    dimensions: [exposure]
+    dimensions: [visit]
 
