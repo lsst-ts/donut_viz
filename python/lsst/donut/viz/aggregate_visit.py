@@ -23,11 +23,8 @@ __all__ = [
     "AggregateDonutTablesTaskConnections",
     "AggregateDonutTablesTaskConfig",
     "AggregateDonutTablesTask",
-<<<<<<< HEAD
-=======
     "AggregateDonutTablesUnpairedCwfsTaskConfig",
     "AggregateDonutTablesUnpairedCwfsTask",
->>>>>>> f3faa20 (All Peter's work)
     "AggregateDonutTablesCwfsTaskConnections",
     "AggregateDonutTablesCwfsTaskConfig",
     "AggregateDonutTablesCwfsTask",
@@ -35,10 +32,7 @@ __all__ = [
     "AggregateAOSVisitTableTaskConfig",
     "AggregateAOSVisitTableTask",
     "AggregateAOSVisitTableCwfsTask",
-<<<<<<< HEAD
-=======
     "AggregateUnpairedAOSVisitTableCwfsTask",
->>>>>>> f3faa20 (All Peter's work)
     "AggregateDonutStampsTaskConnections",
     "AggregateDonutStampsTaskConfig",
     "AggregateDonutStampsTask",
@@ -133,11 +127,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             zernikes_merged = np.array(zernikes_merged).T
             noll_indices = np.array(noll_indices)
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
-<<<<<<< HEAD
-            raw_table["detector"] = zernike_table.meta["extra"]["det_name"]
-=======
             raw_table["detector"] = det_meta["det_name"]
->>>>>>> f3faa20 (All Peter's work)
             raw_table["used"] = zernike_table["used"][1:]
             raw_tables.append(raw_table)
             avg_table = Table()
@@ -147,10 +137,6 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             # just get any one, they're all the same
             if table_meta is None:
                 table_meta = zernike_table.meta
-<<<<<<< HEAD
-=======
-
->>>>>>> f3faa20 (All Peter's work)
             if "estimatorInfo" in zernike_table.meta.keys():
                 for key, val in zernike_table.meta["estimatorInfo"].items():
                     if key not in estimator_meta:
@@ -171,19 +157,10 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             - (np.pi / 2 * radians)
         ).asRadians()
         meta["rotTelPos"] = rtp
-<<<<<<< HEAD
-        meta["ra"] = table_meta["extra"]["boresight_ra_rad"]
-        meta["dec"] = table_meta["extra"]["boresight_dec_rad"]
-        meta["az"] = table_meta["extra"]["boresight_az_rad"]
-        meta["alt"] = table_meta["extra"]["boresight_alt_rad"]
-        meta["band"] = table_meta["extra"]["band"]
-
-=======
         meta["ra"] = det_meta["boresight_ra_rad"]
         meta["dec"] = det_meta["boresight_dec_rad"]
         meta["az"] = det_meta["boresight_az_rad"]
         meta["alt"] = det_meta["boresight_alt_rad"]
->>>>>>> f3faa20 (All Peter's work)
         # Average mjds
         if unpaired_det_type is None:
             meta["mjd"] = 0.5 * (
@@ -214,11 +191,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Add average danish fwhm values into metadata of average table.
         if "fwhm" in out_raw.meta["estimatorInfo"].keys():
             out_avg.meta["estimatorInfo"] = dict()
-<<<<<<< HEAD
-            out_avg.meta["estimatorInfo"]["fwhm"] = np.median(
-=======
             out_avg.meta["estimatorInfo"]["fwhm"] = np.nanmedian(
->>>>>>> f3faa20 (All Peter's work)
                 out_raw.meta["estimatorInfo"]["fwhm"]
             )
 
@@ -697,8 +670,6 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         return out
 
 
-<<<<<<< HEAD
-=======
 class AggregateDonutTablesUnpairedCwfsTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=AggregateDonutTablesCwfsTaskConnections,
@@ -810,7 +781,6 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
         return out
 
 
->>>>>>> f3faa20 (All Peter's work)
 class AggregateAOSVisitTableTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=(
@@ -955,13 +925,9 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
     _DefaultName = "AggregateAOSVisitTableCwfs"
 
     @timeMethod
-<<<<<<< HEAD
     def run(
         self, adt: typing.List[Table], azr: typing.List[Table], aza: typing.List[Table]
     ) -> tuple[Table, Table]:
-=======
-    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
->>>>>>> f3faa20 (All Peter's work)
         extraDetectorNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         intraDetectorNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
         # Only take extra focal detector names
@@ -1027,8 +993,6 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
         return avg_table, raw_table
 
 
-<<<<<<< HEAD
-=======
 class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
     ConfigClass = AggregateAOSVisitTableTaskConfig
     _DefaultName = "AggregateUnpairedAOSVisitTableCwfs"
@@ -1077,7 +1041,6 @@ class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
         return avg_table, raw_table
 
 
->>>>>>> f3faa20 (All Peter's work)
 class AggregateDonutStampsTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "visit"),

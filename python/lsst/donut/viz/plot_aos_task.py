@@ -64,15 +64,12 @@ __all__ = [
     "PlotDonutFitsTaskConnections",
     "PlotDonutFitsTaskConfig",
     "PlotDonutFitsTask",
-<<<<<<< HEAD
-=======
     "PlotDonutUnpairedCwfsTaskConnections",
     "PlotDonutUnpairedCwfsTaskConfig",
     "PlotDonutUnpairedCwfsTask",
     "PlotDonutFitsUnpairedTaskConnections",
     "PlotDonutFitsUnpairedTaskConfig",
     "PlotDonutFitsUnpairedTask",
->>>>>>> f3faa20 (All Peter's work)
 ]
 
 
@@ -460,7 +457,6 @@ class PlotDonutTask(pipeBase.PipelineTask):
         factor = 3
         offset = 7
 
-<<<<<<< HEAD
         match inst:
             case "LSSTCam" | "LSSTCamSim":
                 nacross = 15
@@ -474,20 +470,6 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 fp_size = 0.50  # 50% of horizontal space
             case _:
                 raise ValueError(f"Unknown instrument {inst}")
-=======
-        if inst in ("LSSTCam", "LSSTCamSim"):
-            nacross = 15
-            fp_size = 0.55  # 55% of horizontal space
-            if self.config.doS11only:
-                factor = 1
-                offset = 3
-                nacross = 5
-        elif inst in ("LSSTComCam", "LSSTComCamSim"):
-            nacross = 3
-            fp_size = 0.50  # 50% of horizontal space
-        else:
-            raise ValueError(f"Unknown instrument {inst}")
->>>>>>> f3faa20 (All Peter's work)
         det_size = fp_size / nacross
         fp_center = 0.5, 0.475
 
@@ -743,8 +725,6 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
         return fig
 
 
-<<<<<<< HEAD
-=======
 class PlotDonutUnpairedCwfsTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("visit", "instrument"),
@@ -920,7 +900,6 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
         return fig
 
 
->>>>>>> f3faa20 (All Peter's work)
 class PlotCwfsPairingTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("exposure", "visit", "instrument"),
@@ -1879,8 +1858,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             ypos[col] -= y_step
 
         return fig
-<<<<<<< HEAD
-=======
 
 
 class PlotDonutFitsUnpairedTaskConnections(
@@ -2714,4 +2691,3 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
         )
 
         return fig
->>>>>>> f3faa20 (All Peter's work)
