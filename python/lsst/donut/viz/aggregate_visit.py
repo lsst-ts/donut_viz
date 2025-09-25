@@ -1088,7 +1088,7 @@ class AggregateDonutStampsTaskConfig(
 ):
     maxDonutsPerDetector = pexConfig.Field[int](
         doc="Maximum number of donuts to use per detector",
-        default=1,
+        default=10,
     )
 
     def validate(self):

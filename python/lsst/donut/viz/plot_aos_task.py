@@ -64,9 +64,9 @@ __all__ = [
     "PlotDonutFitsTaskConnections",
     "PlotDonutFitsTaskConfig",
     "PlotDonutFitsTask",
-    "PlotDonutUnpairedCwfsTaskConnections",
-    "PlotDonutUnpairedCwfsTaskConfig",
-    "PlotDonutUnpairedCwfsTask",
+    "PlotDonutFitsUnpairedTaskConnections",
+    "PlotDonutFitsUnpairedTaskConfig",
+    "PlotDonutFitsUnpairedTask",
 ]
 
 
@@ -148,7 +148,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
         # aos_avg = butlerQC.get(inputRefs.aggregateAOSAvg)
 
         zkPyramid, residPyramid, intrinsicPyramid = self.plotZernikePyramids(aos_raw)
-
+        zkPyramid.savefig('/sdf/home/p/peterma2/test.png')# additional save!
         butlerQC.put(zkPyramid, outputRefs.measuredZernikePyramid)
         butlerQC.put(residPyramid, outputRefs.residualZernikePyramid)
         butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid)
@@ -454,19 +454,18 @@ class PlotDonutTask(pipeBase.PipelineTask):
         factor = 3
         offset = 7
 
-        match inst:
-            case "LSSTCam" | "LSSTCamSim":
-                nacross = 15
-                fp_size = 0.55  # 55% of horizontal space
-                if self.config.doS11only:
-                    factor = 1
-                    offset = 3
-                    nacross = 5
-            case "LSSTComCam" | "LSSTComCamSim":
-                nacross = 3
-                fp_size = 0.50  # 50% of horizontal space
-            case _:
-                raise ValueError(f"Unknown instrument {inst}")
+        if inst in ("LSSTCam", "LSSTCamSim"):
+            nacross = 15
+            fp_size = 0.55  # 55% of horizontal space
+            if self.config.doS11only:
+                factor = 1
+                offset = 3
+                nacross = 5
+        elif inst in ("LSSTComCam", "LSSTComCamSim"):
+            nacross = 3
+            fp_size = 0.50  # 50% of horizontal space
+        else:
+            raise ValueError(f"Unknown instrument {inst}")
         det_size = fp_size / nacross
         fp_center = 0.5, 0.475
 
@@ -634,181 +633,6 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
                 donutStampsList.append(stamp)
                 detectorsRead.append(stamp.detector_name)
         for stamp in donutStampsIntra:
-            if stamp.detector_name not in detectorsRead:
-                donutStampsList.append(stamp)
-                detectorsRead.append(stamp.detector_name)
-
-        fp_center = 0.5, 0.475
-        fp_size = 0.7
-        nacross = 4
-        det_size = fp_size / nacross
-        fig = make_figure(figsize=(11, 8.5))
-
-        aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
-
-        for donut in donutStampsList:
-            det_name = donut.detector_name
-            if det_name == "R00_SW0":
-                i = 0
-                j = -1
-                nrot90 = 2
-            elif det_name == "R00_SW1":
-                i = -1
-                j = -1
-                nrot90 = 0
-            elif det_name == "R44_SW0":
-                i = 0 + 0.5
-                j = 1 - 0.5
-                nrot90 = 0
-            elif det_name == "R44_SW1":
-                i = 1 + 0.5
-                j = 1 - 0.5
-                nrot90 = 2
-            elif det_name == "R04_SW0":
-                i = -1 + 0.5
-                j = 0
-                nrot90 = 3
-            elif det_name == "R04_SW1":
-                i = -1 + 0.5
-                j = 1
-                nrot90 = 1
-            elif det_name == "R40_SW0":
-                i = 1
-                j = 0 - 0.5
-                nrot90 = 1
-            elif det_name == "R40_SW1":
-                i = 1
-                j = -1 - 0.5
-                nrot90 = 3
-            x = i - 0.25
-            y = -j
-            xp = np.cos(rtp) * x + np.sin(rtp) * y
-            yp = -np.sin(rtp) * x + np.cos(rtp) * y
-
-            ax, aux_ax = add_rotated_axis(
-                fig,
-                (
-                    xp * det_size + fp_center[0],
-                    yp * det_size * aspect + fp_center[1],
-                ),
-                (det_size * 1.25, det_size * 1.25),
-                -np.rad2deg(rtp),
-            )
-            arr = donut.stamp_im.image.array
-            vmin, vmax = np.quantile(arr, (0.01, 0.99))
-            aux_ax.imshow(
-                np.rot90(donut.stamp_im.image.array.T, nrot90),
-                vmin=vmin,
-                vmax=vmax,
-                extent=[0, det_size * 1.25, 0, det_size * 1.25],
-                origin="upper",  # +y is down
-            )
-            xlim = aux_ax.get_xlim()
-            ylim = aux_ax.get_ylim()
-            defocal = "extra" if det_name[-3:] == "SW0" else "intra"
-            label = f"{det_name} {defocal}"
-            aux_ax.text(
-                xlim[0] + 0.03 * (xlim[1] - xlim[0]),
-                ylim[1] - 0.03 * (ylim[1] - ylim[0]),
-                label,
-                color="w",
-                rotation=-np.rad2deg(rtp),
-                rotation_mode="anchor",
-                ha="left",
-                va="top",
-            )
-        add_coordinate_roses(fig, rtp, q)
-        fig.text(0.47, 0.97, f"{visit}")
-        return fig
-
-
-class PlotDonutUnpairedCwfsTaskConnections(
-    pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "instrument"),
-):
-    donutStampsUnpairedVisit = ct.Input(
-        doc="Unpaired Donut Stamps",
-        dimensions=("visit", "instrument"),
-        storageClass="StampsBase",
-        name="donutStampsUnpairedVisit",
-    )
-    donutPlot = ct.Output(
-        doc="Donut Plot",
-        dimensions=("visit", "instrument"),
-        storageClass="Plot",
-        name="donutPlot",
-    )
-
-
-class PlotDonutUnpairedCwfsTaskConfig(
-    PlotDonutCwfsTaskConfig,
-    pipelineConnections=PlotDonutUnpairedCwfsTaskConnections,
-):
-    pass
-
-
-class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
-    ConfigClass = PlotDonutUnpairedCwfsTaskConfig
-    _DefaultName = "plotDonutUnpairedCwfsTask"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self.config.doRubinTVUpload:
-            if not MultiUploader:
-                raise RuntimeError("MultiUploader is not available")
-            self.uploader = MultiUploader()
-
-    @timeMethod
-    def runQuantum(
-        self,
-        butlerQC: pipeBase.QuantumContext,
-        inputRefs: pipeBase.InputQuantizedConnection,
-        outputRefs: pipeBase.OutputQuantizedConnection,
-    ) -> None:
-        inst = inputRefs.donutStampsUnpairedVisit.dataId["instrument"]
-
-        donutStampsUnpaired = butlerQC.get(inputRefs.donutStampsUnpairedVisit)
-
-        fig = self.run(donutStampsUnpaired, inst)
-
-        butlerQC.put(fig, outputRefs.donutPlot)
-
-        # Same visit for both extra and intra-focal corner sensors
-        visit = donutStampsUnpaired.metadata.getArray("VISIT")[0]
-
-        if self.config.doRubinTVUpload:
-            locationConfig = getAutomaticLocationConfig()
-            day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
-
-            plotName = "fp_donut_gallery"
-            plotFile = makePlotFile(
-                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-            )
-            fig.savefig(plotFile)
-            self.uploader.uploadPerSeqNumPlot(
-                instrument=get_instrument_channel_name(inst),
-                plotName=plotName,
-                dayObs=day_obs,
-                seqNum=seq_num,
-                filename=plotFile,
-            )
-
-    @timeMethod
-    def run(self, donutStampsUnpaired: DonutStamps, inst: str):
-
-        visit = donutStampsUnpaired.metadata.getArray("VISIT")[0]
-        # LSST detector layout
-        q = donutStampsUnpaired.metadata["BORESIGHT_PAR_ANGLE_RAD"]
-        rotAngle = donutStampsUnpaired.metadata["BORESIGHT_ROT_ANGLE_RAD"]
-        rtp = q - rotAngle - np.pi / 2
-
-        # Combine all donuts into one list
-        # We make sure to pick the first, i.e.
-        # the brightest, donut for each detector
-        detectorsRead = []
-        donutStampsList = []
-        for stamp in donutStampsUnpaired:
             if stamp.detector_name not in detectorsRead:
                 donutStampsList.append(stamp)
                 detectorsRead.append(stamp.detector_name)
@@ -1853,5 +1677,838 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 family="monospace",
             )
             ypos[col] -= y_step
+
+        return fig
+
+
+class PlotDonutFitsUnpairedTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "instrument"),
+):
+    aggregateAOSRaw = ct.Input(
+        doc="AOS raw catalog",
+        dimensions=("visit", "instrument"),
+        storageClass="AstropyTable",
+        name="aggregateAOSVisitTableRaw",
+    )
+    donutStampsUnpairedVisit = ct.Input(
+        doc="Unpaired Donut Stamps",
+        dimensions=("visit", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsUnpairedVisit",
+    )
+    camera = ct.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
+    )
+    donutFitsUnpaired = ct.Output(
+        doc="Donut Fits Unpaired",
+        dimensions=("visit", "instrument"),
+        storageClass="Plot",
+        name="donutFitsUnpaired",
+    )
+
+
+class PlotDonutFitsUnpairedTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=PlotDonutFitsUnpairedTaskConnections,
+):
+    doRubinTVUpload = pexConfig.Field(
+        dtype=bool,
+        doc="Upload to RubinTV",
+        default=False,
+    )
+
+
+class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
+    ConfigClass = PlotDonutFitsUnpairedTaskConfig
+    _DefaultName = "plotDonutFitsUnpairedTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
+
+        mask_params_fn = Path(danish.datadir) / "RubinObsc.yaml"
+        with open(mask_params_fn) as f:
+            self.mask_params = yaml.safe_load(f)
+        instConfigFile = None
+        self.instrument = getTaskInstrument(
+            "LSSTCam",
+            "R00_SW0",
+            instConfigFile,
+        )
+        self.obsc = self.instrument.obscuration
+        self.fL = self.instrument.focalLength
+        self.R_outer = self.instrument.radius
+        self.wavelengths = self.instrument.wavelength
+        self.pixel_scale = self.instrument.pixelSize
+        self.factory = danish.DonutFactory(
+            R_outer=self.R_outer,
+            R_inner=self.R_outer * self.obsc,
+            mask_params=self.mask_params,
+            focal_length=self.fL,
+            pixel_scale=self.pixel_scale,
+        )
+
+    @timeMethod
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.QuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ) -> None:
+        # Get the inputs
+        aos_raw = butlerQC.get(inputRefs.aggregateAOSRaw)
+        donutStampsUnpaired = butlerQC.get(inputRefs.donutStampsUnpairedVisit)
+        camera = butlerQC.get(inputRefs.camera)
+        visit = inputRefs.aggregateAOSRaw.dataId["visit"]
+        record = inputRefs.aggregateAOSRaw.dataId.records["visit"]
+
+        day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
+        fig = self.run(
+            aos_raw,
+            donutStampsUnpaired,
+            camera,
+            day_obs,
+            seq_num,
+            record,
+        )
+
+        butlerQC.put(fig, outputRefs.donutFitsUnpaired)
+
+        if self.config.doRubinTVUpload:
+            locationConfig = getAutomaticLocationConfig()
+            instrument = inputRefs.aggregateAOSRaw.dataId["instrument"]
+            plotName = "donut_fits_unpaired"
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
+            fig.savefig(plotFile)
+            self.uploader.uploadPerSeqNumPlot(
+                instrument=get_instrument_channel_name(instrument),
+                plotName=plotName,
+                dayObs=day_obs,
+                seqNum=seq_num,
+                filename=plotFile,
+            )
+
+    def getModel(self, telescope, intra_telescope, extra_telescope, row, img, wavelength, detector_name):
+        """Generate theoretical donut model for single defocal position.
+
+        Parameters
+        ----------
+        telescope : batoid.Optic
+            In-focus telescope optical model
+        intra_telescope : batoid.Optic
+            Intra-focal telescope optical model
+        extra_telescope : batoid.Optic
+            Extra-focal telescope optical model
+        row : astropy.table.Row
+            AOS catalog row with Zernike coefficients
+        img : np.ndarray
+            Observed donut image
+        wavelength : float
+            Wavelength in meters
+        detector_name : str
+            Detector name (e.g., "R00_SW0" or "R00_SW1")
+
+        Returns
+        -------
+        model : np.ndarray
+            Theoretical donut model
+        fwhm : float
+            Fitted FWHM parameter
+        """
+        # Determine which telescope model to use based on detector name
+        if detector_name.endswith("SW1"):
+            # Intra-focal detector
+            defocused_telescope = intra_telescope
+        elif detector_name.endswith("SW0"):
+            # Extra-focal detector
+            defocused_telescope = extra_telescope
+        else:
+            # Default to extra-focal if unclear
+            defocused_telescope = extra_telescope
+
+        # Extract parameters from AOS catalog
+        # Use general CCS positions for unpaired
+        thx = row["thx_CCS"]
+        thy = row["thy_CCS"]
+        zk_CCS = row["zk_CCS"]
+        nollIndices = row.meta["nollIndices"]
+
+        # Calculate intrinsic Zernikes
+        z_intrinsic = (
+            batoid.zernikeGQ(
+                telescope,
+                thx,
+                thy,
+                wavelength,
+                jmax=28,
+                eps=self.obsc,
+            )
+            * wavelength
+        )
+
+        # Calculate reference Zernikes using appropriate defocused telescope
+        z_ref = (
+            batoid.zernikeTA(
+                defocused_telescope,
+                thx,
+                thy,
+                wavelength,
+                jmax=78,
+                eps=self.obsc,
+                focal_length=self.fL,
+            )
+            * wavelength
+        )
+
+        # Apply CCS corrections
+        zk = z_ref.copy()
+        for ij, j in enumerate(nollIndices):
+            zk[j] += zk_CCS[ij] * 1e-6 - z_intrinsic[j]
+
+        # Create fitter for position and FWHM only
+        fitter = danish.SingleDonutModel(
+            self.factory,
+            z_ref=zk,
+            z_terms=tuple(),  # only fitting x/y/fwhm
+            thx=thx,
+            thy=thy,
+            npix=img.shape[0],
+        )
+
+        # Fit model to observed image
+        guess = [0.0, 0.0, 0.7]
+        sky_level = 10000
+        result = least_squares(
+            fitter.chi,
+            guess,
+            jac=fitter.jac,
+            ftol=1e-3,
+            xtol=1e-3,
+            gtol=1e-3,
+            args=(img, sky_level),
+        )
+        dx, dy, fwhm = result.x
+
+        model = fitter.model(*result.x, [])
+        return model, fwhm
+
+    def plotResults(self, axs, img, model, row, blur, match_dist=None, focal_type=None):
+        """Create 4-row visualization for unpaired donuts.
+
+        Parameters
+        ----------
+        axs : list of matplotlib.axes.Axes
+            List of 4 axes for the visualization
+        img : np.ndarray
+            Observed donut image
+        model : np.ndarray
+            Theoretical donut model
+        row : astropy.table.Row
+            AOS catalog row
+        blur : float
+            Blur parameter for display
+        match_dist : float, optional
+            Distance between AOS centroid and donut stamp centroid
+        focal_type : str, optional
+            Focal type ("intra" or "extra")
+        """
+        # Create custom colormap
+        colors = [
+            (0.0, 0.0, 1.0),  # Blue
+            (1.0, 1.0, 1.0),  # White
+            (1.0, 0.0, 0.0),  # Red
+        ]
+        positions = [0.0, 1 / 11, 1.0]
+        cmap = LinearSegmentedColormap.from_list(
+            "cyan_white_magenta", list(zip(positions, colors))
+        )
+
+        # Normalize images
+        img_norm = img / np.sum(img)
+        model_norm = model / np.sum(model)
+        residual = img_norm - model_norm
+
+        vmax = np.nanquantile(img_norm, 0.99)
+
+        # Row 1: Observed donut
+        axs[0].imshow(img_norm, cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        axs[0].text(5, 150, f"blur: {blur:5.3f}")
+        if match_dist is not None:
+            axs[0].text(5, 130, f"match: {match_dist:.1f}px", fontsize=8)
+        if focal_type is not None:
+            axs[0].text(5, 110, f"focal: {focal_type}", fontsize=8,
+                       color="blue" if focal_type == "intra" else "red")
+        axs[0].set_title("Observed", fontsize=10)
+
+        # Row 2: Model
+        axs[1].imshow(model_norm, cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        model_title = f"Model ({focal_type})" if focal_type else "Model"
+        axs[1].set_title(model_title, fontsize=10)
+
+        # Row 3: Residuals
+        axs[2].imshow(residual, cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
+        axs[2].set_title("Residual", fontsize=10)
+
+        # Row 4: Zernike coefficients
+        axs[3].bar(row.meta["nollIndices"], row["zk_CCS"], color="k")
+        axs[3].axhline(0, color="k", lw=0.5)
+        axs[3].set_ylim(-2.5, 2.5)
+        axs[3].set_xlim(3.5, 28.5)
+        axs[3].set_title("Zernike Coefficients", fontsize=10)
+        axs[3].set_xlabel("Noll Index")
+        axs[3].set_ylabel("Coefficient (μm)")
+
+        # Add Zernike mode markers
+        axs[3].scatter(
+            [4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=10, lw=0.5
+        )
+        axs[3].scatter([7, 17], [2.2] * 2, marker="$\u2191$", c="k", s=10, lw=0.5)
+        axs[3].scatter([8, 16], [2.2] * 2, marker="$\u2192$", c="k", s=10, lw=0.5)
+        axs[3].scatter([5, 13, 23], [2.2] * 3, marker=(2, 2, 45), c="k", s=10, lw=0.5)
+        axs[3].scatter([6, 12, 24], [2.2] * 3, marker=(2, 2, 90), c="k", s=10, lw=0.5)
+        axs[3].scatter([9, 19], [2.2] * 2, marker=(3, 2, 60), c="k", s=10, lw=0.5)
+        axs[3].scatter([10, 18], [2.2] * 2, marker=(3, 2, 30), c="k", s=10, lw=0.5)
+        axs[3].scatter([14, 26], [2.2] * 2, marker=(4, 2), c="k", s=10, lw=0.5)
+        axs[3].scatter([15, 25], [2.2] * 2, marker=(4, 2, 22.5), c="k", s=10, lw=0.5)
+        axs[3].scatter([20], [2.2], marker=(5, 2, -18), c="k", s=10, lw=0.5)
+        axs[3].scatter([21], [2.2], marker=(5, 2), c="k", s=10, lw=0.5)
+        axs[3].scatter([27], [2.2], marker=(6, 2, 15), c="k", s=10, lw=0.5)
+        axs[3].scatter([28], [2.2], marker=(6, 2), c="k", s=10, lw=0.5)
+
+        # Add color-coded backgrounds for Zernike modes
+        for j in [4, 11, 22]:
+            axs[3].axvspan(j - 0.5, j + 0.5, color="red", alpha=0.2, ec="none")
+        for j in [5, 12, 23]:
+            axs[3].axvspan(j - 0.5, j + 1.5, color="orange", alpha=0.2, ec="none")
+        for j in [7, 16]:
+            axs[3].axvspan(j - 0.5, j + 1.5, color="yellow", alpha=0.2, ec="none")
+        for j in [9, 18]:
+            axs[3].axvspan(j - 0.5, j + 1.5, color="green", alpha=0.2, ec="none")
+        for j in [14, 25]:
+            axs[3].axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
+        axs[3].axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
+        axs[3].axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
+
+        # Color-code the right spine based on usage
+        color = "green" if row["used"] else "red"
+        axs[3].spines["right"].set_edgecolor(color)
+        axs[3].spines["right"].set_linewidth(3)
+
+        # Remove ticks from image plots
+        for ax in axs[:3]:
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    def plotResultsMultiDonut(self, axs, donut_data):
+        """Create 4x4 visualization for multiple donuts per detector.
+
+        Parameters
+        ----------
+        axs : list of list of matplotlib.axes.Axes
+            4x4 grid of axes: [row][col] where row=0,1,2,3 and col=0,1,2,3
+        donut_data : list of dict
+            List of donut data dictionaries, each containing:
+            - img: observed donut image
+            - model: theoretical donut model
+            - row: AOS catalog row
+            - blur: blur parameter
+            - match_dist: matching distance
+            - focal_type: "intra" or "extra"
+        """
+        # Create custom colormap
+        colors = [
+            (0.0, 0.0, 1.0),  # Blue
+            (1.0, 1.0, 1.0),  # White
+            (1.0, 0.0, 0.0),  # Red
+        ]
+        positions = [0.0, 1 / 11, 1.0]
+        cmap = LinearSegmentedColormap.from_list(
+            "cyan_white_magenta", list(zip(positions, colors))
+        )
+
+        # Process each donut
+        for i, data in enumerate(donut_data):
+            if i >= 4:  # Only process up to 4 donuts
+                break
+
+            img = data['img']
+            model = data['model']
+            row = data['row']
+            blur = data['blur']
+            match_dist = data['match_dist']
+            focal_type = data['focal_type']
+
+            # Normalize images
+            img_norm = img / np.sum(img)
+            model_norm = model / np.sum(model)
+            residual = img_norm - model_norm
+
+            vmax = np.nanquantile(img_norm, 0.99)
+
+            # Row 0: Observed donuts (column i)
+            axs[0][i].imshow(img_norm, cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+            axs[0][i].text(5, 150, f"blur: {blur:5.3f}", fontsize=8)
+            axs[0][i].text(5, 130, f"match: {match_dist:.1f}px", fontsize=8)
+            axs[0][i].text(
+                5,
+                110,
+                f"focal: {focal_type}",
+                fontsize=8,
+                color="blue" if focal_type == "intra" else "red",
+            )
+            # annotate observed centroid in data pixels
+            if 'obs_centroid' in data:
+                cx, cy = data['obs_centroid']
+                axs[0][i].text(
+                    img_norm.shape[1] / 2, img_norm.shape[0] / 2,
+                    f"({cx:.0f},{cy:.0f})",
+                    color='yellow', fontsize=7, ha='center', va='center',
+                    bbox=dict(boxstyle='round,pad=0.2', fc='black', ec='none', alpha=0.4)
+                )
+            axs[0][i].set_title(f"#{i+1}", fontsize=9)  # Simplified title
+            axs[0][i].set_xticks([])
+            axs[0][i].set_yticks([])
+
+            # Row 1: Models (column i)
+            axs[1][i].imshow(model_norm, cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+            axs[1][i].set_title(f"#{i+1}", fontsize=9)  # Simplified title
+            axs[1][i].set_xticks([])
+            axs[1][i].set_yticks([])
+            # annotate AOS centroid in data pixels
+            if 'aos_centroid' in data:
+                cx, cy = data['aos_centroid']
+                axs[1][i].text(
+                    model_norm.shape[1] / 2, model_norm.shape[0] / 2,
+                    f"({cx:.0f},{cy:.0f})",
+                    color='yellow', fontsize=7, ha='center', va='center',
+                    bbox=dict(boxstyle='round,pad=0.2', fc='black', ec='none', alpha=0.4)
+                )
+
+            # Row 2: Residuals (column i)
+            axs[2][i].imshow(residual, cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
+            axs[2][i].set_title(f"#{i+1}", fontsize=9)  # Simplified title
+            axs[2][i].set_xticks([])
+            axs[2][i].set_yticks([])
+
+            # Row 3: Zernike coefficients (column i)
+            axs[3][i].bar(row.meta["nollIndices"], row["zk_CCS"], color="k")
+            axs[3][i].axhline(0, color="k", lw=0.5)
+            axs[3][i].set_ylim(-2.5, 2.5)
+            axs[3][i].set_xlim(3.5, 28.5)
+            axs[3][i].set_title(f"#{i+1}", fontsize=9)  # Simplified title
+            axs[3][i].set_xlabel("Noll Index", fontsize=8)
+            axs[3][i].set_ylabel("Coeff (μm)", fontsize=8)
+
+            # Add Zernike mode markers (simplified for smaller plots)
+            axs[3][i].scatter([4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=8, lw=0.5)
+            axs[3][i].scatter([7, 17], [2.2] * 2, marker="$\u2191$", c="k", s=8, lw=0.5)
+            axs[3][i].scatter([8, 16], [2.2] * 2, marker="$\u2192$", c="k", s=8, lw=0.5)
+
+            # Add color-coded backgrounds for Zernike modes (simplified)
+            for j in [4, 11, 22]:
+                axs[3][i].axvspan(j - 0.5, j + 0.5, color="red", alpha=0.2, ec="none")
+            for j in [5, 12, 23]:
+                axs[3][i].axvspan(j - 0.5, j + 1.5, color="orange", alpha=0.2, ec="none")
+            for j in [7, 16]:
+                axs[3][i].axvspan(j - 0.5, j + 1.5, color="yellow", alpha=0.2, ec="none")
+
+            # Color-code the right spine based on usage
+            color = "green" if row["used"] else "red"
+            axs[3][i].spines["right"].set_edgecolor(color)
+            axs[3][i].spines["right"].set_linewidth(2)
+
+        # Fill empty columns if we have fewer than 4 donuts
+        for i in range(len(donut_data), 4):
+            for row_idx in range(4):
+                axs[row_idx][i].text(
+                    0.5,
+                    0.5,
+                    "No Data",
+                    ha="center",
+                    va="center",
+                    transform=axs[row_idx][i].transAxes,
+                )
+                axs[row_idx][i].set_xticks([])
+                axs[row_idx][i].set_yticks([])
+
+    def run(
+        self,
+        aos_raw,
+        donutStampsUnpaired,
+        camera,
+        day_obs,
+        seq_num,
+        record,
+    ) -> Figure:
+        """Run the PlotDonutFitsUnpaired AOS task.
+
+        Creates a figure of unpaired donuts, models, residuals, and Zernikes.
+
+        Parameters
+        ----------
+        aos_raw: Astropy Table
+            The AOS raw catalog.
+        donutStampsUnpaired: DonutStamps
+            The unpaired donut stamps.
+        camera: Camera
+            The camera object to get detector information.
+        day_obs: int
+            The day of observation.
+        seq_num: int
+            The sequence number of the observation.
+        record: lsst.daf.butler.dimensions._records.visit.RecordClass
+            The butler exposure level record
+
+        Returns
+        -------
+        fig: matplotlib.pyplot.figure
+            The figure.
+        """
+        # Get bandpass and wavelength
+        bandpass = donutStampsUnpaired.getBandpasses()[0]
+        assert all([bandpass == bp for bp in donutStampsUnpaired.getBandpasses()])
+        wavelength = self.wavelengths[bandpass]
+
+        # Create telescope model with defocus for unpaired donuts
+        telescope = batoid.Optic.fromYaml(f"LSST_{bandpass}.yaml")
+        # Create both intra and extra focal telescope models
+        intra_telescope = telescope.withGloballyShiftedOptic(
+            "Detector", [0, 0, -1.5e-3]  # Intra-focal (negative defocus)
+        )
+        extra_telescope = telescope.withGloballyShiftedOptic(
+            "Detector", [0, 0, +1.5e-3]  # Extra-focal (positive defocus)
+        )
+
+        # Get telescope control data from EFD
+        startTime = record.timespan.begin
+        endTime = record.timespan.end
+        efd_client = makeEfdClient()
+        efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
+        states_val = np.empty(50)
+        visit_logevent: int | str = "unknown"
+
+        if day_obs > 20250101:
+            event = getMostRecentRowWithDataBefore(
+                efd_client,
+                efd_topic,
+                timeToLookBefore=Time(startTime, scale="utc"),
+            )
+            for i in range(50):
+                states_val[i] = event[f"aggregatedDoF{i}"]
+            if "visitId" in event.keys():
+                visit_logevent = event["visitId"]
+
+        # Get rotator data
+        _ = getEfdData(
+            client=efd_client,
+            topic="lsst.sal.MTRotator.rotation",
+            begin=startTime,
+            end=endTime,
+        )
+
+        # Create figure with 2x4 grid for 8 detectors
+        fig = make_figure(figsize=(20, 12))
+        fig.suptitle(
+            f"Unpaired Donut Fits - {day_obs} seq{seq_num}\n"
+            f"Blue: Intra-focal detectors (SW1) | Red: Extra-focal detectors (SW0)",
+            fontsize=16,
+            fontweight="bold",
+        )
+
+        # Define detector names
+        detector_names = [
+            "R00_SW0", "R00_SW1", "R04_SW0", "R04_SW1",
+            "R40_SW0", "R40_SW1", "R44_SW0", "R44_SW1"
+        ]
+
+        # Create grid layout: 2 rows x 4 columns with space for labels
+        gs0 = GridSpec(
+            nrows=2,
+            ncols=4,
+            left=0.06,  # Space for row labels on left
+            right=0.95,
+            bottom=0.1,
+            top=0.9,  # Space at top for detector names within panels
+            wspace=0.1,
+            hspace=0.15,
+        )
+
+        # Get blur information
+        donut_blur = np.zeros(len(aos_raw))
+        if "fwhm" in aos_raw.meta["estimatorInfo"].keys():
+            donut_blur = np.array(aos_raw.meta["estimatorInfo"].get("fwhm"))
+
+        # Process each detector
+        for i, det_name in enumerate(detector_names):
+            row_idx = i // 4
+            col_idx = i % 4
+
+            # Create subplot for this detector: 4 rows x 4 columns
+            # (for 4 donuts)
+            gs1 = GridSpecFromSubplotSpec(
+                nrows=4,
+                ncols=4,
+                subplot_spec=gs0[row_idx, col_idx],
+                hspace=0.1,
+                wspace=0.05,
+            )
+
+            axs = []
+            for j in range(4):  # 4 rows
+                row_axs = []
+                for k in range(4):  # 4 columns (donuts)
+                    ax = fig.add_subplot(gs1[j, k])
+                    row_axs.append(ax)
+                axs.append(row_axs)
+
+            # Get detector info
+            try:
+                det = camera[det_name]
+                det_id = det.getId()
+            except KeyError:
+                # Detector not found, skip
+                for row_axs in axs:
+                    for ax in row_axs:
+                        ax.text(
+                            0.5,
+                            0.5,
+                            f"{det_name}\nNot Available",
+                            ha="center",
+                            va="center",
+                            transform=ax.transAxes,
+                        )
+                        ax.set_xticks([])
+                        ax.set_yticks([])
+                continue
+
+            # Set detector title with focal type
+            # Span across all columns in first row
+            focal_color = "blue" if det_name.endswith("SW1") else "red"
+            axs[0][0].set_title(
+                f"ID: {det_id}", fontsize=10, fontweight="bold", color=focal_color
+            )
+
+            # Add colored border to indicate focal type
+            for row_axs in axs:
+                for ax in row_axs:
+                    ax.spines['top'].set_color(focal_color)
+                    ax.spines['top'].set_linewidth(3)
+                    ax.spines['right'].set_color(focal_color)
+                    ax.spines['right'].set_linewidth(3)
+                    ax.spines['bottom'].set_color(focal_color)
+                    ax.spines['bottom'].set_linewidth(3)
+                    ax.spines['left'].set_color(focal_color)
+                    ax.spines['left'].set_linewidth(3)
+
+            # Get AOS data for this detector
+            selected_rows = aos_raw["detector"] == det_name
+            rows = aos_raw[selected_rows]
+            blur = donut_blur[selected_rows]
+
+            if len(rows) == 0:
+                # No AOS data for this detector
+                for row_axs in axs:
+                    for ax in row_axs:
+                        ax.text(
+                            0.5,
+                            0.5,
+                            "No AOS Data",
+                            ha="center",
+                            va="center",
+                            transform=ax.transAxes,
+                        )
+                        ax.set_xticks([])
+                        ax.set_yticks([])
+                continue
+
+            # Get donut stamps for this detector
+            idx_to_donuts = (
+                np.array(donutStampsUnpaired.metadata.getArray("DET_NAME"))
+                == det_name
+            )
+            donut_stamps_sel = np.array(donutStampsUnpaired)[idx_to_donuts]
+
+            if len(donut_stamps_sel) == 0:
+                # No donut stamps for this detector
+                for row_axs in axs:
+                    for ax in row_axs:
+                        ax.text(
+                            0.5,
+                            0.5,
+                            "No Donut Stamps",
+                            ha="center",
+                            va="center",
+                            transform=ax.transAxes,
+                        )
+                        ax.set_xticks([])
+                        ax.set_yticks([])
+                continue
+
+            # Get centroid positions (computed later per-stamp when needed)
+
+            # Donut-stamp-driven: try to collect up to 4 valid donuts
+            # Skip stamps on modeling failure
+            donut_data = []
+            used_aos_indices: set[int] = set()  # ensure one-to-one stamp↔AOS mapping
+            match_threshold_px = 10.0
+            dup_threshold_px = 50.0  # avoid plotting near-duplicate stamps
+            selected_stamp_positions: list[tuple[float, float]] = []
+
+            for istamp, stamp in enumerate(donut_stamps_sel):
+                if len(donut_data) >= 4:
+                    break
+
+                stamp_x = stamp.centroid_position.x
+                stamp_y = stamp.centroid_position.y
+                # Skip if this stamp is essentially a duplicate
+                # of one already selected
+                if any(
+                    np.hypot(stamp_x - sx, stamp_y - sy) < dup_threshold_px
+                    for sx, sy in selected_stamp_positions
+                ):
+                    continue
+                # Find closest AOS catalog entry to this donut stamp
+                dists = np.hypot(rows["centroid_x"] - stamp_x, rows["centroid_y"] - stamp_y)
+
+                if len(dists) == 0:
+                    continue  # No AOS data to match
+
+                # Enforce unique AOS rows and proximity threshold
+                candidate_indices = [i for i in range(len(rows)) if i not in used_aos_indices]
+                if not candidate_indices:
+                    continue
+                candidate_dists = dists[candidate_indices]
+                rel_idx = int(np.argmin(candidate_dists))
+                best_aos_idx = int(candidate_indices[rel_idx])
+                min_dist = float(dists[best_aos_idx])
+                if not np.isfinite(min_dist) or min_dist > match_threshold_px:
+                    # too far or invalid match; skip
+                    continue
+                row = rows[best_aos_idx]
+
+                # Get detector orientation for image rotation
+                nquarter = det.getOrientation().getNQuarter() % 4
+
+                # Extract and rotate image
+                img = np.rot90(
+                    stamp.stamp_im.image.array[1:, 1:], -nquarter
+                ).T
+
+                # Generate model using the matched AOS catalog parameters;
+                # skip on failure
+                try:
+                    model, fwhm = self.getModel(
+                        telescope, intra_telescope, extra_telescope, row, img, wavelength, det_name
+                    )
+                except Exception as e:
+                    print(
+                        f"Warning: skipping stamp {istamp+1} for {det_name} due to model error: {e}"
+                    )
+                    continue
+
+                # Store data for this donut
+                donut_data.append({
+                    'img': img,
+                    'model': model,
+                    'row': row,
+                    'blur': float(blur[best_aos_idx]) if best_aos_idx < len(blur) else 0.0,
+                    'match_dist': min_dist,
+                    'focal_type': "intra" if det_name.endswith("SW1") else "extra",
+                    'obs_centroid': (float(stamp_x), float(stamp_y)),
+                    'aos_centroid': (float(row["centroid_x"]), float(row["centroid_y"]))
+                })
+                # Reserve this AOS entry so it isn't reused by another stamp
+                used_aos_indices.add(best_aos_idx)
+                # Remember this stamp position to avoid near-duplicates
+                selected_stamp_positions.append((stamp_x, stamp_y))
+
+            # Create visualization for all donuts
+            self.plotResultsMultiDonut(axs, donut_data)
+
+            # Add detector label at the top of the subplot (within the panel)
+            focal_color = "blue" if det_name.endswith("SW1") else "red"
+
+            # Add label at the top of the first row of the detector subplot
+            axs[0][0].text(
+                0.5, 1.15,  # Position above the first row
+                f"{det_name}",
+                fontsize=14,
+                fontweight="bold",
+                color=focal_color,
+                ha="center",
+                va="center",
+                transform=axs[0][0].transAxes
+            )
+
+        # Add row labels on the left side
+        row_labels = ["Observed", "Model", "Residual", "Zernikes"]
+
+        # Calculate the center position of each row within the detector panels
+        # Each detector panel has 4 rows; align with the center of each row
+        for i, label in enumerate(row_labels):
+            # Calculate the vertical position for each row
+            # Top detector row: 0.9 - 0.4/2 = 0.7 (center of top row)
+            # Bottom detector row: 0.5 - 0.4/2 = 0.3 (center of bottom row)
+            # Within each detector, position within each detector's space
+
+            # For the top row of detectors (row_idx=0)
+            top_detector_center = 0.7
+            # For the bottom row of detectors (row_idx=1)
+            bottom_detector_center = 0.3
+
+            # Position within each detector's 4x4 grid
+            # Position at 1/8, 3/8, 5/8, 7/8 of the detector height
+            detector_height = 0.4  # Height of each detector panel
+            row_offset = detector_height * (0.125 + i * 0.25)  # 0.125, 0.375, 0.625, 0.875
+
+            # Position for top detector row
+            top_position = top_detector_center + detector_height/2 - row_offset
+            # Position for bottom detector row
+            bottom_position = bottom_detector_center + detector_height/2 - row_offset
+
+            # Add labels for both detector rows
+            fig.text(
+                0.02,  # Left margin
+                top_position,
+                label,
+                fontsize=12,
+                fontweight="bold",
+                ha="left",
+                va="center",
+                rotation=90
+            )
+
+            fig.text(
+                0.02,  # Left margin
+                bottom_position,
+                label,
+                fontsize=12,
+                fontweight="bold",
+                ha="left",
+                va="center",
+                rotation=90
+            )
+
+        # Add telescope control data at the very bottom of the figure
+        fig.text(
+            0.5, 0.02,  # Bottom center of figure
+            f"Telescope Control Data - Visit: {visit_logevent} | "
+            f"Filter: {record.physical_filter} | "
+            f"Elevation: {90 - record.zenith_angle if record.zenith_angle else 90:.1f}° | "
+            f"Azimuth: {record.azimuth if record.azimuth else 0:.1f}°",
+            ha="center", va="bottom", transform=fig.transFigure,
+            fontsize=12, fontweight="bold"
+        )
 
         return fig
