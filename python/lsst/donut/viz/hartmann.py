@@ -21,6 +21,73 @@ __all__ = [
 ]
 
 
+def get_parabola_vertex(v_m1, v_0, v_p1):
+    denom = 2 * (v_m1 - 2 * v_0 + v_p1)
+    if denom == 0:
+        return 0
+    return (v_m1 - v_p1) / denom
+
+
+def get_offset(ref, comp, search_radius=10):
+    # Determine offset via cross-correlation
+    rsh = ref.shape
+    csh = comp.shape
+
+    # No implementation if ref larger than comp
+    assert rsh[0] <= csh[0] and rsh[1] <= csh[1]
+
+    # No implementation for even shapes
+    assert rsh[0] % 2 == 1 and rsh[1] % 2 == 1
+    assert csh[0] % 2 == 1 and csh[1] % 2 == 1
+
+    max_search_x = (csh[1] - rsh[1]) // 2
+    max_search_y = (csh[0] - rsh[0]) // 2
+
+    if search_radius > max_search_x:
+        clip_x = search_radius - max_search_x
+        ref = ref[:, clip_x:-clip_x]
+    if search_radius > max_search_y:
+        clip_y = search_radius - max_search_y
+        ref = ref[clip_y:-clip_y, :]
+    rsh = ref.shape
+
+    corr = np.zeros((2 * search_radius + 1, 2 * search_radius + 1))
+    for j, dy in enumerate(range(-search_radius, search_radius + 1)):
+        for i, dx in enumerate(range(-search_radius, search_radius + 1)):
+            ymin = (csh[0]-rsh[0])//2 + dy
+            ymax = ymin + rsh[0]
+            xmin = (csh[1]-rsh[1])//2 + dx
+            xmax = xmin + rsh[1]
+            crop = comp[ymin:ymax, xmin:xmax]
+
+            corr[j, i] = np.sum(ref * crop) / np.sqrt(np.sum(ref**2) * np.sum(crop**2))
+
+    # import matplotlib.pyplot as plt
+    # fig, axs = plt.subplots(ncols=3, figsize=(12, 4))
+    # axs[0].imshow(ref, origin='lower', interpolation='nearest')
+    # axs[1].imshow(comp, origin='lower', interpolation='nearest')
+    # axs[2].imshow(corr, origin='lower', interpolation='nearest')
+    # plt.show()
+
+    best_ji = np.unravel_index(np.argmax(corr), corr.shape)
+    best_offset = (best_ji[0] - search_radius, best_ji[1] - search_radius)
+
+    dx_sub = get_parabola_vertex(
+        corr[best_ji[0], best_ji[1] - 1],
+        corr[best_ji[0], best_ji[1]],
+        corr[best_ji[0], best_ji[1] + 1]
+    )
+    dy_sub = get_parabola_vertex(
+        corr[best_ji[0] - 1, best_ji[1]],
+        corr[best_ji[0], best_ji[1]],
+        corr[best_ji[0] + 1, best_ji[1]]
+    )
+
+    best_offset = (best_offset[0] + dy_sub, best_offset[1] + dx_sub)
+
+    return best_offset
+
+
 class HartmannSensitivityAnalysisConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("group", "instrument", "detector")
@@ -78,7 +145,7 @@ class HartmannSensitivityAnalysisConfig(
     )
     min_flux = pexConfig.Field[float](
         doc="Minimum flux for analysis",
-        default=1e6,
+        default=3e6,
     )
     max_inner_ratio = pexConfig.Field[float](
         doc="Maximum inner/total flux ratio for analysis",
@@ -185,6 +252,12 @@ class HartmannSensitivityAnalysis(
         if self._display is not None:
             self.update_display(reference_exposure, detections)
 
+        stamps = self.get_aligned_stamps(
+            reference_exposure,
+            test_exposures,
+            detections,
+        )
+
         # Loop over test exposures and measure offsets
         # Make plots
         # Write outputs
@@ -192,6 +265,7 @@ class HartmannSensitivityAnalysis(
         # Measure offsets between reference and test
         return pipeBase.Struct(
             detections=detections,
+            stamps=stamps,
         )
 
     def detect(self, exposure):
@@ -271,7 +345,49 @@ class HartmannSensitivityAnalysis(
         table["outer_flux"] = np.array(outer_fluxes, dtype=np.float32)
         table["inner_ratio"] = table["inner_flux"] / table["flux"]
         table["outer_ratio"] = table["outer_flux"] / table["flux"]
+        table["use"] = table["flux"] > self.config.min_flux
+        table["use"] &= table["inner_ratio"] < self.config.max_inner_ratio
+        table["use"] &= table["outer_ratio"] < self.config.max_outer_ratio
         return table
+
+    def get_aligned_stamps(
+        self,
+        reference_exposure,
+        test_exposures,
+        detections,
+    ):
+        stamp_size = int(self._donut_diam * self.config.bin_size * 1.15)
+        if stamp_size % 2 == 0:
+            stamp_size += 1
+        print(f"Stamp size: {stamp_size}")
+        stamps = []
+        for detection in detections:
+            if not detection["use"]:
+                continue
+            x, y = detection[["x", "y"]]
+
+            # Extract stamp from reference
+            xmin = x - stamp_size // 2
+            xmax = x + stamp_size // 2 + 1
+            ymin = y - stamp_size // 2
+            ymax = y + stamp_size // 2 + 1
+            ref_stamp = reference_exposure.image.array[ymin:ymax, xmin:xmax]
+            offsets = []
+            test_stamps = []
+            for test_exposure in test_exposures:
+                test_stamp = test_exposure.image.array[ymin:ymax, xmin:xmax]
+                offset = get_offset(ref_stamp, test_stamp, search_radius=30)
+                offsets.append(offset)
+                test_stamp = test_exposure.image.array[
+                    ymin+int(round(offset[0])):ymax+int(round(offset[0])),
+                    xmin+int(round(offset[1])):xmax+int(round(offset[1]))
+                ]
+                test_stamps.append(test_stamp)
+            stamps.append(
+                dict(ref=ref_stamp, tests=test_stamps, x=x, y=y, offsets=offsets)
+            )
+        return stamps
+
 
     def update_display(
         self,
