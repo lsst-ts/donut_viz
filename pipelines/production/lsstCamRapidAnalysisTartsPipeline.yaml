@@ -51,10 +51,10 @@ tasks:
     class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
   aggregateUnpairedAOSVisitTableCwfsTask:
     class: lsst.donut.viz.AggregateUnpairedAOSVisitTableCwfsTask
-  # plotAOSTask:
-  #   class: lsst.donut.viz.PlotAOSTask
-  #   config:
-  #     doRubinTVUpload: False
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: False
   plotDonutFitsUnpairedTask:
     class: lsst.donut.viz.PlotDonutFitsUnpairedTask
     config:
@@ -75,7 +75,7 @@ subsets:
       - aggregateDonutStampsUnpairedTask
       - aggregateDonutTablesUnpairedCwfsTask
       - aggregateUnpairedAOSVisitTableCwfsTask
-      # - plotAOSTask
+      - plotAOSTask
       - plotDonutFitsUnpairedTask
     description: |
       AOS visualization tasks. This step generates tables
