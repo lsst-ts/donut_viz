@@ -1,17 +1,18 @@
-from pathlib import Path
+import numpy as np
+
+from astropy.table import QTable
+from skimage.feature import peak_local_max
+from scipy.signal import correlate
 
 import lsst.afw.math as afwMath
-import lsst.daf.base as dafBase
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
 
-from lsst.afw.table import SourceTable
+from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.ip.isr import IsrTaskLSST
-from lsst.meas.algorithms import SourceDetectionTask, SubtractBackgroundTask
-from lsst.meas.algorithms.installGaussianPsf import InstallGaussianPsfTask
-from lsst.meas.base import IdGenerator, SingleFrameMeasurementTask
-from lsst.utils import getPackageDir
+from lsst.meas.algorithms import SubtractBackgroundTask
+
 
 __all__ = [
     "HartmannSensitivityAnalysisConfig",
@@ -24,19 +25,20 @@ class HartmannSensitivityAnalysisConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("group", "instrument", "detector")
 ):
-    # exposures = ct.Input(
-    #     doc="Input exposure to make measurements on",
-    #     dimensions=("exposure", "detector", "instrument"),
-    #     storageClass="Exposure",
-    #     name="post_isr_image",
-    #     multiple=True,
-    # )
     exposures = ct.Input(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
         name="raw",
         multiple=True,
+    )
+    camera = ct.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
+        lookupFunction=lookupStaticCalibrations,
     )
     # hartmannDonuts = ct.Output(
     #     doc="Output Hartmann donuts",
@@ -80,27 +82,17 @@ class HartmannSensitivityAnalysisConfig(
     )
     bin_size = pexConfig.Field[int](
         doc="Bin size for running initial detection",
-        default=16,
+        default=8,
     )
     isr = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
         doc="Instrument signature removal task",
     )
-    installPsf = pexConfig.ConfigurableField(
-        target=InstallGaussianPsfTask,
-        doc="Install a PSF model",
-    )
-    background = pexConfig.ConfigurableField(
+    subtractBackground = pexConfig.ConfigurableField(
         target=SubtractBackgroundTask,
-        doc="Estimate background",
+        doc="Task to perform background subtraction.",
     )
-    detection = pexConfig.ConfigurableField(
-        target=SourceDetectionTask,
-        doc="Detect sources"
-    )
-    measurement = pexConfig.ConfigurableField(
-        target=SingleFrameMeasurementTask, doc="Measure sources"
-    )
+
 
     def setDefaults(self):
         self.isr.doAmpOffset = False
@@ -115,7 +107,7 @@ class HartmannSensitivityAnalysisConfig(
         self.isr.doVariance = False
         self.isr.doDeferredCharge = False
         self.isr.doDefect = False
-        self.isr.doApplyGains = False
+        self.isr.doApplyGains = True
         self.isr.doBias = False
         self.isr.doFlat = True
         self.isr.doDark = False
@@ -125,26 +117,6 @@ class HartmannSensitivityAnalysisConfig(
         self.isr.doBootstrap = False
         self.isr.doCrosstalk = False
         self.isr.doITLEdgeBleedMask = False
-
-        self.installPsf.fwhm = 5.0
-        self.installPsf.width = 21
-
-        self.detection.thresholdValue = 5.0
-        self.detection.includeThresholdMultiplier = 10.0
-        self.detection.reEstimateBackground = False
-        self.detection.doTempLocalBackground = False
-        self.detection.minPixels = 40
-
-        self.measurement.plugins.names = [
-            "base_PixelFlags",
-            "base_FPPosition",
-            "base_SdssCentroid",
-            "ext_shapeHSM_HsmSourceMoments",
-            "base_GaussianFlux",
-            "base_PsfFlux",
-            "base_CircularApertureFlux",
-        ]
-        self.measurement.slots.shape = "ext_shapeHSM_HsmSourceMoments"
 
 
 class HartmannSensitivityAnalysis(
@@ -156,15 +128,13 @@ class HartmannSensitivityAnalysis(
     def __init__(self, config, *, display=None, **kwargs):
         super().__init__(config=config, **kwargs)
 
-        self.schema = SourceTable.makeMinimalSchema()
         self.makeSubtask("isr")
-        self.makeSubtask("installPsf")
-        self.makeSubtask("background")
-        self.makeSubtask("detection", schema=self.schema)
-        self.algMetadata = dafBase.PropertyList()
-        self.makeSubtask("measurement", schema=self.schema, algMetadata=self.algMetadata)
-
+        self.makeSubtask("subtractBackground")
         self._display = display
+
+        self._defocus = abs(self.config.m2_dz + self.config.cam_dz)
+        self._donut_diam = int(680 / 8 * self._defocus / self.config.bin_size)
+        self._donut_radius = self._donut_diam / 2
 
     def runQuantum(
         self,
@@ -175,13 +145,10 @@ class HartmannSensitivityAnalysis(
         inputs = butlerQC.get(inputRefs)
         results = self.run(**inputs)
 
-    def run_ISR(self, exposure, **kwargs):
-        out = self.isr.run(exposure, **kwargs)
-        return out.exposure
-
     def run(
         self,
         exposures,
+        camera=None,
         skip_isr=False,
         **isr_kwargs
     ):
@@ -189,7 +156,10 @@ class HartmannSensitivityAnalysis(
 
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
         if not skip_isr:
-            exposures = [self.run_ISR(exp, **isr_kwargs) for exp in exposures]
+            exposures = [self.isr.run(exp, **isr_kwargs).exposure for exp in exposures]
+        for exposure in exposures:
+            self.subtractBackground.run(exposure=exposure)
+
         ref_index = config.ref_index
         if ref_index < 0:
             ref_index = len(exposures) + ref_index
@@ -197,50 +167,88 @@ class HartmannSensitivityAnalysis(
         test_exposures = [
             exp for i, exp in enumerate(exposures) if i != ref_index
         ]
-        sources = self.detect(reference_exposure)
 
+        detections = self.detect(reference_exposure)
 
-        # Run detection on reference to pick out suitable giant donuts.
-        # Loop over others, passing to .run()
+        if self._display is not None:
+            self.update_display(reference_exposure, detections)
+
+        # Loop over test exposures and measure offsets
         # Make plots
         # Write outputs
 
-    # Measure offsets between reference and test
-        pass
+        # Measure offsets between reference and test
+        return pipeBase.Struct(
+            detections=detections,
+        )
 
     def detect(self, exposure):
-        idGenerator = IdGenerator()
-        sourceIdFactory = idGenerator.make_table_id_factory()
-        table = SourceTable.make(self.schema, sourceIdFactory)
-        # table.setMetadata(self.algMetadata)
+        diam = self._donut_diam
+        radius = self._donut_radius
+        template = np.zeros((diam, diam), dtype=float)
+        y, x = np.ogrid[-diam // 2 : diam // 2, -diam // 2 : diam // 2]
+        r = np.hypot(x, y)
+        template[r < radius] = 1.0
+        template[r < radius*0.62] = 0.0
+        hole = np.zeros_like(template)
+        hole[r < radius*0.62] = 1.0
 
-        exposure = exposure.clone()
-        binned = afwMath.binImage(exposure.getMaskedImage(), self.config.bin_size)
-        exposure.setMaskedImage(binned)
-        self.installPsf.run(exposure)
-        self.background.run(exposure)
-        sourceCat = self.detection.run(table=table, exposure=exposure, doSmooth=True).sources
+        exp = exposure.clone()
+        mi = exp.getMaskedImage()
+        binned = afwMath.binImage(mi, self.config.bin_size)
+        exp.setMaskedImage(binned)
+        arr = exp.image.array
 
-        self.measurement.run(measCat=sourceCat, exposure=exposure, exposureId=idGenerator.catalog_id)
+        # Histogram equalize since we care more about connected points above threshold
+        # than actual flux values.
+        cdf = np.nanquantile(arr, np.linspace(0, 1, 256))
+        heq = np.digitize(arr, cdf)
+        det = correlate(heq, template, mode="same")
+        peaks = peak_local_max(
+            det,
+            min_distance=int(0.8 * diam),
+            exclude_border=int(radius)
+        )
 
-        if self._display is not None:
-            self.update_display(exposure, sourceCat)
-        return sourceCat
+        table = QTable()
+        table["idx"] = np.arange(len(peaks), dtype=np.int32)
+        table["centroid_x"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
+        table["centroid_y"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
+        fluxes = []
+        hole_fluxes = []
+        for peak in peaks:
+            stamp = arr[
+                peak[0] - diam // 2 : peak[0] + diam // 2 + 1,
+                peak[1] - diam // 2 : peak[1] + diam // 2 + 1,
+            ]
+            fluxes.append(np.nansum(stamp*template))
+            hole_fluxes.append(np.nansum(stamp*hole))
+        table["flux"] = np.array(fluxes, dtype=np.float32)
+        table["hole_flux"] = np.array(hole_fluxes, dtype=np.float32)
+        table["ratio"] = table["hole_flux"] / table["flux"]
+        return table
 
     def update_display(
         self,
         exposure,
-        sourceCat,
+        donutCatalog,
     ):
         if self._display is None:
             raise RuntimeError("No display set")
         self._display.mtv(exposure)
 
-        for idx, source in enumerate(sourceCat):
-            x, y = source.getCentroid()
-            sh = source.getShape()
-            self._display.dot(sh, x, y)
-            self._display.dot(str(idx), x, y)
+        for idx, source in enumerate(donutCatalog):
+            x, y = source["centroid_x"], source["centroid_y"]
+            if source["flux"] > 3e6 and abs(source["ratio"]) < 0.1:
+                color = "green"
+            else:
+                color="red"
+            self._display.dot(
+                "o", x, y,
+                size=self._donut_radius*self.config.bin_size,
+                ctype=color
+            )
+            self._display.dot(str(idx), x, y, ctype=color)
 
     def plot(
         self, referenceExposure, testExposures, offsetTable,
