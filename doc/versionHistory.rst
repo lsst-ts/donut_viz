@@ -11,6 +11,7 @@ Version History
 -------------
 
 * Added AiDonut RA pipeline.
+<<<<<<< HEAD
 
 .._lsst.ts.donut.viz-2.2.3
 
@@ -19,6 +20,9 @@ Version History
 -------------
 
 * Add band propagation to metadata in AggregateZernikeTablesTask.
+=======
+* Add unpaired aggregation tasks.
+>>>>>>> f3faa20 (All Peter's work)
 
 .._lsst.ts.donut.viz-2.2.2
 
