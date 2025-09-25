@@ -76,6 +76,18 @@ class HartmannSensitivityAnalysisConfig(
         doc="Defocus offset for the camera in mm",
         default=4.0,
     )
+    min_flux = pexConfig.Field[float](
+        doc="Minimum flux for analysis",
+        default=1e6,
+    )
+    max_inner_ratio = pexConfig.Field[float](
+        doc="Maximum inner/total flux ratio for analysis",
+        default=0.03,
+    )
+    max_outer_ratio = pexConfig.Field[float](
+        doc="Maximum outer/total flux ratio for analysis",
+        default=0.03,
+    )
     do_plot = pexConfig.Field[bool](
         doc="Whether to make plots",
         default=True,
@@ -185,19 +197,28 @@ class HartmannSensitivityAnalysis(
     def detect(self, exposure):
         diam = self._donut_diam
         radius = self._donut_radius
-        template = np.zeros((diam, diam), dtype=float)
-        y, x = np.ogrid[-diam // 2 : diam // 2, -diam // 2 : diam // 2]
+        template_size = int(diam * 1.15)
+        if template_size % 2 == 0:
+            template_size += 1
+        template = np.zeros((template_size, template_size), dtype=float)
+        y, x = np.ogrid[
+            -template_size // 2 : template_size // 2,
+            -template_size // 2 : template_size // 2
+        ]
         r = np.hypot(x, y)
         template[r < radius] = 1.0
         template[r < radius*0.62] = 0.0
-        hole = np.zeros_like(template)
-        hole[r < radius*0.62] = 1.0
+        inner_hole = np.zeros_like(template)
+        inner_hole[r < radius*0.55] = 1.0
+        outer_annulus = np.zeros_like(template)
+        outer_annulus[(r >= radius*1.05) & (r < template_size//2)] = 1.0
 
         exp = exposure.clone()
         mi = exp.getMaskedImage()
         binned = afwMath.binImage(mi, self.config.bin_size)
         exp.setMaskedImage(binned)
         arr = exp.image.array
+        mask = exp.mask.array
 
         # Histogram equalize since we care more about connected points above threshold
         # than actual flux values.
@@ -207,25 +228,49 @@ class HartmannSensitivityAnalysis(
         peaks = peak_local_max(
             det,
             min_distance=int(0.8 * diam),
-            exclude_border=int(radius)
+            exclude_border=int(radius*1.15)
         )
 
         table = QTable()
         table["idx"] = np.arange(len(peaks), dtype=np.int32)
-        table["centroid_x"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
-        table["centroid_y"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
+        table["x"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
+        table["y"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
         fluxes = []
-        hole_fluxes = []
+        inner_fluxes = []
+        outer_fluxes = []
         for peak in peaks:
-            stamp = arr[
-                peak[0] - diam // 2 : peak[0] + diam // 2 + 1,
-                peak[1] - diam // 2 : peak[1] + diam // 2 + 1,
-            ]
+            xmin = peak[1] - template_size // 2
+            xmax = peak[1] + template_size // 2 + 1
+            ymin = peak[0] - template_size // 2
+            ymax = peak[0] + template_size // 2 + 1
+            stamp = arr[ymin:ymax, xmin:xmax]
+            bad_mask_planes = ['BAD', 'CR', 'INTRP', 'SAT', 'SUSPECT', 'NO_DATA']
+            bitmask = exp.mask.getPlaneBitMask(bad_mask_planes)
+            msk = (mask[ymin:ymax, xmin:xmax] & bitmask) != 0
+
+            use = xmin >= 0
+            use = use and ymin >= 0
+            use = use and xmax <= arr.shape[1]
+            use = use and ymax <= arr.shape[0]
+            use = use and np.sum(msk) == 0
+            if not use:
+                fluxes.append(np.nan)
+                inner_fluxes.append(np.nan)
+                outer_fluxes.append(np.nan)
+                continue
+
+            # Guess that a reasonable background estimate is the median of the inner
+            # and outer pixels
+            bkg = np.nanmedian(stamp*(np.maximum(inner_hole, outer_annulus)))
+            stamp = stamp - bkg
             fluxes.append(np.nansum(stamp*template))
-            hole_fluxes.append(np.nansum(stamp*hole))
+            inner_fluxes.append(np.nansum(stamp*inner_hole))
+            outer_fluxes.append(np.nansum(stamp*outer_annulus))
         table["flux"] = np.array(fluxes, dtype=np.float32)
-        table["hole_flux"] = np.array(hole_fluxes, dtype=np.float32)
-        table["ratio"] = table["hole_flux"] / table["flux"]
+        table["inner_flux"] = np.array(inner_fluxes, dtype=np.float32)
+        table["outer_flux"] = np.array(outer_fluxes, dtype=np.float32)
+        table["inner_ratio"] = table["inner_flux"] / table["flux"]
+        table["outer_ratio"] = table["outer_flux"] / table["flux"]
         return table
 
     def update_display(
@@ -238,11 +283,11 @@ class HartmannSensitivityAnalysis(
         self._display.mtv(exposure)
 
         for idx, source in enumerate(donutCatalog):
-            x, y = source["centroid_x"], source["centroid_y"]
-            if source["flux"] > 3e6 and abs(source["ratio"]) < 0.1:
-                color = "green"
-            else:
-                color="red"
+            x, y = source["x"], source["y"]
+            use = source["flux"] > self.config.min_flux
+            use = use and source["inner_ratio"] < self.config.max_inner_ratio
+            use = use and source["outer_ratio"] < self.config.max_outer_ratio
+            color = "green" if use else "red"
             self._display.dot(
                 "o", x, y,
                 size=self._donut_radius*self.config.bin_size,
