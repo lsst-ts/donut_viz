@@ -151,7 +151,6 @@ class PlotAOSTask(pipeBase.PipelineTask):
         # aos_avg = butlerQC.get(inputRefs.aggregateAOSAvg)
 
         zkPyramid, residPyramid, intrinsicPyramid = self.plotZernikePyramids(aos_raw)
-        zkPyramid.savefig('/sdf/home/p/peterma2/test.png')# additional save!
         butlerQC.put(zkPyramid, outputRefs.measuredZernikePyramid)
         butlerQC.put(residPyramid, outputRefs.residualZernikePyramid)
         butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid)
