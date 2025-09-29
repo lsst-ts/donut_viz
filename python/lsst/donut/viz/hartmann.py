@@ -306,18 +306,18 @@ class HartmannSensitivityAnalysis(
             test_exposures,
             detections,
         )
-        for stamp_set in stamp_sets:
+        for idonut, stamp_set in enumerate(stamp_sets):
             self.log.info(
-                "Processing stamp set at (x,y)=(%d,%d)",
-                stamp_set["x"], stamp_set["y"]
+                "Processing stamp set %d", idonut
             )
             fx, fy = self.choose_random_pupil_locations(
                 stamp_set["ref"],
                 self.config.n_pupil_positions
             )
-            stamp_set["fx"] = fx
-            stamp_set["fy"] = fy
-            for test_stamp in stamp_set["tests"]:
+            stamp_set["coords"] = QTable()
+            stamp_set["coords"]["fx"] = fx
+            stamp_set["coords"]["fy"] = fy
+            for iexp, test_stamp in enumerate(stamp_set["tests"]):
                 dfx, dfy = match_patches(
                     stamp_set["ref"],
                     test_stamp,
@@ -326,8 +326,8 @@ class HartmannSensitivityAnalysis(
                     patch_size=30,
                     search_radius=10,
                 )
-                stamp_set.setdefault("dfx", []).append(dfx)
-                stamp_set.setdefault("dfy", []).append(dfy)
+                stamp_set["coords"][f"dfx_{iexp}"] = dfx
+                stamp_set["coords"][f"dfy_{iexp}"] = dfy
 
         # Make plots
         # Write outputs
@@ -443,13 +443,13 @@ class HartmannSensitivityAnalysis(
                 detection["x"],
                 detection["y"]
             )
-            x, y = detection[["x", "y"]]
+            ref_x, ref_y = detection[["x", "y"]]
 
             # Extract stamp from reference
-            xmin = x - stamp_size // 2
-            xmax = x + stamp_size // 2 + 1
-            ymin = y - stamp_size // 2
-            ymax = y + stamp_size // 2 + 1
+            xmin = ref_x - stamp_size // 2
+            xmax = ref_x + stamp_size // 2 + 1
+            ymin = ref_y - stamp_size // 2
+            ymax = ref_y + stamp_size // 2 + 1
             ref_stamp = reference_exposure.image.array[ymin:ymax, xmin:xmax]
             offsets = []
             test_stamps = []
@@ -463,7 +463,15 @@ class HartmannSensitivityAnalysis(
                 ]
                 test_stamps.append(test_stamp)
             stamp_sets.append(
-                dict(ref=ref_stamp, tests=test_stamps, x=x, y=y, offsets=offsets)
+                dict(
+                    ref=ref_stamp,
+                    tests=test_stamps,
+                    ref_x=ref_x,
+                    ref_y=ref_y,
+                    offsets=offsets,
+                    ref_id=reference_exposure.info.getVisitInfo().id,
+                    test_ids=[exp.info.getVisitInfo().id for exp in test_exposures],
+                )
             )
         return stamp_sets
 
@@ -486,8 +494,15 @@ class HartmannSensitivityAnalysis(
         donut_mean = np.nanmean(arr[template])
         donut_iqr = np.ptp(np.nanquantile(arr[template], [0.75, 0.25]))
         threshold = donut_mean - 1.25 * donut_iqr
+
+        expanded_template = np.zeros_like(template, dtype=bool)
+        expanded_template[r < radius*1.1] = True
+        expanded_template[r < radius*0.62*0.9] = False
+
         rng = np.random.Generator(np.random.PCG64(self.config.rng_seed))
-        wx, wy = np.where(arr > threshold)
+        wx, wy = np.where(
+            (arr > threshold) & (expanded_template)
+        )
         x = x.ravel()[wx]
         y = y.ravel()[wy]
         w = rng.choice(len(x), size=n_positions, replace=False)
