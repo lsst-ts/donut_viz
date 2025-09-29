@@ -1,4 +1,5 @@
 import numpy as np
+from collections import defaultdict
 
 from astropy.table import QTable
 from skimage.feature import peak_local_max
@@ -108,6 +109,88 @@ def match_patches(img, ref, xs, ys, patch_size, search_radius):
         dx_out.append(offset[1])
     return dx_out, dy_out
 
+
+def stamp_sets_to_stamps(stamp_sets):
+    all_stamps = []
+    metadata = defaultdict(list)
+    for stamp_set in stamp_sets:
+        nstamp = 1 + len(stamp_set["tests"])
+        all_stamps.append(stamp_set["ref"])
+        all_stamps.extend(stamp_set["tests"])
+        metadata["EXP_ID"].extend([stamp_set["ref_id"]] + stamp_set["test_ids"])
+        metadata["DONUT_ID"].extend([stamp_set["donut_id"]] * nstamp)
+        metadata["REF_ID"].extend([stamp_set["ref_id"]] * nstamp)
+        metadata["REF_X"].extend([stamp_set["ref_x"]] * nstamp)
+        metadata["REF_Y"].extend([stamp_set["ref_y"]] * nstamp)
+        metadata["OFFSET_X"].extend([0.0] + [off[1] for off in stamp_set["offsets"]])
+        metadata["OFFSET_Y"].extend([0.0] + [off[0] for off in stamp_set["offsets"]])
+    out = Stamps(all_stamps)
+    for key, val in metadata.items():
+        out.metadata[key] = np.array(val)
+
+    return out
+
+
+def stamps_to_stamp_sets(stamps):
+    metadata = stamps.metadata
+    donut_ids = np.array(metadata.getArray("DONUT_ID"))
+    exp_ids = np.array(metadata.getArray("EXP_ID"))
+    ref_ids = np.array(metadata.getArray("REF_ID"))
+
+    stamp_sets = []
+    for donut_id in np.unique(donut_ids):
+        ref_donut_idx = np.where(
+            (donut_ids == donut_id) & (exp_ids == ref_ids)
+        )[0][0]
+        ref = stamps[ref_donut_idx]
+        test_idxs = np.where(
+            (donut_ids == donut_id) & (exp_ids != ref_ids)
+        )[0]
+        tests = [stamps[i] for i in test_idxs]
+        offset_x = [metadata.getArray("OFFSET_X")[i] for i in test_idxs]
+        offset_y = [metadata.getArray("OFFSET_Y")[i] for i in test_idxs]
+        offsets = list(zip(offset_y, offset_x))
+
+        stamp_set = {}
+        stamp_set["donut_id"] = donut_id
+        stamp_set["ref"] = ref
+        stamp_set["ref_x"] = metadata.getArray("REF_X")[ref_donut_idx]
+        stamp_set["ref_y"] = metadata.getArray("REF_Y")[ref_donut_idx]
+        stamp_set["tests"] = tests
+        stamp_set["offsets"] = offsets
+        stamp_set["ref_id"] = metadata.getArray("REF_ID")[ref_donut_idx]
+        stamp_set["test_ids"] = [metadata.getArray("EXP_ID")[i] for i in test_idxs]
+
+        stamp_sets.append(stamp_set)
+        # metadata = stamps.metadata
+        # donut_ids = np.unique(metadata["DONUT_ID"])
+        # stamp_sets = []
+        # for donut_id in donut_ids:
+        #     ref_donut_idx = np.where(
+        #         (metadata["DONUT_ID"] == donut_id) & (metadata["EXP_ID"] == metadata["REF_ID"])
+        #     )[0][0]
+        #     ref = stamps[ref_donut_idx]
+        #     test_idxs = np.where(
+        #         (metadata["DONUT_ID"] == donut_id) & (metadata["EXP_ID"] != metadata["REF_ID"])
+        #     )[0]
+        #     tests = [stamps[i] for i in test_idxs]
+        #     offset_x = metadata["OFFSET_X"][test_idxs]
+        #     offset_y = metadata["OFFSET_Y"][test_idxs]
+        #     offsets = list(zip(offset_y, offset_x))
+
+        #     stamp_set = {}
+        #     stamp_set["donut_id"] = donut_id
+        #     stamp_set["ref"] = ref
+        #     stamp_set["ref_x"] = metadata["REF_X"][ref_donut_idx]
+        #     stamp_set["ref_y"] = metadata["REF_Y"][ref_donut_idx]
+        #     stamp_set["tests"] = tests
+        #     stamp_set["offsets"] = offsets
+        #     stamp_set["ref_id"] = metadata["REF_ID"][ref_donut_idx]
+        #     stamp_set["exp_ids"] = [metadata["EXP_ID"][i] for i in test_idxs]
+
+        #     stamp_sets.append(stamp_set)
+
+    return stamp_sets
 
 class HartmannSensitivityAnalysisConnections(
     pipeBase.PipelineTaskConnections,
@@ -336,7 +419,8 @@ class HartmannSensitivityAnalysis(
         # Measure offsets between reference and test
         return pipeBase.Struct(
             detections=detections,
-            stamps=stamp_sets,
+            stamp_sets=stamp_sets,
+            stamps=stamp_sets_to_stamps(stamp_sets),
         )
 
     def detect(self, exposure):
@@ -472,7 +556,10 @@ class HartmannSensitivityAnalysis(
             test_stamps = Stamps(test_stamps)
             stamp_sets.append(
                 dict(
+                    donut_id=detection["idx"],
                     ref=ref_stamp,
+                    ref_x=ref_x,
+                    ref_y=ref_y,
                     tests=test_stamps,
                     offsets=offsets,
                     ref_id=reference_exposure.info.getVisitInfo().id,
