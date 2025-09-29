@@ -54,7 +54,19 @@ tasks:
   plotDonutFitsUnpairedTask:
     class: lsst.donut.viz.PlotDonutFitsUnpairedTask
     config:
-      doRubinTVUpload: True
+      doRubinTVUpload: False
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: False
+  PlotDonutUnpairedCwfsTask:
+    class: lsst.donut.viz.PlotDonutUnpairedCwfsTask
+    config:
+      doRubinTVUpload: False
+  PlotPsfZernTask:
+    class: lsst.donut.viz.PlotPsfZernTask
+    config:
+      doRubinTVUpload: False
 # Define pipeline steps
 subsets:
   step1a-detectors:
@@ -72,6 +84,9 @@ subsets:
       - aggregateDonutTablesUnpairedCwfsTask
       - aggregateUnpairedAOSVisitTableCwfsTask
       - plotDonutFitsUnpairedTask
+      - PlotAOSTask
+      - PlotDonutUnpairedCwfsTask
+      - PlotPsfZernTask
     description: |
       AOS visualization tasks. This step generates tables
       for the AOS visit using neural network-based Zernike estimates.
