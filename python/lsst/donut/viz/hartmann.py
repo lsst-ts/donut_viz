@@ -10,8 +10,9 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
 
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
+from lsst.geom import Box2I, Point2I, Extent2I
 from lsst.ip.isr import IsrTaskLSST
-from lsst.meas.algorithms import SubtractBackgroundTask
+from lsst.meas.algorithms import SubtractBackgroundTask, Stamp, Stamps
 
 
 __all__ = [
@@ -319,8 +320,8 @@ class HartmannSensitivityAnalysis(
             stamp_set["coords"]["fy"] = fy
             for iexp, test_stamp in enumerate(stamp_set["tests"]):
                 dfx, dfy = match_patches(
-                    stamp_set["ref"],
-                    test_stamp,
+                    stamp_set["ref"].stamp_im.image.array,
+                    test_stamp.stamp_im.image.array,
                     fx + self._template_size // 2,
                     fy + self._template_size // 2,
                     patch_size=30,
@@ -376,8 +377,8 @@ class HartmannSensitivityAnalysis(
 
         table = QTable()
         table["idx"] = np.arange(len(peaks), dtype=np.int32)
-        table["x"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
-        table["y"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
+        table["ref_x"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
+        table["ref_y"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
         fluxes = []
         inner_fluxes = []
         outer_fluxes = []
@@ -440,34 +441,39 @@ class HartmannSensitivityAnalysis(
             self.log.info(
                 "Aligning detection %d at (x,y)=(%d,%d)",
                 detection["idx"],
-                detection["x"],
-                detection["y"]
+                detection["ref_x"],
+                detection["ref_y"]
             )
-            ref_x, ref_y = detection[["x", "y"]]
+            ref_x, ref_y = detection[["ref_x", "ref_y"]]
 
             # Extract stamp from reference
             xmin = ref_x - stamp_size // 2
             xmax = ref_x + stamp_size // 2 + 1
             ymin = ref_y - stamp_size // 2
             ymax = ref_y + stamp_size // 2 + 1
-            ref_stamp = reference_exposure.image.array[ymin:ymax, xmin:xmax]
+            box = Box2I(Point2I(xmin, ymin), Extent2I(xmax-xmin, ymax-ymin))
+            ref_stamp = Stamp(reference_exposure.maskedImage[box])
+            ref_stamp_arr = ref_stamp.stamp_im.image.array
+
             offsets = []
             test_stamps = []
             for test_exposure in test_exposures:
-                test_stamp = test_exposure.image.array[ymin:ymax, xmin:xmax]
-                offset = get_offset(ref_stamp, test_stamp, search_radius=30)
+                test_stamp_arr = test_exposure.image.array[ymin:ymax, xmin:xmax]
+                offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=30)
                 offsets.append(offset)
-                test_stamp = test_exposure.image.array[
-                    ymin+int(round(offset[0])):ymax+int(round(offset[0])),
-                    xmin+int(round(offset[1])):xmax+int(round(offset[1]))
-                ]
-                test_stamps.append(test_stamp)
+                test_box = Box2I(
+                    Point2I(
+                        xmin + int(round(offset[1])),
+                        ymin + int(round(offset[0]))
+                    ),
+                    Extent2I(xmax - xmin, ymax - ymin)
+                )
+                test_stamps.append(Stamp(test_exposure.maskedImage[test_box]))
+            test_stamps = Stamps(test_stamps)
             stamp_sets.append(
                 dict(
                     ref=ref_stamp,
                     tests=test_stamps,
-                    ref_x=ref_x,
-                    ref_y=ref_y,
                     offsets=offsets,
                     ref_id=reference_exposure.info.getVisitInfo().id,
                     test_ids=[exp.info.getVisitInfo().id for exp in test_exposures],
@@ -477,7 +483,7 @@ class HartmannSensitivityAnalysis(
 
     def choose_random_pupil_locations(
         self,
-        arr,
+        stamp,
         n_positions
     ):
         radius = self._donut_radius
@@ -491,6 +497,7 @@ class HartmannSensitivityAnalysis(
         template[r < radius] = True
         template[r < radius*0.62] = False
 
+        arr = stamp.stamp_im.image.array
         donut_mean = np.nanmean(arr[template])
         donut_iqr = np.ptp(np.nanquantile(arr[template], [0.75, 0.25]))
         threshold = donut_mean - 1.25 * donut_iqr
@@ -520,7 +527,7 @@ class HartmannSensitivityAnalysis(
         self._display.mtv(exposure)
 
         for idx, source in enumerate(donutCatalog):
-            x, y = source["x"], source["y"]
+            x, y = source["ref_x"], source["ref_y"]
             use = source["flux"] > self.config.min_flux
             use = use and source["inner_ratio"] < self.config.max_inner_ratio
             use = use and source["outer_ratio"] < self.config.max_outer_ratio
