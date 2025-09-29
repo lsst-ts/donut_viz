@@ -1964,7 +1964,7 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
         if self.config.doRubinTVUpload:
             locationConfig = getAutomaticLocationConfig()
             instrument = inputRefs.aggregateAOSRaw.dataId["instrument"]
-            plotName = "donut_fits_unpaired"
+            plotName = "donut_fits"
             plotFile = makePlotFile(
                 locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
             )
