@@ -1,7 +1,7 @@
 import numpy as np
 from collections import defaultdict
 
-from astropy.table import QTable
+from astropy.table import QTable, vstack
 from skimage.feature import peak_local_max
 from scipy.signal import correlate
 
@@ -132,6 +132,8 @@ def stamp_sets_to_stamps(stamp_sets):
 
 
 def stamps_to_stamp_sets(stamps):
+    if len(stamps) == 0:
+        return []
     metadata = stamps.metadata
     donut_ids = np.array(metadata.getArray("DONUT_ID"))
     exp_ids = np.array(metadata.getArray("EXP_ID"))
@@ -390,17 +392,18 @@ class HartmannSensitivityAnalysis(
             test_exposures,
             detections,
         )
-        for idonut, stamp_set in enumerate(stamp_sets):
+        patch_table = None
+        for stamp_set in stamp_sets:
             self.log.info(
-                "Processing stamp set %d", idonut
+                "Processing stamp set %d", stamp_set["donut_id"]
             )
             fx, fy = self.choose_random_pupil_locations(
                 stamp_set["ref"],
                 self.config.n_pupil_positions
             )
-            stamp_set["coords"] = QTable()
-            stamp_set["coords"]["fx"] = fx
-            stamp_set["coords"]["fy"] = fy
+            donut_patch_table = QTable()
+            donut_patch_table["fx"] = fx
+            donut_patch_table["fy"] = fy
             for iexp, test_stamp in enumerate(stamp_set["tests"]):
                 dfx, dfy = match_patches(
                     stamp_set["ref"].stamp_im.image.array,
@@ -410,8 +413,15 @@ class HartmannSensitivityAnalysis(
                     patch_size=30,
                     search_radius=10,
                 )
-                stamp_set["coords"][f"dfx_{iexp}"] = dfx
-                stamp_set["coords"][f"dfy_{iexp}"] = dfy
+                donut_patch_table[f"dfx_{iexp}"] = dfx
+                donut_patch_table[f"dfy_{iexp}"] = dfy
+            donut_patch_table["donut_id"] = stamp_set["donut_id"]
+            if patch_table is None:
+                self.log.info("Creating patch table")
+                patch_table = donut_patch_table
+            else:
+                self.log.info("Extending patch table")
+                patch_table = vstack([patch_table, donut_patch_table])
 
         # Make plots
         # Write outputs
@@ -421,6 +431,7 @@ class HartmannSensitivityAnalysis(
             detections=detections,
             stamp_sets=stamp_sets,
             stamps=stamp_sets_to_stamps(stamp_sets),
+            patch_table=patch_table,
         )
 
     def detect(self, exposure):
