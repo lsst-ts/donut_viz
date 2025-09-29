@@ -191,6 +191,10 @@ class HartmannSensitivityAnalysisConfig(
         doc="Number of random pupil positions to choose",
         default=500,
     )
+    max_donuts = pexConfig.Field[int](
+        doc="Maximum number of donuts to analyze",
+        default=3,
+    )
     isr = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
         doc="Instrument signature removal task",
@@ -413,6 +417,13 @@ class HartmannSensitivityAnalysis(
         table["use"] = table["flux"] > self.config.min_flux
         table["use"] &= table["inner_ratio"] < self.config.max_inner_ratio
         table["use"] &= table["outer_ratio"] < self.config.max_outer_ratio
+
+        # Filter to max_donuts brightest
+        subtable = table[table["use"]]
+        subtable.sort(keys="flux", reverse=True)
+        idxs = subtable["idx"][:self.config.max_donuts]
+        table["use"][~np.isin(table["idx"], idxs)] = False
+
         return table
 
     def get_aligned_stamp_sets(
