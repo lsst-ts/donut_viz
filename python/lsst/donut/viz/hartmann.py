@@ -62,15 +62,13 @@ def get_offset(ref, comp, search_radius=10):
 
             corr[j, i] = np.sum(ref * crop) / np.sqrt(np.sum(ref**2) * np.sum(crop**2))
 
-    # import matplotlib.pyplot as plt
-    # fig, axs = plt.subplots(ncols=3, figsize=(12, 4))
-    # axs[0].imshow(ref, origin='lower', interpolation='nearest')
-    # axs[1].imshow(comp, origin='lower', interpolation='nearest')
-    # axs[2].imshow(corr, origin='lower', interpolation='nearest')
-    # plt.show()
-
     best_ji = np.unravel_index(np.argmax(corr), corr.shape)
     best_offset = (best_ji[0] - search_radius, best_ji[1] - search_radius)
+
+    if best_ji[0] == 0 or best_ji[0] == 2 * search_radius:
+        return (np.nan, np.nan)
+    if best_ji[1] == 0 or best_ji[1] == 2 * search_radius:
+        return (np.nan, np.nan)
 
     dx_sub = get_parabola_vertex(
         corr[best_ji[0], best_ji[1] - 1],
@@ -86,6 +84,28 @@ def get_offset(ref, comp, search_radius=10):
     best_offset = (best_offset[0] + dy_sub, best_offset[1] + dx_sub)
 
     return best_offset
+
+
+def match_patches(img, ref, xs, ys, patch_size, search_radius):
+    dx_out = []
+    dy_out = []
+
+    for x, y in zip(xs, ys):
+        ref_crop = ref[
+            y - patch_size // 2:y + patch_size // 2 + 1,
+            x - patch_size // 2:x + patch_size // 2 + 1,
+        ]
+        img_crop = img[
+            y - (patch_size + 2 * search_radius) // 2:y + (patch_size + 2 * search_radius) // 2 + 1,
+            x - (patch_size + 2 * search_radius) // 2:x + (patch_size + 2 * search_radius) // 2 + 1,
+        ]
+        try:
+            offset = get_offset(ref_crop, img_crop, search_radius)
+        except:
+            offset = np.nan, np.nan
+        dy_out.append(offset[0])
+        dx_out.append(offset[1])
+    return dx_out, dy_out
 
 
 class HartmannSensitivityAnalysisConnections(
@@ -163,6 +183,14 @@ class HartmannSensitivityAnalysisConfig(
         doc="Bin size for running initial detection",
         default=8,
     )
+    rng_seed = pexConfig.Field[int](
+        doc="Random number seed",
+        default=57721,
+    )
+    n_pupil_positions = pexConfig.Field[int](
+        doc="Number of random pupil positions to choose",
+        default=500,
+    )
     isr = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
         doc="Instrument signature removal task",
@@ -212,8 +240,14 @@ class HartmannSensitivityAnalysis(
         self._display = display
 
         self._defocus = abs(self.config.m2_dz + self.config.cam_dz)
-        self._donut_diam = int(680 / 8 * self._defocus / self.config.bin_size)
+        self._donut_diam = 680.0 / 8.0 * self._defocus
         self._donut_radius = self._donut_diam / 2
+        self._binned_template_size = int(self._donut_diam * 1.15 / self.config.bin_size)
+        if self._binned_template_size % 2 == 0:
+            self._binned_template_size += 1
+        self._template_size = int(self._donut_diam * 1.15)
+        if self._template_size % 2 == 0:
+            self._template_size += 1
 
     def runQuantum(
         self,
@@ -235,57 +269,88 @@ class HartmannSensitivityAnalysis(
 
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
         if not skip_isr:
+            self.log.info("Running ISR on %d exposures", len(exposures))
             exposures = [self.isr.run(exp, **isr_kwargs).exposure for exp in exposures]
         for exposure in exposures:
+            self.log.info("Subtracting background")
             self.subtractBackground.run(exposure=exposure)
 
         ref_index = config.ref_index
         if ref_index < 0:
             ref_index = len(exposures) + ref_index
         reference_exposure = exposures[ref_index]
+        ref_id = reference_exposure.info.getVisitInfo().id
+        self.log.info("Using exposure %d as reference", ref_id)
         test_exposures = [
             exp for i, exp in enumerate(exposures) if i != ref_index
         ]
+        self.log.info("Using %d test exposures", len(test_exposures))
+        for exp in test_exposures:
+            test_id = exp.info.getVisitInfo().id
+            self.log.info("  test exposure: %d", test_id)
 
         detections = self.detect(reference_exposure)
+        self.log.info("Detected %d donuts", len(detections))
+        self.log.info("Selected %d donuts for analysis", np.sum(detections["use"]))
 
         if self._display is not None:
             self.update_display(reference_exposure, detections)
 
-        stamps = self.get_aligned_stamps(
+        self.log.info("Aligning stamps")
+        stamp_sets = self.get_aligned_stamp_sets(
             reference_exposure,
             test_exposures,
             detections,
         )
+        for stamp_set in stamp_sets:
+            self.log.info(
+                "Processing stamp set at (x,y)=(%d,%d)",
+                stamp_set["x"], stamp_set["y"]
+            )
+            fx, fy = self.choose_random_pupil_locations(
+                stamp_set["ref"],
+                self.config.n_pupil_positions
+            )
+            stamp_set["fx"] = fx
+            stamp_set["fy"] = fy
+            for test_stamp in stamp_set["tests"]:
+                dfx, dfy = match_patches(
+                    stamp_set["ref"],
+                    test_stamp,
+                    fx + self._template_size // 2,
+                    fy + self._template_size // 2,
+                    patch_size=30,
+                    search_radius=10,
+                )
+                stamp_set.setdefault("dfx", []).append(dfx)
+                stamp_set.setdefault("dfy", []).append(dfy)
 
-        # Loop over test exposures and measure offsets
         # Make plots
         # Write outputs
 
         # Measure offsets between reference and test
         return pipeBase.Struct(
             detections=detections,
-            stamps=stamps,
+            stamps=stamp_sets,
         )
 
     def detect(self, exposure):
-        diam = self._donut_diam
-        radius = self._donut_radius
-        template_size = int(diam * 1.15)
-        if template_size % 2 == 0:
-            template_size += 1
-        template = np.zeros((template_size, template_size), dtype=float)
+        template = np.zeros(
+            (self._binned_template_size, self._binned_template_size),
+            dtype=float
+        )
         y, x = np.ogrid[
-            -template_size // 2 : template_size // 2,
-            -template_size // 2 : template_size // 2
+            -self._binned_template_size // 2 : self._binned_template_size // 2,
+            -self._binned_template_size // 2 : self._binned_template_size // 2
         ]
         r = np.hypot(x, y)
-        template[r < radius] = 1.0
-        template[r < radius*0.62] = 0.0
+        binned_radius = self._donut_radius / self.config.bin_size
+        template[r < binned_radius] = 1.0
+        template[r < binned_radius*0.62] = 0.0
         inner_hole = np.zeros_like(template)
-        inner_hole[r < radius*0.55] = 1.0
+        inner_hole[r < binned_radius*0.55] = 1.0
         outer_annulus = np.zeros_like(template)
-        outer_annulus[(r >= radius*1.05) & (r < template_size//2)] = 1.0
+        outer_annulus[(r >= binned_radius*1.05) & (r < binned_radius*1.15)] = 1.0
 
         exp = exposure.clone()
         mi = exp.getMaskedImage()
@@ -301,8 +366,8 @@ class HartmannSensitivityAnalysis(
         det = correlate(heq, template, mode="same")
         peaks = peak_local_max(
             det,
-            min_distance=int(0.8 * diam),
-            exclude_border=int(radius*1.15)
+            min_distance=int(2 * 0.8 * binned_radius),
+            exclude_border=int(binned_radius*1.15)
         )
 
         table = QTable()
@@ -313,10 +378,10 @@ class HartmannSensitivityAnalysis(
         inner_fluxes = []
         outer_fluxes = []
         for peak in peaks:
-            xmin = peak[1] - template_size // 2
-            xmax = peak[1] + template_size // 2 + 1
-            ymin = peak[0] - template_size // 2
-            ymax = peak[0] + template_size // 2 + 1
+            xmin = peak[1] - self._binned_template_size // 2
+            xmax = peak[1] + self._binned_template_size // 2 + 1
+            ymin = peak[0] - self._binned_template_size // 2
+            ymax = peak[0] + self._binned_template_size // 2 + 1
             stamp = arr[ymin:ymax, xmin:xmax]
             bad_mask_planes = ['BAD', 'CR', 'INTRP', 'SAT', 'SUSPECT', 'NO_DATA']
             bitmask = exp.mask.getPlaneBitMask(bad_mask_planes)
@@ -350,20 +415,23 @@ class HartmannSensitivityAnalysis(
         table["use"] &= table["outer_ratio"] < self.config.max_outer_ratio
         return table
 
-    def get_aligned_stamps(
+    def get_aligned_stamp_sets(
         self,
         reference_exposure,
         test_exposures,
         detections,
     ):
-        stamp_size = int(self._donut_diam * self.config.bin_size * 1.15)
-        if stamp_size % 2 == 0:
-            stamp_size += 1
-        print(f"Stamp size: {stamp_size}")
-        stamps = []
+        stamp_size = self._template_size
+        stamp_sets = []
         for detection in detections:
             if not detection["use"]:
                 continue
+            self.log.info(
+                "Aligning detection %d at (x,y)=(%d,%d)",
+                detection["idx"],
+                detection["x"],
+                detection["y"]
+            )
             x, y = detection[["x", "y"]]
 
             # Extract stamp from reference
@@ -383,11 +451,38 @@ class HartmannSensitivityAnalysis(
                     xmin+int(round(offset[1])):xmax+int(round(offset[1]))
                 ]
                 test_stamps.append(test_stamp)
-            stamps.append(
+            stamp_sets.append(
                 dict(ref=ref_stamp, tests=test_stamps, x=x, y=y, offsets=offsets)
             )
-        return stamps
+        return stamp_sets
 
+    def choose_random_pupil_locations(
+        self,
+        arr,
+        n_positions
+    ):
+        radius = self._donut_radius
+        template_size = self._template_size
+        template = np.zeros((template_size, template_size), dtype=bool)
+        y, x = np.ogrid[
+            -template_size // 2 : template_size // 2,
+            -template_size // 2 : template_size // 2
+        ]
+        r = np.hypot(x, y)
+        template[r < radius] = True
+        template[r < radius*0.62] = False
+
+        donut_mean = np.nanmean(arr[template])
+        donut_iqr = np.ptp(np.nanquantile(arr[template], [0.75, 0.25]))
+        threshold = donut_mean - 1.25 * donut_iqr
+        rng = np.random.Generator(np.random.PCG64(self.config.rng_seed))
+        wx, wy = np.where(arr > threshold)
+        x = x.ravel()[wx]
+        y = y.ravel()[wy]
+        w = rng.choice(len(x), size=n_positions, replace=False)
+        x = x[w]
+        y = y[w]
+        return x, y
 
     def update_display(
         self,
@@ -406,7 +501,7 @@ class HartmannSensitivityAnalysis(
             color = "green" if use else "red"
             self._display.dot(
                 "o", x, y,
-                size=self._donut_radius*self.config.bin_size,
+                size=self._donut_radius,
                 ctype=color
             )
             self._display.dot(str(idx), x, y, ctype=color)
