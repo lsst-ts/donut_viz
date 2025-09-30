@@ -20,6 +20,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from .aggregate_visit import *
+from .hartmann import *
 from .plot_aos_task import *
 from .plot_donut_fits_unpaired_task import *
-from .hartmann import *
