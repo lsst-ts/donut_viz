@@ -425,10 +425,10 @@ class HartmannSensitivityAnalysis(
         if self.config.do_plot:
             self.log.info("Making plot")
             initial_fig = self.plot_initial(stamp_sets, patch_table)
-            final_fig = self.plot_final(stamp_sets, patch_table)
+            filtered_fig = self.plot_filtered(stamp_sets, patch_table)
         else:
             initial_fig = None
-            final_fig = None
+            filtered_fig = None
 
         return pipeBase.Struct(
             detections=detections,
@@ -436,7 +436,7 @@ class HartmannSensitivityAnalysis(
             stamps=stamp_sets_to_stamps(stamp_sets),
             patch_table=patch_table,
             initial_fig=initial_fig,
-            final_fig=final_fig,
+            filtered_fig=filtered_fig,
         )
 
     def prepare_exposures(
@@ -833,7 +833,7 @@ class HartmannSensitivityAnalysis(
                 patch_table[f"dfy_{iexp}_fit"][select] = dy_fit
                 patch_table[f"use_fit_{iexp}"][select] = use
 
-    def plot_final(
+    def plot_filtered(
         self, stamp_sets, patch_table
     ):
         ndonut = len(stamp_sets)
@@ -905,7 +905,7 @@ class HartmannSensitivityAnalysis(
                 )
                 ax.quiver(
                     fx[wgood], fy[wgood], dfx_fit[wgood], dfy_fit[wgood],
-                    color="k", alpha=0.2, width=0.004,
+                    color="k", alpha=0.4, width=0.004,
                     scale_units="xy", angles="xy", scale=0.1, pivot="middle"
                 )
                 ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
