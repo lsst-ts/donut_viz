@@ -5,6 +5,7 @@
 setupRequired(afw)
 setupRequired(daf_butler)
 setupRequired(geom)
+setupRequired(summit_utils)
 setupRequired(ts_wep)
 
 # The following is boilerplate for all packages.

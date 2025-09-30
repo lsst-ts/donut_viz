@@ -16,6 +16,7 @@ from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.geom import Box2I, Point2I, Extent2I
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import SubtractBackgroundTask, Stamp, Stamps
+from lsst.pex.exceptions import LengthError
 
 
 __all__ = [
@@ -100,11 +101,24 @@ def match_patches(img, ref, xs, ys, patch_size, search_radius):
         ymin = y - patch_size // 2
         ymax = y + patch_size // 2 + 1
         ref_crop = ref[ymin:ymax, xmin:xmax]
+        if xmin < 0 or ymin < 0 or xmax > ref.shape[1] or ymax > ref.shape[1]:
+            dy_out.append(np.nan)
+            dx_out.append(np.nan)
+            continue
 
         xmin_crop = xmin - search_radius
         xmax_crop = xmax + search_radius
         ymin_crop = ymin - search_radius
         ymax_crop = ymax + search_radius
+        if (
+            xmin_crop < 0
+            or ymin_crop < 0
+            or xmax_crop > img.shape[1]
+            or ymax_crop > img.shape[0]
+        ):
+            dy_out.append(np.nan)
+            dx_out.append(np.nan)
+            continue
         img_crop = img[ymin_crop:ymax_crop, xmin_crop:xmax_crop]
         offset = get_offset(ref_crop, img_crop, search_radius)
         dy_out.append(offset[0])
@@ -235,41 +249,39 @@ class HartmannSensitivityAnalysisConnections(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="raw",
+        name="post_isr_image",
         multiple=True,
     )
-    camera = ct.PrerequisiteInput(
-        name="camera",
-        storageClass="Camera",
-        doc="Input camera to construct complete exposures.",
-        dimensions=["instrument"],
-        isCalibration=True,
-        lookupFunction=lookupStaticCalibrations,
+    hartmann_stamps = ct.Output(
+        doc="Output Hartmann stamps",
+        dimensions=("group", "instrument", "detector"),
+        storageClass="Stamps",
+        name="hartmann_stamps",
     )
-    # hartmannStamps = ct.Output(
-    #     doc="Output Hartmann stamps",
-    #     dimensions=("group", "instrument", "detector"),
-    #     storageClass="Stamps",
-    #     name="hartmann_stamps",
-    # )
-    # hartmannDetectionTable = ct.Output(
-    #     doc="Output Hartmann detection table",
-    #     dimensions=("group", "instrument", "detector"),
-    #     storageClass="AstropyQTable",
-    #     name="hartmann_detection_table",
-    # )
-    # hartmannAnalysisTable = ct.Output(
-    #     doc="Output Hartmann sensitivity analysis table",
-    #     dimensions=("group", "instrument", "detector"),
-    #     storageClass="AstropyQTable",
-    #     name="hartmann_analysis_table",
-    # )
-    # hartmannPlot = ct.Output(
-    #     doc="Output Hartmann sensitivity analysis plot",
-    #     dimensions=("group", "instrument", "detector"),
-    #     storageClass="Plot",
-    #     name="hartmann_sensitivity_plot",
-    # )
+    hartmann_detection_table = ct.Output(
+        doc="Output Hartmann detection table",
+        dimensions=("group", "instrument", "detector"),
+        storageClass="AstropyQTable",
+        name="hartmann_detection_table",
+    )
+    hartmann_analysis_table = ct.Output(
+        doc="Output Hartmann sensitivity analysis table",
+        dimensions=("group", "instrument", "detector"),
+        storageClass="AstropyQTable",
+        name="hartmann_analysis_table",
+    )
+    hartmann_unfiltered_plot = ct.Output(
+        doc="Output Hartmann unfiltered plot",
+        dimensions=("group", "instrument", "detector"),
+        storageClass="Plot",
+        name="hartmann_unfiltered_plot",
+    )
+    hartmann_filtered_plot = ct.Output(
+        doc="Output Hartmann filtered plot",
+        dimensions=("group", "instrument", "detector"),
+        storageClass="Plot",
+        name="hartmann_filtered_plot",
+    )
 
 
 class HartmannSensitivityAnalysisConfig(
@@ -389,14 +401,13 @@ class HartmannSensitivityAnalysis(
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
         inputs = butlerQC.get(inputRefs)
-        results = self.run(**inputs)
-
+        outputs = self.run(**inputs)
+        butlerQC.put(outputs, outputRefs)
 
     def run(
         self,
         exposures,
-        camera=None,
-        skip_isr=False,
+        run_isr=False,
         **isr_kwargs
     ):
         config = self.config
@@ -404,7 +415,7 @@ class HartmannSensitivityAnalysis(
         reference_exposure, test_exposures = self.prepare_exposures(
             exposures,
             config.ref_index,
-            skip_isr=skip_isr,
+            run_isr=run_isr,
             **isr_kwargs
         )
         detections = self.detect(reference_exposure)
@@ -431,23 +442,23 @@ class HartmannSensitivityAnalysis(
             filtered_fig = None
 
         return pipeBase.Struct(
-            detections=detections,
+            hartmann_detection_table=detections,
+            hartmann_stamps=stamp_sets_to_stamps(stamp_sets),
             stamp_sets=stamp_sets,
-            stamps=stamp_sets_to_stamps(stamp_sets),
-            patch_table=patch_table,
-            initial_fig=initial_fig,
-            filtered_fig=filtered_fig,
+            hartmann_analysis_table=patch_table,
+            hartmann_unfiltered_plot=initial_fig,
+            hartmann_filtered_plot=filtered_fig,
         )
 
     def prepare_exposures(
         self,
         exposures,
         ref_index,
-        skip_isr=False,
+        run_isr=False,
         **isr_kwargs
     ):
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
-        if not skip_isr:
+        if run_isr:
             self.log.info("Running ISR on %d exposures", len(exposures))
             exposures = [self.isr.run(exp, **isr_kwargs).exposure for exp in exposures]
         for exposure in exposures:
@@ -586,7 +597,15 @@ class HartmannSensitivityAnalysis(
             ymin = ref_y - stamp_size // 2
             ymax = ref_y + stamp_size // 2 + 1
             box = Box2I(Point2I(xmin, ymin), Extent2I(xmax-xmin, ymax-ymin))
-            ref_stamp = Stamp(reference_exposure.maskedImage[box])
+            try:
+                ref_stamp = Stamp(reference_exposure.maskedImage[box])
+            except LengthError:
+                detection["use"] = False
+                self.log.warn(
+                    "  Could not extract reference stamp for detection %d; skipping",
+                    detection["idx"]
+                )
+                continue
             ref_stamp_arr = ref_stamp.stamp_im.image.array
 
             offsets = []
@@ -594,6 +613,14 @@ class HartmannSensitivityAnalysis(
             for test_exposure in test_exposures:
                 test_stamp_arr = test_exposure.image.array[ymin:ymax, xmin:xmax]
                 offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=30)
+                if not np.isfinite(offset).all():
+                    detection["use"] = False
+                    self.log.warn(
+                        "  Could not align detection %d in exposure %d; skipping",
+                        detection["idx"],
+                        test_exposure.info.getVisitInfo().id
+                    )
+                    break
                 offsets.append(offset)
                 test_box = Box2I(
                     Point2I(
@@ -602,7 +629,19 @@ class HartmannSensitivityAnalysis(
                     ),
                     Extent2I(xmax - xmin, ymax - ymin)
                 )
-                test_stamps.append(Stamp(test_exposure.maskedImage[test_box]))
+                try:
+                    test_stamp = Stamp(test_exposure.maskedImage[test_box])
+                except LengthError:
+                    detection["use"] = False
+                    self.log.warn(
+                        "  Could not extract aligned stamp for detection %d in exposure %d; skipping",
+                        detection["idx"],
+                        test_exposure.info.getVisitInfo().id
+                    )
+                    break
+                test_stamps.append(test_stamp)
+            if not detection["use"]:
+                continue
             test_stamps = Stamps(test_stamps)
             stamp_sets.append(
                 dict(
