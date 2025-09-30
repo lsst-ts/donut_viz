@@ -1,23 +1,19 @@
-import numpy as np
 from collections import defaultdict
-
-from astropy.table import QTable, vstack
-from galsim.zernike import zernikeBasis
-from matplotlib.figure import Figure
-from skimage.feature import peak_local_max
-from scipy.signal import correlate
 
 import lsst.afw.math as afwMath
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
-
-from lsst.fgcmcal.utilities import lookupStaticCalibrations
-from lsst.geom import Box2I, Point2I, Extent2I
+import numpy as np
+from astropy.table import QTable, vstack
+from galsim.zernike import zernikeBasis
+from lsst.geom import Box2I, Extent2I, Point2I
 from lsst.ip.isr import IsrTaskLSST
-from lsst.meas.algorithms import SubtractBackgroundTask, Stamp, Stamps
+from lsst.meas.algorithms import Stamp, Stamps, SubtractBackgroundTask
 from lsst.pex.exceptions import LengthError
-
+from matplotlib.figure import Figure
+from scipy.signal import correlate
+from skimage.feature import peak_local_max
 
 __all__ = [
     "HartmannSensitivityAnalysisConfig",
@@ -59,9 +55,9 @@ def get_offset(ref, comp, search_radius=10):
     corr = np.zeros((2 * search_radius + 1, 2 * search_radius + 1))
     for j, dy in enumerate(range(-search_radius, search_radius + 1)):
         for i, dx in enumerate(range(-search_radius, search_radius + 1)):
-            ymin = (csh[0]-rsh[0])//2 + dy
+            ymin = (csh[0] - rsh[0]) // 2 + dy
             ymax = ymin + rsh[0]
-            xmin = (csh[1]-rsh[1])//2 + dx
+            xmin = (csh[1] - rsh[1]) // 2 + dx
             xmax = xmin + rsh[1]
             crop = comp[ymin:ymax, xmin:xmax]
 
@@ -78,12 +74,12 @@ def get_offset(ref, comp, search_radius=10):
     dx_sub = get_parabola_vertex(
         corr[best_ji[0], best_ji[1] - 1],
         corr[best_ji[0], best_ji[1]],
-        corr[best_ji[0], best_ji[1] + 1]
+        corr[best_ji[0], best_ji[1] + 1],
     )
     dy_sub = get_parabola_vertex(
         corr[best_ji[0] - 1, best_ji[1]],
         corr[best_ji[0], best_ji[1]],
-        corr[best_ji[0] + 1, best_ji[1]]
+        corr[best_ji[0] + 1, best_ji[1]],
     )
 
     best_offset = (best_offset[0] + dy_sub, best_offset[1] + dx_sub)
@@ -130,16 +126,16 @@ def align_offsets(fx, fy, dfx, dfy):
     # Solve \Delta x = dx - y dtheta
     #       \Delta y = dy + x dtheta
     # for dx, dy, dtheta.
-    design = np.zeros((2*len(fx), 3))
-    design[:len(fx), 0] = 1.0
-    design[len(fx):, 1] = 1.0
-    design[:len(fx), 2] = -fy
-    design[len(fx):, 2] = fx
+    design = np.zeros((2 * len(fx), 3))
+    design[: len(fx), 0] = 1.0
+    design[len(fx) :, 1] = 1.0
+    design[: len(fx), 2] = -fy
+    design[len(fx) :, 2] = fx
     target = np.concatenate([dfx, dfy])
     w = np.isfinite(target)
     solution, *_ = np.linalg.lstsq(design[w], target[w])
-    delta = design@solution
-    return dfx - delta[:len(fx)], dfy - delta[len(fx):]
+    delta = design @ solution
+    return dfx - delta[: len(fx)], dfy - delta[len(fx) :]
 
 
 def stamp_sets_to_stamps(stamp_sets):
@@ -173,13 +169,9 @@ def stamps_to_stamp_sets(stamps):
 
     stamp_sets = []
     for donut_id in np.unique(donut_ids):
-        ref_donut_idx = np.where(
-            (donut_ids == donut_id) & (exp_ids == ref_ids)
-        )[0][0]
+        ref_donut_idx = np.where((donut_ids == donut_id) & (exp_ids == ref_ids))[0][0]
         ref = stamps[ref_donut_idx]
-        test_idxs = np.where(
-            (donut_ids == donut_id) & (exp_ids != ref_ids)
-        )[0]
+        test_idxs = np.where((donut_ids == donut_id) & (exp_ids != ref_ids))[0]
         tests = [stamps[i] for i in test_idxs]
         offset_x = [metadata.getArray("OFFSET_X")[i] for i in test_idxs]
         offset_y = [metadata.getArray("OFFSET_Y")[i] for i in test_idxs]
@@ -201,19 +193,21 @@ def stamps_to_stamp_sets(stamps):
 
 
 def fit_displacements(
-    fx, fy, dfx, dfy, radius,
+    fx,
+    fy,
+    dfx,
+    dfy,
+    radius,
 ):
     # Filter outliers in absolute displacement
     dfr = np.hypot(dfx, dfy)
     quantiles = np.nanquantile(dfr, [0.25, 0.5, 0.75])
-    threshold = quantiles[0] + 4.0 * np.ptp(quantiles[[0,2]])
+    threshold = quantiles[0] + 4.0 * np.ptp(quantiles[[0, 2]])
 
     flag_0 = dfr < threshold
 
     # Fit Zks to inliers
-    zkBasis = zernikeBasis(
-        28, fx, fy, R_outer=radius, R_inner=radius*0.62
-    )
+    zkBasis = zernikeBasis(28, fx, fy, R_outer=radius, R_inner=radius * 0.62)
     wgood = np.isfinite(dfx) & np.isfinite(dfy) & flag_0
     dx_coefs, *_ = np.linalg.lstsq(zkBasis.T[wgood], dfx[wgood])
     dy_coefs, *_ = np.linalg.lstsq(zkBasis.T[wgood], dfy[wgood])
@@ -225,12 +219,12 @@ def fit_displacements(
     ddy = dfy - dy_fit
     xquant = np.nanquantile(ddx, [0.25, 0.5, 0.75])
     yquant = np.nanquantile(ddy, [0.25, 0.5, 0.75])
-    xiqr = np.ptp(xquant[[0,2]])
-    yiqr = np.ptp(yquant[[0,2]])
+    xiqr = np.ptp(xquant[[0, 2]])
+    yiqr = np.ptp(yquant[[0, 2]])
     xmed = xquant[1]
     ymed = yquant[1]
-    xgood = (ddx > xmed - 3*xiqr) & (ddx < xmed + 3*xiqr)
-    ygood = (ddy > ymed - 3*yiqr) & (ddy < ymed + 3*yiqr)
+    xgood = (ddx > xmed - 3 * xiqr) & (ddx < xmed + 3 * xiqr)
+    ygood = (ddy > ymed - 3 * yiqr) & (ddy < ymed + 3 * yiqr)
     good = np.isfinite(dfx) & np.isfinite(dfy) & xgood & ygood
 
     # Fit once more for the plot
@@ -242,8 +236,7 @@ def fit_displacements(
 
 
 class HartmannSensitivityAnalysisConnections(
-    pipeBase.PipelineTaskConnections,
-    dimensions=("group", "instrument", "detector")
+    pipeBase.PipelineTaskConnections, dimensions=("group", "instrument", "detector")
 ):
     exposures = ct.Input(
         doc="Input exposure to make measurements on",
@@ -286,7 +279,7 @@ class HartmannSensitivityAnalysisConnections(
 
 class HartmannSensitivityAnalysisConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=HartmannSensitivityAnalysisConnections
+    pipelineConnections=HartmannSensitivityAnalysisConnections,
 ):
     ref_index = pexConfig.Field[int](
         doc="Index of the reference exposure within the group",
@@ -344,7 +337,6 @@ class HartmannSensitivityAnalysisConfig(
         target=SubtractBackgroundTask,
         doc="Task to perform background subtraction.",
     )
-
 
     def setDefaults(self):
         self.isr.doAmpOffset = False
@@ -404,19 +396,11 @@ class HartmannSensitivityAnalysis(
         outputs = self.run(**inputs)
         butlerQC.put(outputs, outputRefs)
 
-    def run(
-        self,
-        exposures,
-        run_isr=False,
-        **isr_kwargs
-    ):
+    def run(self, exposures, run_isr=False, **isr_kwargs):
         config = self.config
 
         reference_exposure, test_exposures = self.prepare_exposures(
-            exposures,
-            config.ref_index,
-            run_isr=run_isr,
-            **isr_kwargs
+            exposures, config.ref_index, run_isr=run_isr, **isr_kwargs
         )
         detections = self.detect(reference_exposure)
 
@@ -450,13 +434,7 @@ class HartmannSensitivityAnalysis(
             hartmann_filtered_plot=filtered_fig,
         )
 
-    def prepare_exposures(
-        self,
-        exposures,
-        ref_index,
-        run_isr=False,
-        **isr_kwargs
-    ):
+    def prepare_exposures(self, exposures, ref_index, run_isr=False, **isr_kwargs):
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
         if run_isr:
             self.log.info("Running ISR on %d exposures", len(exposures))
@@ -471,9 +449,7 @@ class HartmannSensitivityAnalysis(
         reference_exposure = exposures[ref_index]
         ref_id = reference_exposure.info.getVisitInfo().id
         self.log.info("Using exposure %d as reference", ref_id)
-        test_exposures = [
-            exp for i, exp in enumerate(exposures) if i != ref_index
-        ]
+        test_exposures = [exp for i, exp in enumerate(exposures) if i != ref_index]
         self.log.info("Using %d test exposures", len(test_exposures))
         for exp in test_exposures:
             test_id = exp.info.getVisitInfo().id
@@ -482,21 +458,20 @@ class HartmannSensitivityAnalysis(
 
     def detect(self, exposure):
         template = np.zeros(
-            (self._binned_template_size, self._binned_template_size),
-            dtype=float
+            (self._binned_template_size, self._binned_template_size), dtype=float
         )
         y, x = np.ogrid[
             -self._binned_template_size // 2 : self._binned_template_size // 2,
-            -self._binned_template_size // 2 : self._binned_template_size // 2
+            -self._binned_template_size // 2 : self._binned_template_size // 2,
         ]
         r = np.hypot(x, y)
         binned_radius = self._donut_radius / self.config.bin_size
         template[r < binned_radius] = 1.0
-        template[r < binned_radius*0.62] = 0.0
+        template[r < binned_radius * 0.62] = 0.0
         inner_hole = np.zeros_like(template)
-        inner_hole[r < binned_radius*0.55] = 1.0
+        inner_hole[r < binned_radius * 0.55] = 1.0
         outer_annulus = np.zeros_like(template)
-        outer_annulus[(r >= binned_radius*1.05) & (r < binned_radius*1.15)] = 1.0
+        outer_annulus[(r >= binned_radius * 1.05) & (r < binned_radius * 1.15)] = 1.0
 
         exp = exposure.clone()
         mi = exp.getMaskedImage()
@@ -505,15 +480,15 @@ class HartmannSensitivityAnalysis(
         arr = exp.image.array
         mask = exp.mask.array
 
-        # Histogram equalize since we care more about connected points above threshold
-        # than actual flux values.
+        # Histogram equalize since we care more about connected points above
+        # threshold than actual flux values.
         cdf = np.nanquantile(arr, np.linspace(0, 1, 256))
         heq = np.digitize(arr, cdf)
         det = correlate(heq, template, mode="same")
         peaks = peak_local_max(
             det,
             min_distance=int(2 * 0.8 * binned_radius),
-            exclude_border=int(binned_radius*1.15)
+            exclude_border=int(binned_radius * 1.15),
         )
 
         table = QTable()
@@ -529,7 +504,7 @@ class HartmannSensitivityAnalysis(
             ymin = peak[0] - self._binned_template_size // 2
             ymax = peak[0] + self._binned_template_size // 2 + 1
             stamp = arr[ymin:ymax, xmin:xmax]
-            bad_mask_planes = ['BAD', 'CR', 'INTRP', 'SAT', 'SUSPECT', 'NO_DATA']
+            bad_mask_planes = ["BAD", "CR", "INTRP", "SAT", "SUSPECT", "NO_DATA"]
             bitmask = exp.mask.getPlaneBitMask(bad_mask_planes)
             msk = (mask[ymin:ymax, xmin:xmax] & bitmask) != 0
 
@@ -544,13 +519,13 @@ class HartmannSensitivityAnalysis(
                 outer_fluxes.append(np.nan)
                 continue
 
-            # Guess that a reasonable background estimate is the median of the inner
-            # and outer pixels
-            bkg = np.nanmedian(stamp*(np.maximum(inner_hole, outer_annulus)))
+            # Guess that a reasonable background estimate is the median of the
+            # inner and outer pixels
+            bkg = np.nanmedian(stamp * (np.maximum(inner_hole, outer_annulus)))
             stamp = stamp - bkg
-            fluxes.append(np.nansum(stamp*template))
-            inner_fluxes.append(np.nansum(stamp*inner_hole))
-            outer_fluxes.append(np.nansum(stamp*outer_annulus))
+            fluxes.append(np.nansum(stamp * template))
+            inner_fluxes.append(np.nansum(stamp * inner_hole))
+            outer_fluxes.append(np.nansum(stamp * outer_annulus))
         table["flux"] = np.array(fluxes, dtype=np.float32)
         table["inner_flux"] = np.array(inner_fluxes, dtype=np.float32)
         table["outer_flux"] = np.array(outer_fluxes, dtype=np.float32)
@@ -563,7 +538,7 @@ class HartmannSensitivityAnalysis(
         # Filter to max_donuts brightest
         subtable = table[table["use"]]
         subtable.sort(keys="flux", reverse=True)
-        idxs = subtable["idx"][:self.config.max_donuts]
+        idxs = subtable["idx"][: self.config.max_donuts]
         table["use"][~np.isin(table["idx"], idxs)] = False
 
         self.log.info("Detected %d donuts", len(table))
@@ -587,7 +562,7 @@ class HartmannSensitivityAnalysis(
                 "Aligning detection %d at (x,y)=(%d,%d)",
                 detection["idx"],
                 detection["ref_x"],
-                detection["ref_y"]
+                detection["ref_y"],
             )
             ref_x, ref_y = detection[["ref_x", "ref_y"]]
 
@@ -596,14 +571,14 @@ class HartmannSensitivityAnalysis(
             xmax = ref_x + stamp_size // 2 + 1
             ymin = ref_y - stamp_size // 2
             ymax = ref_y + stamp_size // 2 + 1
-            box = Box2I(Point2I(xmin, ymin), Extent2I(xmax-xmin, ymax-ymin))
+            box = Box2I(Point2I(xmin, ymin), Extent2I(xmax - xmin, ymax - ymin))
             try:
                 ref_stamp = Stamp(reference_exposure.maskedImage[box])
             except LengthError:
                 detection["use"] = False
                 self.log.warn(
                     "  Could not extract reference stamp for detection %d; skipping",
-                    detection["idx"]
+                    detection["idx"],
                 )
                 continue
             ref_stamp_arr = ref_stamp.stamp_im.image.array
@@ -618,16 +593,13 @@ class HartmannSensitivityAnalysis(
                     self.log.warn(
                         "  Could not align detection %d in exposure %d; skipping",
                         detection["idx"],
-                        test_exposure.info.getVisitInfo().id
+                        test_exposure.info.getVisitInfo().id,
                     )
                     break
                 offsets.append(offset)
                 test_box = Box2I(
-                    Point2I(
-                        xmin + int(round(offset[1])),
-                        ymin + int(round(offset[0]))
-                    ),
-                    Extent2I(xmax - xmin, ymax - ymin)
+                    Point2I(xmin + int(round(offset[1])), ymin + int(round(offset[0]))),
+                    Extent2I(xmax - xmin, ymax - ymin),
                 )
                 try:
                     test_stamp = Stamp(test_exposure.maskedImage[test_box])
@@ -636,7 +608,7 @@ class HartmannSensitivityAnalysis(
                     self.log.warn(
                         "  Could not extract aligned stamp for detection %d in exposure %d; skipping",
                         detection["idx"],
-                        test_exposure.info.getVisitInfo().id
+                        test_exposure.info.getVisitInfo().id,
                     )
                     break
                 test_stamps.append(test_stamp)
@@ -657,21 +629,17 @@ class HartmannSensitivityAnalysis(
             )
         return stamp_sets
 
-    def choose_random_pupil_locations(
-        self,
-        stamp,
-        n_positions
-    ):
+    def choose_random_pupil_locations(self, stamp, n_positions):
         radius = self._donut_radius
         template_size = self._template_size
         template = np.zeros((template_size, template_size), dtype=bool)
         y, x = np.ogrid[
             -template_size // 2 : template_size // 2,
-            -template_size // 2 : template_size // 2
+            -template_size // 2 : template_size // 2,
         ]
         r = np.hypot(x, y)
         template[r < radius] = True
-        template[r < radius*0.62] = False
+        template[r < radius * 0.62] = False
 
         arr = stamp.stamp_im.image.array
         donut_mean = np.nanmean(arr[template])
@@ -679,13 +647,11 @@ class HartmannSensitivityAnalysis(
         threshold = donut_mean - 1.25 * donut_iqr
 
         expanded_template = np.zeros_like(template, dtype=bool)
-        expanded_template[r < radius*1.1] = True
-        expanded_template[r < radius*0.62*0.9] = False
+        expanded_template[r < radius * 1.1] = True
+        expanded_template[r < radius * 0.62 * 0.9] = False
 
         rng = np.random.Generator(np.random.PCG64(self.config.rng_seed))
-        wx, wy = np.where(
-            (arr > threshold) & (expanded_template)
-        )
+        wx, wy = np.where((arr > threshold) & (expanded_template))
         x = x.ravel()[wx]
         y = y.ravel()[wy]
         w = rng.choice(len(x), size=n_positions, replace=False)
@@ -699,12 +665,9 @@ class HartmannSensitivityAnalysis(
     ):
         patch_table = None
         for stamp_set in stamp_sets:
-            self.log.info(
-                "Processing stamp set %d", stamp_set["donut_id"]
-            )
+            self.log.info("Processing stamp set %d", stamp_set["donut_id"])
             fx, fy = self.choose_random_pupil_locations(
-                stamp_set["ref"],
-                self.config.n_pupil_positions
+                stamp_set["ref"], self.config.n_pupil_positions
             )
             donut_patch_table = QTable()
             donut_patch_table["fx"] = fx
@@ -768,23 +731,17 @@ class HartmannSensitivityAnalysis(
             use = use and source["inner_ratio"] < self.config.max_inner_ratio
             use = use and source["outer_ratio"] < self.config.max_outer_ratio
             color = "green" if use else "red"
-            self._display.dot(
-                "o", x, y,
-                size=self._donut_radius,
-                ctype=color
-            )
+            self._display.dot("o", x, y, size=self._donut_radius, ctype=color)
             self._display.dot(str(idx), x, y, ctype=color)
 
-    def plot_initial(
-        self, stamp_sets, patch_table
-    ):
+    def plot_initial(self, stamp_sets, patch_table):
         ndonut = len(stamp_sets)
         if ndonut == 0:
             nexp = 0
         else:
             nexp = len(stamp_sets[0]["tests"])
 
-        fig = Figure(figsize=(3*self.config.max_exp_plot, 3*self.config.max_donuts))
+        fig = Figure(figsize=(3 * self.config.max_exp_plot, 3 * self.config.max_donuts))
         grispec_kw = dict(
             left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
         )
@@ -809,10 +766,7 @@ class HartmannSensitivityAnalysis(
                 if idonut == 0:
                     ax.set_title(stamp_set["test_ids"][iexp])
                 if iexp == 0:
-                    label = (
-                        idonut,
-                        (int(stamp_set["ref_x"]), int(stamp_set["ref_y"]))
-                    )
+                    label = (idonut, (int(stamp_set["ref_x"]), int(stamp_set["ref_y"])))
                     ax.set_ylabel(label)
                 coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
                 fx = np.array(coords["fx"])
@@ -831,12 +785,20 @@ class HartmannSensitivityAnalysis(
                 ax.imshow(
                     resid,
                     origin="lower",
-                    cmap="bwr", vmin=-vmax, vmax=vmax,
-                    extent=[-ext, ext, -ext, ext]
+                    cmap="bwr",
+                    vmin=-vmax,
+                    vmax=vmax,
+                    extent=[-ext, ext, -ext, ext],
                 )
                 Q = ax.quiver(
-                    fx, fy, dfx, dfy,
-                    scale_units="xy", angles="xy", scale=0.1, pivot="middle"
+                    fx,
+                    fy,
+                    dfx,
+                    dfy,
+                    scale_units="xy",
+                    angles="xy",
+                    scale=0.1,
+                    pivot="middle",
                 )
                 ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
         return fig
@@ -849,8 +811,16 @@ class HartmannSensitivityAnalysis(
             return
         donut_ids = np.unique(patch_table["donut_id"])
         ndonut = len(donut_ids)
-        nexp = len([col for col in patch_table.colnames if col.startswith("dfx_") and col.endswith("_aligned")])
-        self.log.info("Fitting displacements for %d donuts and %d exposures", ndonut, nexp)
+        nexp = len(
+            [
+                col
+                for col in patch_table.colnames
+                if col.startswith("dfx_") and col.endswith("_aligned")
+            ]
+        )
+        self.log.info(
+            "Fitting displacements for %d donuts and %d exposures", ndonut, nexp
+        )
 
         # Make room in table
         for iexp in range(nexp):
@@ -872,16 +842,14 @@ class HartmannSensitivityAnalysis(
                 patch_table[f"dfy_{iexp}_fit"][select] = dy_fit
                 patch_table[f"use_fit_{iexp}"][select] = use
 
-    def plot_filtered(
-        self, stamp_sets, patch_table
-    ):
+    def plot_filtered(self, stamp_sets, patch_table):
         ndonut = len(stamp_sets)
         if ndonut == 0:
             nexp = 0
         else:
             nexp = len(stamp_sets[0]["tests"])
 
-        fig = Figure(figsize=(3*self.config.max_exp_plot, 3*self.config.max_donuts))
+        fig = Figure(figsize=(3 * self.config.max_exp_plot, 3 * self.config.max_donuts))
         grispec_kw = dict(
             left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
         )
@@ -906,10 +874,7 @@ class HartmannSensitivityAnalysis(
                 if idonut == 0:
                     ax.set_title(stamp_set["test_ids"][iexp])
                 if iexp == 0:
-                    label = (
-                        idonut,
-                        (int(stamp_set["ref_x"]), int(stamp_set["ref_y"]))
-                    )
+                    label = (idonut, (int(stamp_set["ref_x"]), int(stamp_set["ref_y"])))
                     ax.set_ylabel(label)
                 coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
                 fx = np.array(coords["fx"])
@@ -931,21 +896,47 @@ class HartmannSensitivityAnalysis(
                 ax.imshow(
                     resid,
                     origin="lower",
-                    cmap="bwr", vmin=-vmax, vmax=vmax,
-                    extent=[-ext, ext, -ext, ext]
+                    cmap="bwr",
+                    vmin=-vmax,
+                    vmax=vmax,
+                    extent=[-ext, ext, -ext, ext],
                 )
                 Q = ax.quiver(
-                    fx[wgood], fy[wgood], dfx[wgood], dfy[wgood], color="g",
-                    scale_units="xy", angles="xy", scale=0.1, pivot="middle", width=0.002
+                    fx[wgood],
+                    fy[wgood],
+                    dfx[wgood],
+                    dfy[wgood],
+                    color="g",
+                    scale_units="xy",
+                    angles="xy",
+                    scale=0.1,
+                    pivot="middle",
+                    width=0.002,
                 )
                 ax.quiver(
-                    fx[~wgood], fy[~wgood], dfx[~wgood], dfy[~wgood], color="r",
-                    scale_units="xy", angles="xy", scale=0.1, pivot="middle", width=0.002
+                    fx[~wgood],
+                    fy[~wgood],
+                    dfx[~wgood],
+                    dfy[~wgood],
+                    color="r",
+                    scale_units="xy",
+                    angles="xy",
+                    scale=0.1,
+                    pivot="middle",
+                    width=0.002,
                 )
                 ax.quiver(
-                    fx[wgood], fy[wgood], dfx_fit[wgood], dfy_fit[wgood],
-                    color="k", alpha=0.4, width=0.004,
-                    scale_units="xy", angles="xy", scale=0.1, pivot="middle"
+                    fx[wgood],
+                    fy[wgood],
+                    dfx_fit[wgood],
+                    dfy_fit[wgood],
+                    color="k",
+                    alpha=0.4,
+                    width=0.004,
+                    scale_units="xy",
+                    angles="xy",
+                    scale=0.1,
+                    pivot="middle",
                 )
                 ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
         return fig
