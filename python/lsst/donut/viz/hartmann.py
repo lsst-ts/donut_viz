@@ -320,6 +320,10 @@ class HartmannSensitivityAnalysisConfig(
         doc="Maximum number of donuts to analyze",
         default=3,
     )
+    max_exp_plot = pexConfig.Field[int](
+        doc="Maximum number of exposures to plot",
+        default=4,
+    )
     isr = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
         doc="Instrument signature removal task",
@@ -690,6 +694,8 @@ class HartmannSensitivityAnalysis(
         self,
         patch_table,
     ):
+        if patch_table is None:
+            return
         self.log.info("Removing net shifts and rotations")
         idxs = [int(col[4:]) for col in patch_table.colnames if col.startswith("dfx_")]
         for idx in idxs:
@@ -739,16 +745,20 @@ class HartmannSensitivityAnalysis(
         else:
             nexp = len(stamp_sets[0]["tests"])
 
-        fig = Figure(figsize=(3*nexp, 3*self.config.max_donuts))
+        fig = Figure(figsize=(3*self.config.max_exp_plot, 3*self.config.max_donuts))
         grispec_kw = dict(
             left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
         )
         axs = fig.subplots(
             nrows=self.config.max_donuts,
-            ncols=nexp,
+            ncols=self.config.max_exp_plot,
             gridspec_kw=grispec_kw,
             squeeze=False,
         )
+        for ax in axs.ravel():
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_aspect("equal")
 
         for idonut in range(self.config.max_donuts):
             for iexp in range(nexp):
@@ -790,15 +800,14 @@ class HartmannSensitivityAnalysis(
                     scale_units="xy", angles="xy", scale=0.1, pivot="middle"
                 )
                 ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_aspect("equal")
         return fig
 
     def fit_displacements(
         self,
         patch_table,
     ):
+        if patch_table is None:
+            return
         donut_ids = np.unique(patch_table["donut_id"])
         ndonut = len(donut_ids)
         nexp = len([col for col in patch_table.colnames if col.startswith("dfx_") and col.endswith("_aligned")])
@@ -833,16 +842,20 @@ class HartmannSensitivityAnalysis(
         else:
             nexp = len(stamp_sets[0]["tests"])
 
-        fig = Figure(figsize=(3*nexp, 3*self.config.max_donuts))
+        fig = Figure(figsize=(3*self.config.max_exp_plot, 3*self.config.max_donuts))
         grispec_kw = dict(
             left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
         )
         axs = fig.subplots(
             nrows=self.config.max_donuts,
-            ncols=nexp,
+            ncols=self.config.max_exp_plot,
             gridspec_kw=grispec_kw,
             squeeze=False,
         )
+        for ax in axs.ravel():
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_aspect("equal")
 
         for idonut in range(self.config.max_donuts):
             for iexp in range(nexp):
@@ -896,7 +909,4 @@ class HartmannSensitivityAnalysis(
                     scale_units="xy", angles="xy", scale=0.1, pivot="middle"
                 )
                 ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_aspect("equal")
         return fig
