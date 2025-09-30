@@ -2,6 +2,8 @@ import numpy as np
 from collections import defaultdict
 
 from astropy.table import QTable, vstack
+from galsim.zernike import zernikeBasis
+from matplotlib.figure import Figure
 from skimage.feature import peak_local_max
 from scipy.signal import correlate
 
@@ -93,21 +95,37 @@ def match_patches(img, ref, xs, ys, patch_size, search_radius):
     dy_out = []
 
     for x, y in zip(xs, ys):
-        ref_crop = ref[
-            y - patch_size // 2:y + patch_size // 2 + 1,
-            x - patch_size // 2:x + patch_size // 2 + 1,
-        ]
-        img_crop = img[
-            y - (patch_size + 2 * search_radius) // 2:y + (patch_size + 2 * search_radius) // 2 + 1,
-            x - (patch_size + 2 * search_radius) // 2:x + (patch_size + 2 * search_radius) // 2 + 1,
-        ]
-        try:
-            offset = get_offset(ref_crop, img_crop, search_radius)
-        except:
-            offset = np.nan, np.nan
+        xmin = x - patch_size // 2
+        xmax = x + patch_size // 2 + 1
+        ymin = y - patch_size // 2
+        ymax = y + patch_size // 2 + 1
+        ref_crop = ref[ymin:ymax, xmin:xmax]
+
+        xmin_crop = xmin - search_radius
+        xmax_crop = xmax + search_radius
+        ymin_crop = ymin - search_radius
+        ymax_crop = ymax + search_radius
+        img_crop = img[ymin_crop:ymax_crop, xmin_crop:xmax_crop]
+        offset = get_offset(ref_crop, img_crop, search_radius)
         dy_out.append(offset[0])
         dx_out.append(offset[1])
     return dx_out, dy_out
+
+
+def align_offsets(fx, fy, dfx, dfy):
+    # Solve \Delta x = dx - y dtheta
+    #       \Delta y = dy + x dtheta
+    # for dx, dy, dtheta.
+    design = np.zeros((2*len(fx), 3))
+    design[:len(fx), 0] = 1.0
+    design[len(fx):, 1] = 1.0
+    design[:len(fx), 2] = -fy
+    design[len(fx):, 2] = fx
+    target = np.concatenate([dfx, dfy])
+    w = np.isfinite(target)
+    solution, *_ = np.linalg.lstsq(design[w], target[w])
+    delta = design@solution
+    return dfx - delta[:len(fx)], dfy - delta[len(fx):]
 
 
 def stamp_sets_to_stamps(stamp_sets):
@@ -164,35 +182,50 @@ def stamps_to_stamp_sets(stamps):
         stamp_set["test_ids"] = [metadata.getArray("EXP_ID")[i] for i in test_idxs]
 
         stamp_sets.append(stamp_set)
-        # metadata = stamps.metadata
-        # donut_ids = np.unique(metadata["DONUT_ID"])
-        # stamp_sets = []
-        # for donut_id in donut_ids:
-        #     ref_donut_idx = np.where(
-        #         (metadata["DONUT_ID"] == donut_id) & (metadata["EXP_ID"] == metadata["REF_ID"])
-        #     )[0][0]
-        #     ref = stamps[ref_donut_idx]
-        #     test_idxs = np.where(
-        #         (metadata["DONUT_ID"] == donut_id) & (metadata["EXP_ID"] != metadata["REF_ID"])
-        #     )[0]
-        #     tests = [stamps[i] for i in test_idxs]
-        #     offset_x = metadata["OFFSET_X"][test_idxs]
-        #     offset_y = metadata["OFFSET_Y"][test_idxs]
-        #     offsets = list(zip(offset_y, offset_x))
-
-        #     stamp_set = {}
-        #     stamp_set["donut_id"] = donut_id
-        #     stamp_set["ref"] = ref
-        #     stamp_set["ref_x"] = metadata["REF_X"][ref_donut_idx]
-        #     stamp_set["ref_y"] = metadata["REF_Y"][ref_donut_idx]
-        #     stamp_set["tests"] = tests
-        #     stamp_set["offsets"] = offsets
-        #     stamp_set["ref_id"] = metadata["REF_ID"][ref_donut_idx]
-        #     stamp_set["exp_ids"] = [metadata["EXP_ID"][i] for i in test_idxs]
-
-        #     stamp_sets.append(stamp_set)
 
     return stamp_sets
+
+
+def fit_displacements(
+    fx, fy, dfx, dfy, radius,
+):
+    # Filter outliers in absolute displacement
+    dfr = np.hypot(dfx, dfy)
+    quantiles = np.nanquantile(dfr, [0.25, 0.5, 0.75])
+    threshold = quantiles[0] + 4.0 * np.ptp(quantiles[[0,2]])
+
+    flag_0 = dfr < threshold
+
+    # Fit Zks to inliers
+    zkBasis = zernikeBasis(
+        28, fx, fy, R_outer=radius, R_inner=radius*0.62
+    )
+    wgood = np.isfinite(dfx) & np.isfinite(dfy) & flag_0
+    dx_coefs, *_ = np.linalg.lstsq(zkBasis.T[wgood], dfx[wgood])
+    dy_coefs, *_ = np.linalg.lstsq(zkBasis.T[wgood], dfy[wgood])
+    dx_fit = zkBasis.T @ dx_coefs
+    dy_fit = zkBasis.T @ dy_coefs
+
+    # Filter again on residuals to Zk fit
+    ddx = dfx - dx_fit
+    ddy = dfy - dy_fit
+    xquant = np.nanquantile(ddx, [0.25, 0.5, 0.75])
+    yquant = np.nanquantile(ddy, [0.25, 0.5, 0.75])
+    xiqr = np.ptp(xquant[[0,2]])
+    yiqr = np.ptp(yquant[[0,2]])
+    xmed = xquant[1]
+    ymed = yquant[1]
+    xgood = (ddx > xmed - 3*xiqr) & (ddx < xmed + 3*xiqr)
+    ygood = (ddy > ymed - 3*yiqr) & (ddy < ymed + 3*yiqr)
+    good = np.isfinite(dfx) & np.isfinite(dfy) & xgood & ygood
+
+    # Fit once more for the plot
+    dx_coefs, *_ = np.linalg.lstsq(zkBasis.T[good], dfx[good])
+    dy_coefs, *_ = np.linalg.lstsq(zkBasis.T[good], dfy[good])
+    dx_fit = zkBasis.T @ dx_coefs
+    dy_fit = zkBasis.T @ dy_coefs
+    return dx_fit, dy_fit, good
+
 
 class HartmannSensitivityAnalysisConnections(
     pipeBase.PipelineTaskConnections,
@@ -213,23 +246,29 @@ class HartmannSensitivityAnalysisConnections(
         isCalibration=True,
         lookupFunction=lookupStaticCalibrations,
     )
-    # hartmannDonuts = ct.Output(
-    #     doc="Output Hartmann donuts",
+    # hartmannStamps = ct.Output(
+    #     doc="Output Hartmann stamps",
     #     dimensions=("group", "instrument", "detector"),
-    #     storageClass="DonutStamps",
-    #     name="hartmann_donuts",
+    #     storageClass="Stamps",
+    #     name="hartmann_stamps",
+    # )
+    # hartmannDetectionTable = ct.Output(
+    #     doc="Output Hartmann detection table",
+    #     dimensions=("group", "instrument", "detector"),
+    #     storageClass="AstropyQTable",
+    #     name="hartmann_detection_table",
+    # )
+    # hartmannAnalysisTable = ct.Output(
+    #     doc="Output Hartmann sensitivity analysis table",
+    #     dimensions=("group", "instrument", "detector"),
+    #     storageClass="AstropyQTable",
+    #     name="hartmann_analysis_table",
     # )
     # hartmannPlot = ct.Output(
     #     doc="Output Hartmann sensitivity analysis plot",
     #     dimensions=("group", "instrument", "detector"),
     #     storageClass="Plot",
     #     name="hartmann_sensitivity_plot",
-    # )
-    # hartmannTable = ct.Output(
-    #     doc="Output Hartmann sensitivity analysis table",
-    #     dimensions=("group", "instrument", "detector"),
-    #     storageClass="AstropyQTable",
-    #     name="hartmann_sensitivity_table",
     # )
 
 
@@ -348,6 +387,7 @@ class HartmannSensitivityAnalysis(
         inputs = butlerQC.get(inputRefs)
         results = self.run(**inputs)
 
+
     def run(
         self,
         exposures,
@@ -357,6 +397,51 @@ class HartmannSensitivityAnalysis(
     ):
         config = self.config
 
+        reference_exposure, test_exposures = self.prepare_exposures(
+            exposures,
+            config.ref_index,
+            skip_isr=skip_isr,
+            **isr_kwargs
+        )
+        detections = self.detect(reference_exposure)
+
+        if self._display is not None:
+            self.update_display(reference_exposure, detections)
+
+        # Initial alignment of donuts
+        stamp_sets = self.get_aligned_stamp_sets(
+            reference_exposure,
+            test_exposures,
+            detections,
+        )
+        patch_table = self.match_all_patches(stamp_sets)
+        self.remove_net_shift_and_rotation(patch_table)
+        self.fit_displacements(patch_table)
+
+        if self.config.do_plot:
+            self.log.info("Making plot")
+            initial_fig = self.plot_initial(stamp_sets, patch_table)
+            final_fig = self.plot_final(stamp_sets, patch_table)
+        else:
+            initial_fig = None
+            final_fig = None
+
+        return pipeBase.Struct(
+            detections=detections,
+            stamp_sets=stamp_sets,
+            stamps=stamp_sets_to_stamps(stamp_sets),
+            patch_table=patch_table,
+            initial_fig=initial_fig,
+            final_fig=final_fig,
+        )
+
+    def prepare_exposures(
+        self,
+        exposures,
+        ref_index,
+        skip_isr=False,
+        **isr_kwargs
+    ):
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
         if not skip_isr:
             self.log.info("Running ISR on %d exposures", len(exposures))
@@ -365,7 +450,7 @@ class HartmannSensitivityAnalysis(
             self.log.info("Subtracting background")
             self.subtractBackground.run(exposure=exposure)
 
-        ref_index = config.ref_index
+        # Sort exposures and pick reference
         if ref_index < 0:
             ref_index = len(exposures) + ref_index
         reference_exposure = exposures[ref_index]
@@ -378,61 +463,7 @@ class HartmannSensitivityAnalysis(
         for exp in test_exposures:
             test_id = exp.info.getVisitInfo().id
             self.log.info("  test exposure: %d", test_id)
-
-        detections = self.detect(reference_exposure)
-        self.log.info("Detected %d donuts", len(detections))
-        self.log.info("Selected %d donuts for analysis", np.sum(detections["use"]))
-
-        if self._display is not None:
-            self.update_display(reference_exposure, detections)
-
-        self.log.info("Aligning stamps")
-        stamp_sets = self.get_aligned_stamp_sets(
-            reference_exposure,
-            test_exposures,
-            detections,
-        )
-        patch_table = None
-        for stamp_set in stamp_sets:
-            self.log.info(
-                "Processing stamp set %d", stamp_set["donut_id"]
-            )
-            fx, fy = self.choose_random_pupil_locations(
-                stamp_set["ref"],
-                self.config.n_pupil_positions
-            )
-            donut_patch_table = QTable()
-            donut_patch_table["fx"] = fx
-            donut_patch_table["fy"] = fy
-            for iexp, test_stamp in enumerate(stamp_set["tests"]):
-                dfx, dfy = match_patches(
-                    stamp_set["ref"].stamp_im.image.array,
-                    test_stamp.stamp_im.image.array,
-                    fx + self._template_size // 2,
-                    fy + self._template_size // 2,
-                    patch_size=30,
-                    search_radius=10,
-                )
-                donut_patch_table[f"dfx_{iexp}"] = dfx
-                donut_patch_table[f"dfy_{iexp}"] = dfy
-            donut_patch_table["donut_id"] = stamp_set["donut_id"]
-            if patch_table is None:
-                self.log.info("Creating patch table")
-                patch_table = donut_patch_table
-            else:
-                self.log.info("Extending patch table")
-                patch_table = vstack([patch_table, donut_patch_table])
-
-        # Make plots
-        # Write outputs
-
-        # Measure offsets between reference and test
-        return pipeBase.Struct(
-            detections=detections,
-            stamp_sets=stamp_sets,
-            stamps=stamp_sets_to_stamps(stamp_sets),
-            patch_table=patch_table,
-        )
+        return reference_exposure, test_exposures
 
     def detect(self, exposure):
         template = np.zeros(
@@ -520,6 +551,9 @@ class HartmannSensitivityAnalysis(
         idxs = subtable["idx"][:self.config.max_donuts]
         table["use"][~np.isin(table["idx"], idxs)] = False
 
+        self.log.info("Detected %d donuts", len(table))
+        self.log.info("Selected %d donuts for analysis", np.sum(table["use"]))
+
         return table
 
     def get_aligned_stamp_sets(
@@ -528,6 +562,7 @@ class HartmannSensitivityAnalysis(
         test_exposures,
         detections,
     ):
+        self.log.info("Aligning detections")
         stamp_size = self._template_size
         stamp_sets = []
         for detection in detections:
@@ -615,6 +650,64 @@ class HartmannSensitivityAnalysis(
         y = y[w]
         return x, y
 
+    def match_all_patches(
+        self,
+        stamp_sets,
+    ):
+        patch_table = None
+        for stamp_set in stamp_sets:
+            self.log.info(
+                "Processing stamp set %d", stamp_set["donut_id"]
+            )
+            fx, fy = self.choose_random_pupil_locations(
+                stamp_set["ref"],
+                self.config.n_pupil_positions
+            )
+            donut_patch_table = QTable()
+            donut_patch_table["fx"] = fx
+            donut_patch_table["fy"] = fy
+            for iexp, test_stamp in enumerate(stamp_set["tests"]):
+                dfx, dfy = match_patches(
+                    stamp_set["ref"].stamp_im.image.array,
+                    test_stamp.stamp_im.image.array,
+                    fx + self._template_size // 2,
+                    fy + self._template_size // 2,
+                    patch_size=30,
+                    search_radius=10,
+                )
+                donut_patch_table[f"dfx_{iexp}"] = dfx
+                donut_patch_table[f"dfy_{iexp}"] = dfy
+            donut_patch_table["donut_id"] = stamp_set["donut_id"]
+            if patch_table is None:
+                self.log.info("Creating patch table")
+                patch_table = donut_patch_table
+            else:
+                self.log.info("Extending patch table")
+                patch_table = vstack([patch_table, donut_patch_table])
+        return patch_table
+
+    def remove_net_shift_and_rotation(
+        self,
+        patch_table,
+    ):
+        self.log.info("Removing net shifts and rotations")
+        idxs = [int(col[4:]) for col in patch_table.colnames if col.startswith("dfx_")]
+        for idx in idxs:
+            patch_table[f"dfx_{idx}_aligned"] = np.nan
+            patch_table[f"dfy_{idx}_aligned"] = np.nan
+        for donut_id in np.unique(patch_table["donut_id"]):
+            wdonut = np.where(patch_table["donut_id"] == donut_id)[0]
+            fx = patch_table["fx"][wdonut]
+            fy = patch_table["fy"][wdonut]
+
+            for idx in idxs:
+                dfx = patch_table[f"dfx_{idx}"][wdonut]
+                dfy = patch_table[f"dfy_{idx}"][wdonut]
+
+                dfx_aligned, dfy_aligned = align_offsets(fx, fy, dfx, dfy)
+                patch_table[f"dfx_{idx}_aligned"][wdonut] = dfx_aligned
+                patch_table[f"dfy_{idx}_aligned"][wdonut] = dfy_aligned
+
     def update_display(
         self,
         exposure,
@@ -637,7 +730,173 @@ class HartmannSensitivityAnalysis(
             )
             self._display.dot(str(idx), x, y, ctype=color)
 
-    def plot(
-        self, referenceExposure, testExposures, offsetTable,
+    def plot_initial(
+        self, stamp_sets, patch_table
     ):
-        pass
+        ndonut = len(stamp_sets)
+        if ndonut == 0:
+            nexp = 0
+        else:
+            nexp = len(stamp_sets[0]["tests"])
+
+        fig = Figure(figsize=(3*nexp, 3*self.config.max_donuts))
+        grispec_kw = dict(
+            left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
+        )
+        axs = fig.subplots(
+            nrows=self.config.max_donuts,
+            ncols=nexp,
+            gridspec_kw=grispec_kw,
+            squeeze=False,
+        )
+
+        for idonut in range(self.config.max_donuts):
+            for iexp in range(nexp):
+                ax = axs[idonut][iexp]
+                if idonut >= ndonut or iexp >= nexp:
+                    fig.delaxes(ax)
+                    continue
+                stamp_set = stamp_sets[idonut]
+                if idonut == 0:
+                    ax.set_title(stamp_set["test_ids"][iexp])
+                if iexp == 0:
+                    label = (
+                        idonut,
+                        (int(stamp_set["ref_x"]), int(stamp_set["ref_y"]))
+                    )
+                    ax.set_ylabel(label)
+                coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
+                fx = np.array(coords["fx"])
+                fy = np.array(coords["fy"])
+                dfx = np.array(coords[f"dfx_{iexp}_aligned"])
+                dfy = np.array(coords[f"dfy_{iexp}_aligned"])
+
+                ax = axs[idonut][iexp]
+                vmax = np.quantile(stamp_set["ref"].stamp_im.image.array, 0.99)
+                resid = (
+                    stamp_set["ref"].stamp_im.image.array
+                    - stamp_set["tests"][iexp].stamp_im.image.array
+                )
+
+                ext = resid.shape[0] // 2
+                ax.imshow(
+                    resid,
+                    origin="lower",
+                    cmap="bwr", vmin=-vmax, vmax=vmax,
+                    extent=[-ext, ext, -ext, ext]
+                )
+                Q = ax.quiver(
+                    fx, fy, dfx, dfy,
+                    scale_units="xy", angles="xy", scale=0.1, pivot="middle"
+                )
+                ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_aspect("equal")
+        return fig
+
+    def fit_displacements(
+        self,
+        patch_table,
+    ):
+        donut_ids = np.unique(patch_table["donut_id"])
+        ndonut = len(donut_ids)
+        nexp = len([col for col in patch_table.colnames if col.startswith("dfx_") and col.endswith("_aligned")])
+        self.log.info("Fitting displacements for %d donuts and %d exposures", ndonut, nexp)
+
+        # Make room in table
+        for iexp in range(nexp):
+            patch_table[f"dfx_{iexp}_fit"] = np.nan
+            patch_table[f"dfy_{iexp}_fit"] = np.nan
+            patch_table[f"use_fit_{iexp}"] = False
+
+        for donut_id in donut_ids:
+            select = patch_table["donut_id"] == donut_id
+            fx = patch_table["fx"][select]
+            fy = patch_table["fy"][select]
+            for iexp in range(nexp):
+                dfx = patch_table[f"dfx_{iexp}_aligned"][select]
+                dfy = patch_table[f"dfy_{iexp}_aligned"][select]
+                dx_fit, dy_fit, use = fit_displacements(
+                    fx, fy, dfx, dfy, self._donut_radius
+                )
+                patch_table[f"dfx_{iexp}_fit"][select] = dx_fit
+                patch_table[f"dfy_{iexp}_fit"][select] = dy_fit
+                patch_table[f"use_fit_{iexp}"][select] = use
+
+    def plot_final(
+        self, stamp_sets, patch_table
+    ):
+        ndonut = len(stamp_sets)
+        if ndonut == 0:
+            nexp = 0
+        else:
+            nexp = len(stamp_sets[0]["tests"])
+
+        fig = Figure(figsize=(3*nexp, 3*self.config.max_donuts))
+        grispec_kw = dict(
+            left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
+        )
+        axs = fig.subplots(
+            nrows=self.config.max_donuts,
+            ncols=nexp,
+            gridspec_kw=grispec_kw,
+            squeeze=False,
+        )
+
+        for idonut in range(self.config.max_donuts):
+            for iexp in range(nexp):
+                ax = axs[idonut][iexp]
+                if idonut >= ndonut or iexp >= nexp:
+                    fig.delaxes(ax)
+                    continue
+                stamp_set = stamp_sets[idonut]
+                if idonut == 0:
+                    ax.set_title(stamp_set["test_ids"][iexp])
+                if iexp == 0:
+                    label = (
+                        idonut,
+                        (int(stamp_set["ref_x"]), int(stamp_set["ref_y"]))
+                    )
+                    ax.set_ylabel(label)
+                coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
+                fx = np.array(coords["fx"])
+                fy = np.array(coords["fy"])
+                dfx = np.array(coords[f"dfx_{iexp}_aligned"])
+                dfy = np.array(coords[f"dfy_{iexp}_aligned"])
+                dfx_fit = np.array(coords[f"dfx_{iexp}_fit"])
+                dfy_fit = np.array(coords[f"dfy_{iexp}_fit"])
+                wgood = np.array(coords[f"use_fit_{iexp}"], dtype=bool)
+
+                ax = axs[idonut][iexp]
+                vmax = np.quantile(stamp_set["ref"].stamp_im.image.array, 0.99)
+                resid = (
+                    stamp_set["ref"].stamp_im.image.array
+                    - stamp_set["tests"][iexp].stamp_im.image.array
+                )
+
+                ext = resid.shape[0] // 2
+                ax.imshow(
+                    resid,
+                    origin="lower",
+                    cmap="bwr", vmin=-vmax, vmax=vmax,
+                    extent=[-ext, ext, -ext, ext]
+                )
+                Q = ax.quiver(
+                    fx[wgood], fy[wgood], dfx[wgood], dfy[wgood], color="g",
+                    scale_units="xy", angles="xy", scale=0.1, pivot="middle", width=0.002
+                )
+                ax.quiver(
+                    fx[~wgood], fy[~wgood], dfx[~wgood], dfy[~wgood], color="r",
+                    scale_units="xy", angles="xy", scale=0.1, pivot="middle", width=0.002
+                )
+                ax.quiver(
+                    fx[wgood], fy[wgood], dfx_fit[wgood], dfy_fit[wgood],
+                    color="k", alpha=0.2, width=0.004,
+                    scale_units="xy", angles="xy", scale=0.1, pivot="middle"
+                )
+                ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_aspect("equal")
+        return fig
