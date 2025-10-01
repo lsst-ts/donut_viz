@@ -741,7 +741,8 @@ class HartmannSensitivityAnalysis(
         else:
             nexp = len(stamp_sets[0]["tests"])
 
-        fig = Figure(figsize=(3 * self.config.max_exp_plot, 3 * self.config.max_donuts))
+        figsize = (3 * self.config.max_exp_plot, 3 * self.config.max_donuts)
+        fig = Figure(figsize=figsize, dpi=200)
         grispec_kw = dict(
             left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
         )
@@ -849,7 +850,8 @@ class HartmannSensitivityAnalysis(
         else:
             nexp = len(stamp_sets[0]["tests"])
 
-        fig = Figure(figsize=(3 * self.config.max_exp_plot, 3 * self.config.max_donuts))
+        figsize = (3 * self.config.max_exp_plot, 3 * self.config.max_donuts)
+        fig = Figure(figsize=figsize, dpi=200)
         grispec_kw = dict(
             left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
         )
