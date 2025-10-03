@@ -30,9 +30,9 @@ __all__ = [
 ]
 
 
-def predict_ccd_from_OCS(telescope, x_OCS, y_OCS, det):
+def predict_ccd_from_ocs(telescope, x_ocs, y_ocs, det):
     cr = batoid.RayVector.fromStop(
-        x=0.0, y=0.0, optic=telescope, wavelength=700e-9, theta_x=x_OCS, theta_y=y_OCS
+        x=0.0, y=0.0, optic=telescope, wavelength=700e-9, theta_x=x_ocs, theta_y=y_ocs
     )
     fp = telescope.trace(cr)
     x_ccd, y_ccd = det.transform(
@@ -239,8 +239,8 @@ def stamp_sets_to_stamps(stamp_sets):
         metadata["EXP_ID"].extend([stamp_set["ref_id"]] + stamp_set["test_ids"])
         metadata["DONUT_ID"].extend([stamp_set["donut_id"]] * nstamp)
         metadata["REF_ID"].extend([stamp_set["ref_id"]] * nstamp)
-        metadata["REF_X"].extend([stamp_set["ref_x"]] * nstamp)
-        metadata["REF_Y"].extend([stamp_set["ref_y"]] * nstamp)
+        metadata["X_REF"].extend([stamp_set["x_ref_ccd_dvcs"]] * nstamp)
+        metadata["Y_REF"].extend([stamp_set["y_ref_ccd_dvcs"]] * nstamp)
         metadata["OFFSET_X"].extend([0.0] + [off[1] for off in stamp_set["offsets"]])
         metadata["OFFSET_Y"].extend([0.0] + [off[0] for off in stamp_set["offsets"]])
     out = Stamps(all_stamps)
@@ -271,8 +271,8 @@ def stamps_to_stamp_sets(stamps):
         stamp_set = {}
         stamp_set["donut_id"] = donut_id
         stamp_set["ref"] = ref
-        stamp_set["ref_x"] = metadata.getArray("REF_X")[ref_donut_idx]
-        stamp_set["ref_y"] = metadata.getArray("REF_Y")[ref_donut_idx]
+        stamp_set["x_ref_CCD_DVCS"] = metadata.getArray("X_REF")[ref_donut_idx]
+        stamp_set["y_ref_CCD_DVCS"] = metadata.getArray("Y_REF")[ref_donut_idx]
         stamp_set["tests"] = tests
         stamp_set["offsets"] = offsets
         stamp_set["ref_id"] = metadata.getArray("REF_ID")[ref_donut_idx]
@@ -601,23 +601,22 @@ class HartmannSensitivityAnalysis(
 
         table = QTable()
         table["idx"] = np.arange(len(peaks), dtype=np.int32)
-        table["ref_x"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
-        table["ref_y"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
+        table["x_ref_ccd_dvcs"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
+        table["y_ref_ccd_dvcs"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
         fluxes = []
         inner_fluxes = []
         outer_fluxes = []
-        x_ocs = []
-        y_ocs = []
+        x_field_ocs = []
+        y_field_ocs = []
         for peak in peaks:
-            ref_x = peak[1] * self.config.bin_size
-            ref_y = peak[0] * self.config.bin_size
+            x_ccd_dvcs = peak[1] * self.config.bin_size
+            y_ccd_dvcs = peak[0] * self.config.bin_size
             # Get OCS coordinates
-            ref_x_DVCS, ref_y_DVCS = exposure.getDetector().transform(
-                Point2D(ref_x, ref_y), PIXELS, FIELD_ANGLE
+            x_field_dvcs, y_field_dvcs = exposure.getDetector().transform(
+                Point2D(x_ccd_dvcs, y_ccd_dvcs), PIXELS, FIELD_ANGLE
             )
-            ref_x_OCS, ref_y_OCS = ref_y_DVCS, ref_x_DVCS
-            x_ocs.append(ref_x_OCS)
-            y_ocs.append(ref_y_OCS)
+            x_field_ocs.append(y_field_dvcs)
+            y_field_ocs.append(x_field_dvcs)
 
             xmin = peak[1] - self._binned_template_size // 2
             xmax = peak[1] + self._binned_template_size // 2 + 1
@@ -646,8 +645,8 @@ class HartmannSensitivityAnalysis(
             fluxes.append(np.nansum(stamp * template))
             inner_fluxes.append(np.nansum(stamp * inner_hole))
             outer_fluxes.append(np.nansum(stamp * outer_annulus))
-        table["ref_x_OCS"] = np.array(x_ocs, dtype=np.float32)
-        table["ref_y_OCS"] = np.array(y_ocs, dtype=np.float32)
+        table["x_ref_field_ocs"] = np.array(x_field_ocs, dtype=np.float32)
+        table["y_ref_field_ocs"] = np.array(y_field_ocs, dtype=np.float32)
         table["flux"] = np.array(fluxes, dtype=np.float32)
         table["inner_flux"] = np.array(inner_fluxes, dtype=np.float32)
         table["outer_flux"] = np.array(outer_fluxes, dtype=np.float32)
@@ -706,23 +705,23 @@ class HartmannSensitivityAnalysis(
             self.log.info(
                 "  Aligning detection %d at (x,y)=(%d,%d)",
                 detection["idx"],
-                detection["ref_x"],
-                detection["ref_y"],
+                detection["x_ref_ccd_dvcs"],
+                detection["y_ref_ccd_dvcs"],
             )
-            ref_x, ref_y = detection[["ref_x", "ref_y"]]
-            ref_x_OCS, ref_y_OCS = detection[["ref_x_OCS", "ref_y_OCS"]]
-            ref_x_predict, ref_y_predict = predict_ccd_from_OCS(
+            x_ref_ccd_dvcs, y_ref_ccd_dvcs = detection[["x_ref_ccd_dvcs", "y_ref_ccd_dvcs"]]
+            x_ref_field_ocs, y_ref_field_ocs = detection[["x_ref_field_ocs", "y_ref_field_ocs"]]
+            x_ref_predict, y_ref_predict = predict_ccd_from_ocs(
                 reference_telescope,
-                ref_x_OCS,
-                ref_y_OCS,
+                x_ref_field_ocs,
+                y_ref_field_ocs,
                 reference_exposure.getDetector(),
             )
 
             # Extract stamp from reference
-            xmin = ref_x - stamp_size // 2
-            xmax = ref_x + stamp_size // 2 + 1
-            ymin = ref_y - stamp_size // 2
-            ymax = ref_y + stamp_size // 2 + 1
+            xmin = x_ref_ccd_dvcs - stamp_size // 2
+            xmax = x_ref_ccd_dvcs + stamp_size // 2 + 1
+            ymin = y_ref_ccd_dvcs - stamp_size // 2
+            ymax = y_ref_ccd_dvcs + stamp_size // 2 + 1
             box = Box2I(Point2I(xmin, ymin), Extent2I(xmax - xmin, ymax - ymin))
             try:
                 ref_stamp = Stamp(reference_exposure.maskedImage[box])
@@ -739,16 +738,16 @@ class HartmannSensitivityAnalysis(
             test_stamps = []
             for test_exposure, test_telescope in zip(test_exposures, test_telescopes):
                 # Get expected position in test exposure
-                test_x_predict, test_y_predict = predict_ccd_from_OCS(
+                x_test_predict, y_test_predict = predict_ccd_from_ocs(
                     test_telescope,
-                    ref_x_OCS,
-                    ref_y_OCS,
+                    x_ref_field_ocs,
+                    y_ref_field_ocs,
                     test_exposure.getDetector(),
                 )
-                test_xmin = xmin + int(round(test_x_predict - ref_x_predict))
-                test_xmax = xmax + int(round(test_x_predict - ref_x_predict))
-                test_ymin = ymin + int(round(test_y_predict - ref_y_predict))
-                test_ymax = ymax + int(round(test_y_predict - ref_y_predict))
+                test_xmin = xmin + int(round(x_test_predict - x_ref_predict))
+                test_xmax = xmax + int(round(x_test_predict - x_ref_predict))
+                test_ymin = ymin + int(round(y_test_predict - y_ref_predict))
+                test_ymax = ymax + int(round(y_test_predict - y_ref_predict))
                 test_box = Box2I(
                     Point2I(test_xmin, test_ymin),
                     Extent2I(test_xmax - test_xmin, test_ymax - test_ymin),
@@ -803,8 +802,8 @@ class HartmannSensitivityAnalysis(
                 dict(
                     donut_id=detection["idx"],
                     ref=ref_stamp,
-                    ref_x=ref_x,
-                    ref_y=ref_y,
+                    x_ref_ccd_dvcs=x_ref_ccd_dvcs,
+                    y_ref_ccd_dvcs=y_ref_ccd_dvcs,
                     tests=test_stamps,
                     offsets=offsets,
                     ref_id=reference_exposure.info.getVisitInfo().id,
@@ -843,6 +842,7 @@ class HartmannSensitivityAnalysis(
         w = rng.choice(len(x), size=n_positions, replace=False)
         x = x[w]
         y = y[w]
+        # Parallel to DVCS
         return x, y
 
     def match_all_patches(
@@ -911,7 +911,7 @@ class HartmannSensitivityAnalysis(
         self._display.mtv(exposure)
 
         for idx, source in enumerate(donutCatalog):
-            x, y = source["ref_x"], source["ref_y"]
+            x, y = source["x_ref_ccd_dvcs"], source["y_ref_ccd_dvcs"]
             use = source["flux"] > self.config.min_flux
             use = use and source["inner_ratio"] < self.config.max_inner_ratio
             use = use and source["outer_ratio"] < self.config.max_outer_ratio
@@ -952,7 +952,7 @@ class HartmannSensitivityAnalysis(
                 if idonut == 0:
                     ax.set_title(stamp_set["test_ids"][iexp])
                 if iexp == 0:
-                    label = (idonut, (int(stamp_set["ref_x"]), int(stamp_set["ref_y"])))
+                    label = (idonut, (int(stamp_set["x_ref_ccd_dvcs"]), int(stamp_set["y_ref_ccd_dvcs"])))
                     ax.set_ylabel(label)
                 coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
                 fx = np.array(coords["fx"])
@@ -1061,7 +1061,7 @@ class HartmannSensitivityAnalysis(
                 if idonut == 0:
                     ax.set_title(stamp_set["test_ids"][iexp])
                 if iexp == 0:
-                    label = (idonut, (int(stamp_set["ref_x"]), int(stamp_set["ref_y"])))
+                    label = (idonut, (int(stamp_set["x_ref_ccd_dvcs"]), int(stamp_set["y_ref_ccd_dvcs"])))
                     ax.set_ylabel(label)
                 coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
                 fx = np.array(coords["fx"])
