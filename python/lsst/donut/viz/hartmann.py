@@ -1,16 +1,24 @@
 from collections import defaultdict
+from functools import lru_cache
 
+import astropy.units as u
+import batoid
 import lsst.afw.math as afwMath
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
 import numpy as np
 from astropy.table import QTable, vstack
+from batoid_rubin import LSSTBuilder
 from galsim.zernike import zernikeBasis
-from lsst.geom import Box2I, Extent2I, Point2I
+from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE, PIXELS
+from lsst.geom import Box2I, Extent2I, Point2D, Point2I
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import Stamp, Stamps, SubtractBackgroundTask
 from lsst.pex.exceptions import LengthError
+from lsst.summit.utils.efdUtils import getEfdData, getMostRecentRowWithDataBefore
+from lsst.ts.ofc import BendModeToForce, OFCData
+from lsst_efd_client import EfdClient
 from matplotlib.figure import Figure
 from scipy.signal import correlate
 from skimage.feature import peak_local_max
@@ -20,6 +28,89 @@ __all__ = [
     "HartmannSensitivityAnalysisConnections",
     "HartmannSensitivityAnalysis",
 ]
+
+
+def predict_ccd_from_OCS(telescope, x_OCS, y_OCS, det):
+    cr = batoid.RayVector.fromStop(
+        x=0.0, y=0.0, optic=telescope, wavelength=700e-9, theta_x=x_OCS, theta_y=y_OCS
+    )
+    fp = telescope.trace(cr)
+    x_ccd, y_ccd = det.transform(
+        Point2D(fp.y[0] * 1e3, fp.x[0] * 1e3), FOCAL_PLANE, PIXELS
+    )
+    return x_ccd, y_ccd
+
+
+@lru_cache
+def get_m2_bmf():
+    """Get the M2 BendModeToForce object"""
+    return BendModeToForce("M2", OFCData("lsst"))
+
+
+@lru_cache
+def get_m1m3_bmf():
+    """Get the M1M3 BendModeToForce object"""
+    return BendModeToForce("M1M3", OFCData("lsst"))
+
+
+def get_state(exposure, efd_client):
+    visitInfo = exposure.info.getVisitInfo()
+    begin = visitInfo.date.toAstropy()
+    begin -= visitInfo.exposureTime * u.s / 2
+    end = begin + visitInfo.exposureTime * u.s
+
+    out = np.zeros(50, dtype=np.float64)
+
+    m2_df = getMostRecentRowWithDataBefore(
+        efd_client,
+        "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
+        timeToLookBefore=end,
+        where=lambda df: df["salIndex"] == 2,
+    )
+    out[0] = m2_df["z"]
+    out[1] = m2_df["x"]
+    out[2] = m2_df["y"]
+    out[3] = m2_df["u"]
+    out[4] = m2_df["v"]
+
+    cam_df = getMostRecentRowWithDataBefore(
+        efd_client,
+        "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
+        timeToLookBefore=end,
+        where=lambda df: df["salIndex"] == 1,
+    )
+    out[5] = cam_df["z"]
+    out[6] = cam_df["x"]
+    out[7] = cam_df["y"]
+    out[8] = cam_df["u"]
+    out[9] = cam_df["v"]
+
+    m1m3_event = getMostRecentRowWithDataBefore(
+        efd_client,
+        "lsst.sal.MTM1M3.logevent_appliedActiveOpticForces",
+        timeToLookBefore=end,
+    )
+    m1m3_forces = np.empty((156,))
+    for i in range(156):
+        m1m3_forces[i] = m1m3_event[f"zForces{i}"]
+    out[10:30] = get_m1m3_bmf().bending_mode(m1m3_forces)
+
+    m2_telemetry = QTable.from_pandas(
+        getEfdData(
+            efd_client,
+            "lsst.sal.MTM2.axialForce",
+            begin=begin,
+            end=end,
+        )
+    )
+    nrow = len(m2_telemetry)
+    m2_forces = np.empty((nrow, 72), dtype=np.float64)
+    for i in range(72):
+        m2_forces[:, i] = m2_telemetry[f"applied{i}"]
+    m2_forces = np.mean(m2_forces, axis=0)
+    out[30:] = get_m2_bmf().bending_mode(m2_forces)
+
+    return out
 
 
 def get_parabola_vertex(v_m1, v_0, v_p1):
@@ -407,18 +498,35 @@ class HartmannSensitivityAnalysis(
         if self._display is not None:
             self.update_display(reference_exposure, detections)
 
-        # Initial alignment of donuts
-        stamp_sets = self.get_aligned_stamp_sets(
-            reference_exposure,
-            test_exposures,
-            detections,
-        )
+        if sum(detections["use"]) == 0:
+            stamp_sets = []
+        else:
+            efd_client = EfdClient("usdf_efd")
+            ref_state = get_state(reference_exposure, efd_client)
+            test_states = [get_state(exp, efd_client) for exp in test_exposures]
+
+            # Make optics
+            band = reference_exposure.filter.bandLabel
+            ref_telescope = self.get_telescope(band, ref_state - ref_state)
+            test_telescopes = [
+                self.get_telescope(band, ts - ref_state) for ts in test_states
+            ]
+
+            # Initial alignment of donuts
+            stamp_sets = self.get_aligned_stamp_sets(
+                reference_exposure,
+                test_exposures,
+                ref_telescope,
+                test_telescopes,
+                detections,
+            )
+
         patch_table = self.match_all_patches(stamp_sets)
         self.remove_net_shift_and_rotation(patch_table)
         self.fit_displacements(patch_table)
 
         if self.config.do_plot:
-            self.log.info("Making plot")
+            self.log.info("Making plots")
             initial_fig = self.plot_initial(stamp_sets, patch_table)
             filtered_fig = self.plot_filtered(stamp_sets, patch_table)
         else:
@@ -439,8 +547,8 @@ class HartmannSensitivityAnalysis(
         if run_isr:
             self.log.info("Running ISR on %d exposures", len(exposures))
             exposures = [self.isr.run(exp, **isr_kwargs).exposure for exp in exposures]
+        self.log.info("Subtracting background")
         for exposure in exposures:
-            self.log.info("Subtracting background")
             self.subtractBackground.run(exposure=exposure)
 
         # Sort exposures and pick reference
@@ -498,7 +606,19 @@ class HartmannSensitivityAnalysis(
         fluxes = []
         inner_fluxes = []
         outer_fluxes = []
+        x_ocs = []
+        y_ocs = []
         for peak in peaks:
+            ref_x = peak[1] * self.config.bin_size
+            ref_y = peak[0] * self.config.bin_size
+            # Get OCS coordinates
+            ref_x_DVCS, ref_y_DVCS = exposure.getDetector().transform(
+                Point2D(ref_x, ref_y), PIXELS, FIELD_ANGLE
+            )
+            ref_x_OCS, ref_y_OCS = ref_y_DVCS, ref_x_DVCS
+            x_ocs.append(ref_x_OCS)
+            y_ocs.append(ref_y_OCS)
+
             xmin = peak[1] - self._binned_template_size // 2
             xmax = peak[1] + self._binned_template_size // 2 + 1
             ymin = peak[0] - self._binned_template_size // 2
@@ -526,6 +646,8 @@ class HartmannSensitivityAnalysis(
             fluxes.append(np.nansum(stamp * template))
             inner_fluxes.append(np.nansum(stamp * inner_hole))
             outer_fluxes.append(np.nansum(stamp * outer_annulus))
+        table["ref_x_OCS"] = np.array(x_ocs, dtype=np.float32)
+        table["ref_y_OCS"] = np.array(y_ocs, dtype=np.float32)
         table["flux"] = np.array(fluxes, dtype=np.float32)
         table["inner_flux"] = np.array(inner_fluxes, dtype=np.float32)
         table["outer_flux"] = np.array(outer_fluxes, dtype=np.float32)
@@ -546,10 +668,33 @@ class HartmannSensitivityAnalysis(
 
         return table
 
+    def get_telescope(self, band, state):
+        # Handle sign flips and unit conversions
+        state = np.array(state)
+        state[[0, 1, 3, 5, 6, 8]] *= -1  # z and x are flipped
+        state[30:] *= -1  # M2 modes are flipped
+        state[[3, 4, 8, 9]] *= 3600  # deg to arcsec
+
+        fiducial = (
+            batoid.Optic.fromYaml(f"LSST_{band}.yaml")
+            .withGloballyShiftedOptic("M2", [0, 0, self.config.m2_dz * 1e-3])
+            .withGloballyShiftedOptic("LSSTCamera", [0, 0, self.config.cam_dz * 1e-3])
+        )
+
+        builder = LSSTBuilder(
+            fiducial,
+            fea_dir="/home/j/jmeyers3/.local/batoid_rubin_data",
+            bend_dir="/home/j/jmeyers3/.local/batoid_rubin_data",
+        )
+        builder = builder.with_aos_dof(state)
+        return builder.build()
+
     def get_aligned_stamp_sets(
         self,
         reference_exposure,
         test_exposures,
+        reference_telescope,
+        test_telescopes,
         detections,
     ):
         self.log.info("Aligning detections")
@@ -559,12 +704,19 @@ class HartmannSensitivityAnalysis(
             if not detection["use"]:
                 continue
             self.log.info(
-                "Aligning detection %d at (x,y)=(%d,%d)",
+                "  Aligning detection %d at (x,y)=(%d,%d)",
                 detection["idx"],
                 detection["ref_x"],
                 detection["ref_y"],
             )
             ref_x, ref_y = detection[["ref_x", "ref_y"]]
+            ref_x_OCS, ref_y_OCS = detection[["ref_x_OCS", "ref_y_OCS"]]
+            ref_x_predict, ref_y_predict = predict_ccd_from_OCS(
+                reference_telescope,
+                ref_x_OCS,
+                ref_y_OCS,
+                reference_exposure.getDetector(),
+            )
 
             # Extract stamp from reference
             xmin = ref_x - stamp_size // 2
@@ -585,9 +737,38 @@ class HartmannSensitivityAnalysis(
 
             offsets = []
             test_stamps = []
-            for test_exposure in test_exposures:
-                test_stamp_arr = test_exposure.image.array[ymin:ymax, xmin:xmax]
-                offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=30)
+            for test_exposure, test_telescope in zip(test_exposures, test_telescopes):
+                # Get expected position in test exposure
+                test_x_predict, test_y_predict = predict_ccd_from_OCS(
+                    test_telescope,
+                    ref_x_OCS,
+                    ref_y_OCS,
+                    test_exposure.getDetector(),
+                )
+                test_xmin = xmin + int(round(test_x_predict - ref_x_predict))
+                test_xmax = xmax + int(round(test_x_predict - ref_x_predict))
+                test_ymin = ymin + int(round(test_y_predict - ref_y_predict))
+                test_ymax = ymax + int(round(test_y_predict - ref_y_predict))
+                test_box = Box2I(
+                    Point2I(test_xmin, test_ymin),
+                    Extent2I(test_xmax - test_xmin, test_ymax - test_ymin),
+                )
+                if (
+                    test_xmin < 0
+                    or test_ymin < 0
+                    or test_xmax > test_exposure.image.array.shape[1]
+                    or test_ymax > test_exposure.image.array.shape[0]
+                ):
+                    detection["use"] = False
+                    self.log.warn(
+                        "  Aligned stamp for detection %d in exposure %d would be out of bounds; skipping",
+                        detection["idx"],
+                        test_exposure.info.getVisitInfo().id,
+                    )
+                    break
+                test_stamp = Stamp(test_exposure.maskedImage[test_box])
+                test_stamp_arr = test_stamp.stamp_im.image.array
+                offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=60)
                 if not np.isfinite(offset).all():
                     detection["use"] = False
                     self.log.warn(
@@ -598,8 +779,11 @@ class HartmannSensitivityAnalysis(
                     break
                 offsets.append(offset)
                 test_box = Box2I(
-                    Point2I(xmin + int(round(offset[1])), ymin + int(round(offset[0]))),
-                    Extent2I(xmax - xmin, ymax - ymin),
+                    Point2I(
+                        test_xmin + int(round(offset[1])),
+                        test_ymin + int(round(offset[0])),
+                    ),
+                    Extent2I(test_xmax - test_xmin, test_ymax - test_ymin),
                 )
                 try:
                     test_stamp = Stamp(test_exposure.maskedImage[test_box])
@@ -629,7 +813,9 @@ class HartmannSensitivityAnalysis(
             )
         return stamp_sets
 
-    def choose_random_pupil_locations(self, stamp, n_positions):
+    def choose_random_pupil_locations(self, stamp_set, n_positions):
+        # Use danish to match pupil locations to image locations
+        stamp = stamp_set["ref"]
         radius = self._donut_radius
         template_size = self._template_size
         template = np.zeros((template_size, template_size), dtype=bool)
@@ -651,7 +837,7 @@ class HartmannSensitivityAnalysis(
         expanded_template[r < radius * 0.62 * 0.9] = False
 
         rng = np.random.Generator(np.random.PCG64(self.config.rng_seed))
-        wx, wy = np.where((arr > threshold) & (expanded_template))
+        wy, wx = np.where((arr > threshold) & (expanded_template))
         x = x.ravel()[wx]
         y = y.ravel()[wy]
         w = rng.choice(len(x), size=n_positions, replace=False)
@@ -665,14 +851,15 @@ class HartmannSensitivityAnalysis(
     ):
         patch_table = None
         for stamp_set in stamp_sets:
-            self.log.info("Processing stamp set %d", stamp_set["donut_id"])
+            self.log.info("Matching patches in donut %d", stamp_set["donut_id"])
             fx, fy = self.choose_random_pupil_locations(
-                stamp_set["ref"], self.config.n_pupil_positions
+                stamp_set, self.config.n_pupil_positions
             )
             donut_patch_table = QTable()
             donut_patch_table["fx"] = fx
             donut_patch_table["fy"] = fy
             for iexp, test_stamp in enumerate(stamp_set["tests"]):
+                self.log.info("  Matching in exposure %d", stamp_set["test_ids"][iexp])
                 dfx, dfy = match_patches(
                     stamp_set["ref"].stamp_im.image.array,
                     test_stamp.stamp_im.image.array,
@@ -685,10 +872,8 @@ class HartmannSensitivityAnalysis(
                 donut_patch_table[f"dfy_{iexp}"] = dfy
             donut_patch_table["donut_id"] = stamp_set["donut_id"]
             if patch_table is None:
-                self.log.info("Creating patch table")
                 patch_table = donut_patch_table
             else:
-                self.log.info("Extending patch table")
                 patch_table = vstack([patch_table, donut_patch_table])
         return patch_table
 
