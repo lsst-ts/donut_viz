@@ -410,9 +410,13 @@ class HartmannSensitivityAnalysisConfig(
         doc="Defocus offset for the camera in mm",
         default=4.0,
     )
+    det_dz = pexConfig.Field[float](
+        doc="Defocus offset for the detector in mm",
+        default=0.0,
+    )
     min_flux = pexConfig.Field[float](
         doc="Minimum flux for analysis",
-        default=3e6,
+        default=2e6,
     )
     max_inner_ratio = pexConfig.Field[float](
         doc="Maximum inner/total flux ratio for analysis",
@@ -493,8 +497,10 @@ class HartmannSensitivityAnalysis(
         self.makeSubtask("subtractBackground")
         self._display = display
 
-        self._defocus = abs(self.config.m2_dz + self.config.cam_dz)
-        self._donut_diam = 680.0 / 8.0 * self._defocus
+        self._defocus = np.abs(
+            self.config.m2_dz + self.config.cam_dz + self.config.det_dz
+        )
+        self._donut_diam = 680.0 / 8.0 * self._defocus  # ~680 pixels for 8mm defocus
         self._donut_radius = self._donut_diam / 2
         self._binned_template_size = int(self._donut_diam * 1.15 / self.config.bin_size)
         if self._binned_template_size % 2 == 0:
@@ -524,29 +530,7 @@ class HartmannSensitivityAnalysis(
         if self._display is not None:
             self.update_display(reference_exposure, detections)
 
-        if sum(detections["use"]) == 0:
-            stamp_sets = []
-        else:
-            efd_client = EfdClient("usdf_efd")
-            ref_state = get_state(reference_exposure, efd_client)
-            test_states = [get_state(exp, efd_client) for exp in test_exposures]
-
-            # Make optics
-            band = reference_exposure.filter.bandLabel
-            ref_telescope = self.get_telescope(band, ref_state - ref_state)
-            test_telescopes = [
-                self.get_telescope(band, ts - ref_state) for ts in test_states
-            ]
-
-            # Initial alignment of donuts
-            stamp_sets = self.get_aligned_stamp_sets(
-                reference_exposure,
-                test_exposures,
-                ref_telescope,
-                test_telescopes,
-                detections,
-            )
-
+        stamp_sets = self.get_initial_stamp_sets(detections, reference_exposure, test_exposures)
         patch_table = self.match_all_patches(stamp_sets)
         self.remove_net_shift_and_rotation(patch_table)
         self.fit_displacements(patch_table)
@@ -706,6 +690,30 @@ class HartmannSensitivityAnalysis(
 
         return table
 
+    def get_initial_stamp_sets(self, detections, reference_exposure, test_exposures):
+        if sum(detections["use"]) == 0:
+            return []
+        efd_client = EfdClient("usdf_efd")
+        ref_state = get_state(reference_exposure, efd_client)
+        test_states = [get_state(exp, efd_client) for exp in test_exposures]
+
+        # Make optics
+        band = reference_exposure.filter.bandLabel
+        ref_telescope = self.get_telescope(band, ref_state - ref_state)
+        test_telescopes = [
+            self.get_telescope(band, ts - ref_state) for ts in test_states
+        ]
+
+        # Initial alignment of donuts
+        stamp_sets = self.get_aligned_stamp_sets(
+            reference_exposure,
+            test_exposures,
+            ref_telescope,
+            test_telescopes,
+            detections,
+        )
+        return stamp_sets
+
     def get_telescope(self, band, state):
         # Handle sign flips and unit conversions
         state = np.array(state)
@@ -717,6 +725,7 @@ class HartmannSensitivityAnalysis(
             batoid.Optic.fromYaml(f"LSST_{band}.yaml")
             .withGloballyShiftedOptic("M2", [0, 0, self.config.m2_dz * 1e-3])
             .withGloballyShiftedOptic("LSSTCamera", [0, 0, self.config.cam_dz * 1e-3])
+            .withGloballyShiftedOptic("Detector", [0, 0, self.config.det_dz * 1e-3])
         )
 
         builder = LSSTBuilder(
@@ -857,6 +866,38 @@ class HartmannSensitivityAnalysis(
             )
         return stamp_sets
 
+    def match_all_patches(
+        self,
+        stamp_sets,
+    ):
+        patch_table = None
+        for stamp_set in stamp_sets:
+            self.log.info("Matching patches in donut %d", stamp_set["donut_id"])
+            fx, fy = self.choose_random_pupil_locations(
+                stamp_set, self.config.n_pupil_positions
+            )
+            donut_patch_table = QTable()
+            donut_patch_table["fx"] = fx
+            donut_patch_table["fy"] = fy
+            for iexp, test_stamp in enumerate(stamp_set["tests"]):
+                self.log.info("  Matching in exposure %d", stamp_set["test_ids"][iexp])
+                dfx, dfy = match_patches(
+                    stamp_set["ref"].stamp_im.image.array,
+                    test_stamp.stamp_im.image.array,
+                    fx + self._template_size // 2,
+                    fy + self._template_size // 2,
+                    patch_size=30,
+                    search_radius=10,
+                )
+                donut_patch_table[f"dfx_{iexp}"] = dfx
+                donut_patch_table[f"dfy_{iexp}"] = dfy
+            donut_patch_table["donut_id"] = stamp_set["donut_id"]
+            if patch_table is None:
+                patch_table = donut_patch_table
+            else:
+                patch_table = vstack([patch_table, donut_patch_table])
+        return patch_table
+
     def choose_random_pupil_locations(self, stamp_set, n_positions):
         # Use danish to match pupil locations to image locations
         stamp = stamp_set["ref"]
@@ -889,38 +930,6 @@ class HartmannSensitivityAnalysis(
         y = y[w]
         # Parallel to DVCS
         return x, y
-
-    def match_all_patches(
-        self,
-        stamp_sets,
-    ):
-        patch_table = None
-        for stamp_set in stamp_sets:
-            self.log.info("Matching patches in donut %d", stamp_set["donut_id"])
-            fx, fy = self.choose_random_pupil_locations(
-                stamp_set, self.config.n_pupil_positions
-            )
-            donut_patch_table = QTable()
-            donut_patch_table["fx"] = fx
-            donut_patch_table["fy"] = fy
-            for iexp, test_stamp in enumerate(stamp_set["tests"]):
-                self.log.info("  Matching in exposure %d", stamp_set["test_ids"][iexp])
-                dfx, dfy = match_patches(
-                    stamp_set["ref"].stamp_im.image.array,
-                    test_stamp.stamp_im.image.array,
-                    fx + self._template_size // 2,
-                    fy + self._template_size // 2,
-                    patch_size=30,
-                    search_radius=10,
-                )
-                donut_patch_table[f"dfx_{iexp}"] = dfx
-                donut_patch_table[f"dfy_{iexp}"] = dfy
-            donut_patch_table["donut_id"] = stamp_set["donut_id"]
-            if patch_table is None:
-                patch_table = donut_patch_table
-            else:
-                patch_table = vstack([patch_table, donut_patch_table])
-        return patch_table
 
     def remove_net_shift_and_rotation(
         self,
