@@ -8,6 +8,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
 import numpy as np
+from astropy.coordinates import Angle
 from astropy.table import QTable, vstack
 from batoid_rubin import LSSTBuilder
 from galsim.zernike import zernikeBasis
@@ -30,15 +31,40 @@ __all__ = [
 ]
 
 
-def predict_ccd_from_ocs(telescope, x_ocs, y_ocs, det):
+def ccs_to_ocs(x_ccs: float, y_ccs: float, rtp: Angle) -> tuple[float, float]:
+    crtp, srtp = np.cos(rtp), np.sin(rtp)
+    x_ocs = x_ccs * crtp + y_ccs * srtp
+    y_ocs = -x_ccs * srtp + y_ccs * crtp
+    return x_ocs, y_ocs
+
+
+def ocs_to_ccs(x_ocs: float, y_ocs: float, rtp: Angle) -> tuple[float, float]:
+    return ccs_to_ocs(x_ocs, y_ocs, -rtp)
+
+
+def ccs_to_dvcs(x_ccs: float, y_ccs: float) -> tuple[float, float]:
+    return y_ccs, x_ccs
+
+
+def dvcs_to_ccs(x_dvcs: float, y_dvcs: float) -> tuple[float, float]:
+    return y_dvcs, x_dvcs
+
+
+def trace_ocs_to_ccd(
+    telescope, x_ocs: float, y_ocs: float, det, rtp: Angle
+) -> tuple[float, float]:
     cr = batoid.RayVector.fromStop(
         x=0.0, y=0.0, optic=telescope, wavelength=700e-9, theta_x=x_ocs, theta_y=y_ocs
     )
-    fp = telescope.trace(cr)
-    x_ccd, y_ccd = det.transform(
-        Point2D(fp.y[0] * 1e3, fp.x[0] * 1e3), FOCAL_PLANE, PIXELS
+    fp = telescope.trace(cr)  # OCS FOCAL_PLANE
+    x_fp_ocs = fp.x[0] * 1e3  # m to mm
+    y_fp_ocs = fp.y[0] * 1e3  # m to mm
+    x_fp_ccs, y_fp_ccs = ocs_to_ccs(x_fp_ocs, y_fp_ocs, rtp)
+    x_fp_dvcs, y_fp_dvcs = ccs_to_dvcs(x_fp_ccs, y_fp_ccs)
+    x_ccd_dvcs, y_ccd_dvcs = det.transform(
+        Point2D(x_fp_dvcs, y_fp_dvcs), FOCAL_PLANE, PIXELS
     )
-    return x_ccd, y_ccd
+    return x_ccd_dvcs, y_ccd_dvcs
 
 
 @lru_cache
@@ -565,6 +591,11 @@ class HartmannSensitivityAnalysis(
         return reference_exposure, test_exposures
 
     def detect(self, exposure):
+        visit_info = exposure.info.getVisitInfo()
+        rsp = visit_info.boresightRotAngle.asDegrees() * u.deg
+        q = visit_info.boresightParAngle.asDegrees() * u.deg
+        rtp = q - rsp - 90.0*u.deg
+
         template = np.zeros(
             (self._binned_template_size, self._binned_template_size), dtype=float
         )
@@ -606,8 +637,10 @@ class HartmannSensitivityAnalysis(
         fluxes = []
         inner_fluxes = []
         outer_fluxes = []
-        x_field_ocs = []
-        y_field_ocs = []
+        x_field_ccs_list = []
+        y_field_ccs_list = []
+        x_field_ocs_list = []
+        y_field_ocs_list = []
         for peak in peaks:
             x_ccd_dvcs = peak[1] * self.config.bin_size
             y_ccd_dvcs = peak[0] * self.config.bin_size
@@ -615,8 +648,12 @@ class HartmannSensitivityAnalysis(
             x_field_dvcs, y_field_dvcs = exposure.getDetector().transform(
                 Point2D(x_ccd_dvcs, y_ccd_dvcs), PIXELS, FIELD_ANGLE
             )
-            x_field_ocs.append(y_field_dvcs)
-            y_field_ocs.append(x_field_dvcs)
+            x_field_ccs, y_field_ccs = dvcs_to_ccs(x_field_dvcs, y_field_dvcs)
+            x_field_ocs, y_field_ocs = ccs_to_ocs(x_field_ccs, y_field_ccs, rtp)
+            x_field_ccs_list.append(x_field_ccs)
+            y_field_ccs_list.append(y_field_ccs)
+            x_field_ocs_list.append(x_field_ocs)
+            y_field_ocs_list.append(y_field_ocs)
 
             xmin = peak[1] - self._binned_template_size // 2
             xmax = peak[1] + self._binned_template_size // 2 + 1
@@ -645,8 +682,10 @@ class HartmannSensitivityAnalysis(
             fluxes.append(np.nansum(stamp * template))
             inner_fluxes.append(np.nansum(stamp * inner_hole))
             outer_fluxes.append(np.nansum(stamp * outer_annulus))
-        table["x_ref_field_ocs"] = np.array(x_field_ocs, dtype=np.float32)
-        table["y_ref_field_ocs"] = np.array(y_field_ocs, dtype=np.float32)
+        table["x_ref_field_ocs"] = np.array(x_field_ocs_list, dtype=np.float32)
+        table["y_ref_field_ocs"] = np.array(y_field_ocs_list, dtype=np.float32)
+        table["x_ref_field_ccs"] = np.array(x_field_ccs_list, dtype=np.float32)
+        table["y_ref_field_ccs"] = np.array(y_field_ccs_list, dtype=np.float32)
         table["flux"] = np.array(fluxes, dtype=np.float32)
         table["inner_flux"] = np.array(inner_fluxes, dtype=np.float32)
         table["outer_flux"] = np.array(outer_fluxes, dtype=np.float32)
@@ -697,6 +736,10 @@ class HartmannSensitivityAnalysis(
         detections,
     ):
         self.log.info("Aligning detections")
+        visit_info = reference_exposure.info.getVisitInfo()
+        rsp = visit_info.boresightRotAngle.asDegrees() * u.deg
+        q = visit_info.boresightParAngle.asDegrees() * u.deg
+        rtp = q - rsp - 90.0 * u.deg
         stamp_size = self._template_size
         stamp_sets = []
         for detection in detections:
@@ -710,11 +753,12 @@ class HartmannSensitivityAnalysis(
             )
             x_ref_ccd_dvcs, y_ref_ccd_dvcs = detection[["x_ref_ccd_dvcs", "y_ref_ccd_dvcs"]]
             x_ref_field_ocs, y_ref_field_ocs = detection[["x_ref_field_ocs", "y_ref_field_ocs"]]
-            x_ref_predict, y_ref_predict = predict_ccd_from_ocs(
+            x_ref_predict, y_ref_predict = trace_ocs_to_ccd(
                 reference_telescope,
                 x_ref_field_ocs,
                 y_ref_field_ocs,
                 reference_exposure.getDetector(),
+                rtp
             )
 
             # Extract stamp from reference
@@ -738,11 +782,12 @@ class HartmannSensitivityAnalysis(
             test_stamps = []
             for test_exposure, test_telescope in zip(test_exposures, test_telescopes):
                 # Get expected position in test exposure
-                x_test_predict, y_test_predict = predict_ccd_from_ocs(
+                x_test_predict, y_test_predict = trace_ocs_to_ccd(
                     test_telescope,
                     x_ref_field_ocs,
                     y_ref_field_ocs,
                     test_exposure.getDetector(),
+                    rtp
                 )
                 test_xmin = xmin + int(round(x_test_predict - x_ref_predict))
                 test_xmax = xmax + int(round(x_test_predict - x_ref_predict))
