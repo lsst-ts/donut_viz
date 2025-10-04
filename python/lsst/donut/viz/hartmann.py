@@ -530,7 +530,9 @@ class HartmannSensitivityAnalysis(
         if self._display is not None:
             self.update_display(reference_exposure, detections)
 
-        stamp_sets = self.get_initial_stamp_sets(detections, reference_exposure, test_exposures)
+        stamp_sets = self.get_initial_stamp_sets(
+            detections, reference_exposure, test_exposures
+        )
         patch_table = self.match_all_patches(stamp_sets)
         self.remove_net_shift_and_rotation(patch_table)
         self.fit_displacements(patch_table)
@@ -578,7 +580,7 @@ class HartmannSensitivityAnalysis(
         visit_info = exposure.info.getVisitInfo()
         rsp = visit_info.boresightRotAngle.asDegrees() * u.deg
         q = visit_info.boresightParAngle.asDegrees() * u.deg
-        rtp = q - rsp - 90.0*u.deg
+        rtp = q - rsp - 90.0 * u.deg
 
         template = np.zeros(
             (self._binned_template_size, self._binned_template_size), dtype=float
@@ -760,14 +762,18 @@ class HartmannSensitivityAnalysis(
                 detection["x_ref_ccd_dvcs"],
                 detection["y_ref_ccd_dvcs"],
             )
-            x_ref_ccd_dvcs, y_ref_ccd_dvcs = detection[["x_ref_ccd_dvcs", "y_ref_ccd_dvcs"]]
-            x_ref_field_ocs, y_ref_field_ocs = detection[["x_ref_field_ocs", "y_ref_field_ocs"]]
+            x_ref_ccd_dvcs, y_ref_ccd_dvcs = detection[
+                ["x_ref_ccd_dvcs", "y_ref_ccd_dvcs"]
+            ]
+            x_ref_field_ocs, y_ref_field_ocs = detection[
+                ["x_ref_field_ocs", "y_ref_field_ocs"]
+            ]
             x_ref_predict, y_ref_predict = trace_ocs_to_ccd(
                 reference_telescope,
                 x_ref_field_ocs,
                 y_ref_field_ocs,
                 reference_exposure.getDetector(),
-                rtp
+                rtp,
             )
 
             # Extract stamp from reference
@@ -796,7 +802,7 @@ class HartmannSensitivityAnalysis(
                     x_ref_field_ocs,
                     y_ref_field_ocs,
                     test_exposure.getDetector(),
-                    rtp
+                    rtp,
                 )
                 test_xmin = xmin + int(round(x_test_predict - x_ref_predict))
                 test_xmax = xmax + int(round(x_test_predict - x_ref_predict))
@@ -1006,7 +1012,13 @@ class HartmannSensitivityAnalysis(
                 if idonut == 0:
                     ax.set_title(stamp_set["test_ids"][iexp])
                 if iexp == 0:
-                    label = (idonut, (int(stamp_set["x_ref_ccd_dvcs"]), int(stamp_set["y_ref_ccd_dvcs"])))
+                    label = (
+                        idonut,
+                        (
+                            int(stamp_set["x_ref_ccd_dvcs"]),
+                            int(stamp_set["y_ref_ccd_dvcs"]),
+                        ),
+                    )
                     ax.set_ylabel(label)
                 coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
                 fx = np.array(coords["fx"])
@@ -1115,7 +1127,13 @@ class HartmannSensitivityAnalysis(
                 if idonut == 0:
                     ax.set_title(stamp_set["test_ids"][iexp])
                 if iexp == 0:
-                    label = (idonut, (int(stamp_set["x_ref_ccd_dvcs"]), int(stamp_set["y_ref_ccd_dvcs"])))
+                    label = (
+                        idonut,
+                        (
+                            int(stamp_set["x_ref_ccd_dvcs"]),
+                            int(stamp_set["y_ref_ccd_dvcs"]),
+                        ),
+                    )
                     ax.set_ylabel(label)
                 coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
                 fx = np.array(coords["fx"])
