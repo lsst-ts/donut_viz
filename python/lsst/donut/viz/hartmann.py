@@ -1,5 +1,8 @@
+import requests
 from collections import defaultdict
 from functools import lru_cache
+from pathlib import Path
+from time import sleep
 
 import astropy.units as u
 import batoid
@@ -10,6 +13,7 @@ import lsst.pipe.base.connectionTypes as ct
 import numpy as np
 from astropy.coordinates import Angle
 from astropy.table import QTable, vstack
+from astropy.time import Time
 from batoid_rubin import LSSTBuilder
 from galsim.zernike import zernikeBasis
 from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE, PIXELS
@@ -17,9 +21,9 @@ from lsst.geom import Box2I, Extent2I, Point2D, Point2I
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import Stamp, Stamps, SubtractBackgroundTask
 from lsst.pex.exceptions import LengthError
-from lsst.summit.utils.efdUtils import getEfdData, getMostRecentRowWithDataBefore
+# from lsst.summit.utils.efdUtils import getEfdData, getMostRecentRowWithDataBefore
 from lsst.ts.ofc import BendModeToForce, OFCData
-from lsst_efd_client import EfdClient
+# from lsst_efd_client import EfdClient
 from matplotlib.figure import Figure
 from scipy.signal import correlate
 from skimage.feature import peak_local_max
@@ -29,6 +33,96 @@ __all__ = [
     "HartmannSensitivityAnalysisConnections",
     "HartmannSensitivityAnalysis",
 ]
+
+
+class EFD:
+    """Class to query USDF EFD via REST API.
+    """
+
+    def __init__(self, site: str = "usdf_efd"):
+        creds_service = f"https://roundtable.lsst.codes/segwarides/creds/{site}"
+        attempt = 0
+        while attempt < 5:
+            attempt += 1
+            try:
+                efd_creds = requests.get(creds_service, timeout=10).json()
+            except (requests.RequestException, ValueError, KeyError):
+                sleep(0.5 + random())
+                continue
+            else:
+                break
+        else:
+            raise ConnectionError("Unable to retrieve credentials after 5 attempts")
+
+        self.auth = efd_creds["username"], efd_creds["password"]
+        self.url = "https://usdf-rsp.slac.stanford.edu/influxdb-enterprise-data/query"
+
+    def get_most_recent_row_before(self, topic, time, where=None):
+        import pandas as pd
+
+        # Stealing from summit_utils and rubin_nights
+        earliest = Time("2019-01-01")
+        if time < earliest:
+            raise ValueError(f"Time {time} is before EFD start time.")
+        earliest = max(earliest, time - 240 * u.min)
+        query = f'select * from "{topic}" '
+        query += f"where time > '{earliest.isot}Z' and time <= '{time.isot}Z'"
+        params = {"db": "efd", "q": query}
+        while True:
+            try:
+                response = requests.get(
+                    self.url, auth=self.auth, params=params
+                ).json()
+            except ValueError:
+                print("Waiting for EFD...")
+                sleep(1.0)
+                continue
+            else:
+                break
+
+        statement = response["results"][0]
+        if "series" not in statement:
+            raise ValueError(f"No data found for topic {topic} at time {time}.")
+        series = statement["series"][0]
+        result = pd.DataFrame(series.get("values", []), columns=series["columns"])
+        if where is not None and not result.empty:
+            result = result[where(result)]
+
+        if "time" in result:
+            result = result.set_index(pd.to_datetime(result["time"]))
+            result = result.drop("time", axis=1)
+        return result.iloc[-1]
+
+    def get_efd_data(
+        self,
+        topic,
+        begin,
+        end,
+    ):
+        import pandas as pd
+        query = f'select * from "{topic}" '
+        query += f"where time > '{begin.isot}Z' and time <= '{end.isot}Z'"
+        params = {"db": "efd", "q": query}
+        while True:
+            try:
+                response = requests.get(
+                    self.url, auth=self.auth, params=params
+                ).json()
+            except ValueError:
+                print("Waiting for EFD...")
+                sleep(1.0)
+                continue
+            else:
+                break
+        statement = response["results"][0]
+        if "series" not in statement:
+            raise ValueError(f"No data found for topic {topic} at time {time}.")
+        series = statement["series"][0]
+        result = pd.DataFrame(series.get("values", []), columns=series["columns"])
+        if "time" in result:
+            result = result.set_index(pd.to_datetime(result["time"]))
+            result = result.drop("time", axis=1)
+        return result
 
 
 def ccs_to_ocs(x_ccs: float, y_ccs: float, rtp: Angle) -> tuple[float, float]:
@@ -87,47 +181,66 @@ def get_state(exposure, efd_client):
 
     out = np.zeros(50, dtype=np.float64)
 
-    m2_df = getMostRecentRowWithDataBefore(
-        efd_client,
+    m2_df = efd_client.get_most_recent_row_before(
         "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
-        timeToLookBefore=end,
+        time=end,
         where=lambda df: df["salIndex"] == 2,
     )
+    # m2_df = getMostRecentRowWithDataBefore(
+    #     efd_client,
+    #     "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
+    #     timeToLookBefore=end,
+    #     where=lambda df: df["salIndex"] == 2,
+    # )
     out[0] = m2_df["z"]
     out[1] = m2_df["x"]
     out[2] = m2_df["y"]
     out[3] = m2_df["u"]
     out[4] = m2_df["v"]
 
-    cam_df = getMostRecentRowWithDataBefore(
-        efd_client,
+    cam_df = efd_client.get_most_recent_row_before(
         "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
-        timeToLookBefore=end,
+        time=end,
         where=lambda df: df["salIndex"] == 1,
     )
+    # cam_df = getMostRecentRowWithDataBefore(
+    #     efd_client,
+    #     "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
+    #     timeToLookBefore=end,
+    #     where=lambda df: df["salIndex"] == 1,
+    # )
     out[5] = cam_df["z"]
     out[6] = cam_df["x"]
     out[7] = cam_df["y"]
     out[8] = cam_df["u"]
     out[9] = cam_df["v"]
 
-    m1m3_event = getMostRecentRowWithDataBefore(
-        efd_client,
+    m1m3_event = efd_client.get_most_recent_row_before(
         "lsst.sal.MTM1M3.logevent_appliedActiveOpticForces",
-        timeToLookBefore=end,
+        time=end,
     )
+    # m1m3_event = getMostRecentRowWithDataBefore(
+    #     efd_client,
+    #     "lsst.sal.MTM1M3.logevent_appliedActiveOpticForces",
+    #     timeToLookBefore=end,
+    # )
     m1m3_forces = np.empty((156,))
     for i in range(156):
         m1m3_forces[i] = m1m3_event[f"zForces{i}"]
     out[10:30] = get_m1m3_bmf().bending_mode(m1m3_forces)
 
     m2_telemetry = QTable.from_pandas(
-        getEfdData(
-            efd_client,
+        efd_client.get_efd_data(
             "lsst.sal.MTM2.axialForce",
             begin=begin,
             end=end,
         )
+        # getEfdData(
+        #     efd_client,
+        #     "lsst.sal.MTM2.axialForce",
+        #     begin=begin,
+        #     end=end,
+        # )
     )
     nrow = len(m2_telemetry)
     m2_forces = np.empty((nrow, 72), dtype=np.float64)
@@ -695,9 +808,13 @@ class HartmannSensitivityAnalysis(
     def get_initial_stamp_sets(self, detections, reference_exposure, test_exposures):
         if sum(detections["use"]) == 0:
             return []
-        efd_client = EfdClient("usdf_efd")
+        self.log.info("Connecting to EFD")
+        efd_client = EFD()
+        # efd_client = EfdClient("usdf_efd")
+        self.log.info("  Connected; Fetching states")
         ref_state = get_state(reference_exposure, efd_client)
         test_states = [get_state(exp, efd_client) for exp in test_exposures]
+        self.log.info("  Fetched states")
 
         # Make optics
         band = reference_exposure.filter.bandLabel
