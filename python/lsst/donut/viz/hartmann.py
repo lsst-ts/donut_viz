@@ -1,4 +1,3 @@
-import requests
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
@@ -12,6 +11,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
 import numpy as np
+import requests
 import yaml
 from astropy.coordinates import Angle
 from astropy.table import QTable, vstack
@@ -23,8 +23,10 @@ from lsst.geom import Box2I, Extent2I, Point2D, Point2I
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import Stamp, Stamps, SubtractBackgroundTask
 from lsst.pex.exceptions import LengthError
+
 # from lsst.summit.utils.efdUtils import getEfdData, getMostRecentRowWithDataBefore
 from lsst.ts.ofc import BendModeToForce, OFCData
+
 # from lsst_efd_client import EfdClient
 from matplotlib.figure import Figure
 from scipy.optimize import least_squares
@@ -39,8 +41,7 @@ __all__ = [
 
 
 class EFD:
-    """Class to query USDF EFD via REST API.
-    """
+    """Class to query USDF EFD via REST API."""
 
     def __init__(self, site: str = "usdf_efd"):
         creds_service = f"https://roundtable.lsst.codes/segwarides/creds/{site}"
@@ -73,9 +74,7 @@ class EFD:
         params = {"db": "efd", "q": query}
         while True:
             try:
-                response = requests.get(
-                    self.url, auth=self.auth, params=params
-                ).json()
+                response = requests.get(self.url, auth=self.auth, params=params).json()
             except ValueError:
                 print("Waiting for EFD...")
                 sleep(1.0)
@@ -103,14 +102,13 @@ class EFD:
         end,
     ):
         import pandas as pd
+
         query = f'select * from "{topic}" '
         query += f"where time > '{begin.utc.isot}Z' and time <= '{end.utc.isot}Z'"
         params = {"db": "efd", "q": query}
         while True:
             try:
-                response = requests.get(
-                    self.url, auth=self.auth, params=params
-                ).json()
+                response = requests.get(self.url, auth=self.auth, params=params).json()
             except ValueError:
                 print("Waiting for EFD...")
                 sleep(1.0)
@@ -162,14 +160,12 @@ def get_rays(telescope, u_ocs, v_ocs, x_ocs, y_ocs):
         optic=telescope,
         wavelength=700e-9,
         theta_x=x_ocs,
-        theta_y=y_ocs
+        theta_y=y_ocs,
     )
     return rays
 
 
-def trace_ocs_to_ccd(
-    rays, telescope, det, rtp: Angle
-):
+def trace_ocs_to_ccd(rays, telescope, det, rtp: Angle):
     fp = telescope.trace(rays.copy())  # OCS FOCAL_PLANE
     x_fp_ocs = fp.x * 1e3  # m to mm
     y_fp_ocs = fp.y * 1e3  # m to mm
@@ -191,13 +187,14 @@ def pupil_to_pixel(u_ocs, v_ocs, dx, dy, zTA_ccs, rtp):
     u_ccs = u_ocs * crtp + v_ocs * srtp
     v_ccs = -u_ocs * srtp + v_ocs * crtp
     x, y = danish.pupil_to_focal(
-        u_ccs, v_ccs,
+        u_ccs,
+        v_ccs,
         aberrations=zTA_ccs,
         R_outer=4.18,
-        R_inner=4.18*0.612,
-        focal_length=10.31
+        R_inner=4.18 * 0.612,
+        focal_length=10.31,
     )
-    x, y = y, x # CCS to DVCS
+    x, y = y, x  # CCS to DVCS
     x /= 10e-6  # m to pixels
     y /= 10e-6
     x += dx
@@ -213,11 +210,12 @@ def pixel_to_pupil(x, y, dx, dy, zTA_ccs, rtp):
     y *= 10e-6
     x, y = y, x  # DVCS to CCS
     u_ccs, v_ccs = danish.focal_to_pupil(
-        x, y,
+        x,
+        y,
         aberrations=zTA_ccs,
         R_outer=4.18,
-        R_inner=4.18*0.612,
-        focal_length=10.31
+        R_inner=4.18 * 0.612,
+        focal_length=10.31,
     )
     crtp, srtp = np.cos(rtp), np.sin(rtp)
     u_ocs = u_ccs * crtp - v_ccs * srtp
@@ -231,16 +229,19 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, verbose=None):
     with open(Path(danish.datadir) / "RubinObsc.yaml") as f:
         mask_params = yaml.safe_load(f)
 
-    zTA = batoid.zernikeTA(
-        telescope,
-        theta_x=x_ccs,
-        theta_y=y_ccs,
-        wavelength=700e-9,
-        nrad=20,
-        jmax=78,
-        eps=0.612,
-        focal_length=10.31
-    ) * 700e-9
+    zTA = (
+        batoid.zernikeTA(
+            telescope,
+            theta_x=x_ccs,
+            theta_y=y_ccs,
+            wavelength=700e-9,
+            nrad=20,
+            jmax=78,
+            eps=0.612,
+            focal_length=10.31,
+        )
+        * 700e-9
+    )
 
     factory = danish.DonutFactory(
         R_outer=4.18,
@@ -249,14 +250,9 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, verbose=None):
         pixel_scale=10e-6,
     )
 
-    arr = stamp.stamp_im.image.array.T # Transpose DVCS -> CCS
+    arr = stamp.stamp_im.image.array.T  # Transpose DVCS -> CCS
     fitter = danish.SingleDonutModel(
-        factory,
-        z_ref=zTA,
-        thx=x_ccs,
-        thy=y_ccs,
-        z_terms=(),
-        npix=arr.shape[0]
+        factory, z_ref=zTA, thx=x_ccs, thy=y_ccs, z_terms=(), npix=arr.shape[0]
     )
     guess = [0.0, 0.0, 0.8]
 
@@ -267,13 +263,13 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, verbose=None):
         bounds=[(-10, -10, 0.5), (10, 10, 2.5)],
         x_scale=[1.0, 1.0, 0.01],
         args=(arr, 1000),
-        verbose=verbose
+        verbose=verbose,
     )
     dx, dy, fwhm, *z_fit = fit.x
     model = fitter.model(dx, dy, fwhm, z_fit)
     # Convert offsets to actual pixel coordinates
-    dx_pix = dx / (3600*np.rad2deg(1/10.31)*10e-6)  # arcsec -> pix
-    dy_pix = dy / (3600*np.rad2deg(1/10.31)*10e-6)
+    dx_pix = dx / (3600 * np.rad2deg(1 / 10.31) * 10e-6)  # arcsec -> pix
+    dy_pix = dy / (3600 * np.rad2deg(1 / 10.31) * 10e-6)
     dx_pix += arr.shape[1] // 2
     dy_pix += arr.shape[0] // 2
 
@@ -285,16 +281,22 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, verbose=None):
 
 
 def predict_dx_dy(
-    reference_telescope, test_telescope,
-    u_ocs, v_ocs, x_field_ocs, y_field_ocs,
+    reference_telescope,
+    test_telescope,
+    u_ocs,
+    v_ocs,
+    x_field_ocs,
+    y_field_ocs,
     det,
-    rtp: Angle
+    rtp: Angle,
 ):
     rays = batoid.RayVector.fromStop(
-        x=u_ocs, y=v_ocs,
+        x=u_ocs,
+        y=v_ocs,
         optic=reference_telescope,
         wavelength=700e-9,
-        theta_x=x_field_ocs, theta_y=y_field_ocs,
+        theta_x=x_field_ocs,
+        theta_y=y_field_ocs,
     )
     fp_ref = reference_telescope.trace(rays.copy())
     x_ref_ocs = fp_ref.x * 1e3  # m to mm
@@ -310,8 +312,6 @@ def predict_dx_dy(
             x_ccd, y_ccd = np.nan, np.nan
         x_ref_ccd_dvcs.append(x_ccd)
         y_ref_ccd_dvcs.append(y_ccd)
-
-
 
     fp_test = test_telescope.trace(rays.copy())
     x_test_ocs = fp_test.x * 1e3  # m to mm
@@ -1047,13 +1047,17 @@ class HartmannSensitivityAnalysis(
             ]
             cr = get_rays(
                 # reference_telescope, 0.0, 0.0, x_ref_field_ocs, y_ref_field_ocs
-                reference_telescope, 0.0, 0.0, x_ref_field_ccs, y_ref_field_ccs
+                reference_telescope,
+                0.0,
+                0.0,
+                x_ref_field_ccs,
+                y_ref_field_ccs,
             )
             x_ref_predict, y_ref_predict = trace_ocs_to_ccd(
                 cr.copy(),
                 reference_telescope,
                 reference_exposure.getDetector(),
-                rtp=0*units.deg,
+                rtp=0 * units.deg,
             )
             x_ref_predict = x_ref_predict[0]
             y_ref_predict = y_ref_predict[0]
@@ -1083,7 +1087,7 @@ class HartmannSensitivityAnalysis(
                     cr.copy(),
                     test_telescope,
                     test_exposure.getDetector(),
-                    rtp=0*units.deg,
+                    rtp=0 * units.deg,
                 )
                 x_test_predict = x_test_predict[0]
                 y_test_predict = y_test_predict[0]
@@ -1159,12 +1163,7 @@ class HartmannSensitivityAnalysis(
             )
         return stamp_sets
 
-    def match_all_patches(
-        self,
-        stamp_sets,
-        ref_telescope,
-        rtp
-    ):
+    def match_all_patches(self, stamp_sets, ref_telescope, rtp):
         patch_table = None
         for stamp_set in stamp_sets:
             self.log.info("Matching patches in donut %d", stamp_set["donut_id"])
@@ -1181,7 +1180,8 @@ class HartmannSensitivityAnalysis(
                 dx, dy = match_patches(
                     stamp_set["ref"].stamp_im.image.array,
                     test_stamp.stamp_im.image.array,
-                    x.to_value(units.pix), y.to_value(units.pix),
+                    x.to_value(units.pix),
+                    y.to_value(units.pix),
                     patch_size=30,
                     search_radius=10,
                 )
@@ -1197,20 +1197,18 @@ class HartmannSensitivityAnalysis(
     def choose_pupil_locations(self, stamp_set, telescope, rtp, nrad):
         dx, dy, model, zTA = fit_danish(
             telescope,
-            x_ccs = stamp_set["x_ref_field_ccs"],
-            y_ccs = stamp_set["y_ref_field_ccs"],
-            stamp = stamp_set["ref"],
+            x_ccs=stamp_set["x_ref_field_ccs"],
+            y_ccs=stamp_set["y_ref_field_ccs"],
+            stamp=stamp_set["ref"],
         )
 
         u, v = batoid.utils.hexapolar(
             outer=4.18,
-            inner=4.18*0.612,
+            inner=4.18 * 0.612,
             nrad=nrad,
-            naz=int(nrad*6.28/(1-0.612)),
+            naz=int(nrad * 6.28 / (1 - 0.612)),
         )
-        x, y = pupil_to_pixel(
-            u, v, dx, dy, zTA, rtp
-        )
+        x, y = pupil_to_pixel(u, v, dx, dy, zTA, rtp)
 
         return u * units.m, v * units.m, x * units.pix, y * units.pix
 
