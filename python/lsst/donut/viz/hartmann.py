@@ -1046,18 +1046,13 @@ class HartmannSensitivityAnalysis(
                 ["x_ref_field_ccs", "y_ref_field_ccs"]
             ]
             cr = get_rays(
-                # reference_telescope, 0.0, 0.0, x_ref_field_ocs, y_ref_field_ocs
-                reference_telescope,
-                0.0,
-                0.0,
-                x_ref_field_ccs,
-                y_ref_field_ccs,
+                reference_telescope, 0.0, 0.0, x_ref_field_ocs, y_ref_field_ocs
             )
             x_ref_predict, y_ref_predict = trace_ocs_to_ccd(
                 cr.copy(),
                 reference_telescope,
                 reference_exposure.getDetector(),
-                rtp=0 * units.deg,
+                rtp,
             )
             x_ref_predict = x_ref_predict[0]
             y_ref_predict = y_ref_predict[0]
@@ -1087,7 +1082,7 @@ class HartmannSensitivityAnalysis(
                     cr.copy(),
                     test_telescope,
                     test_exposure.getDetector(),
-                    rtp=0 * units.deg,
+                    rtp,
                 )
                 x_test_predict = x_test_predict[0]
                 y_test_predict = y_test_predict[0]
@@ -1114,7 +1109,7 @@ class HartmannSensitivityAnalysis(
                     break
                 test_stamp = Stamp(test_exposure.maskedImage[test_box])
                 test_stamp_arr = test_stamp.stamp_im.image.array
-                offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=60)
+                offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=100)
                 if not np.isfinite(offset).all():
                     detection["use"] = False
                     self.log.warn(
