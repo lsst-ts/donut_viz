@@ -134,22 +134,22 @@ def get_rtp(exposure):
     return rtp
 
 
-def ccs_to_ocs(x_ccs: float, y_ccs: float, rtp: Angle) -> tuple[float, float]:
-    crtp, srtp = np.cos(rtp), np.sin(rtp)
+def ccs_to_ocs(x_ccs, y_ccs, rtp: Angle):
+    crtp, srtp = np.cos(rtp).value, np.sin(rtp).value
     x_ocs = x_ccs * crtp - y_ccs * srtp
     y_ocs = x_ccs * srtp + y_ccs * crtp
     return x_ocs, y_ocs
 
 
-def ocs_to_ccs(x_ocs: float, y_ocs: float, rtp: Angle) -> tuple[float, float]:
+def ocs_to_ccs(x_ocs, y_ocs, rtp: Angle):
     return ccs_to_ocs(x_ocs, y_ocs, -rtp)
 
 
-def ccs_to_dvcs(x_ccs: float, y_ccs: float) -> tuple[float, float]:
+def ccs_to_dvcs(x_ccs, y_ccs):
     return y_ccs, x_ccs
 
 
-def dvcs_to_ccs(x_dvcs: float, y_dvcs: float) -> tuple[float, float]:
+def dvcs_to_ccs(x_dvcs, y_dvcs):
     return y_dvcs, x_dvcs
 
 
@@ -173,12 +173,11 @@ def trace_ocs_to_ccd(rays, telescope, det, rtp: Angle):
     x_fp_dvcs, y_fp_dvcs = ccs_to_dvcs(x_fp_ccs, y_fp_ccs)
     x_ccd_dvcs, y_ccd_dvcs = [], []
     for x, y in zip(x_fp_dvcs, y_fp_dvcs):
-        try:
-            x_ccd, y_ccd = det.transform(Point2D(x, y), FOCAL_PLANE, PIXELS)
-        except LengthError:
-            x_ccd, y_ccd = np.nan, np.nan
+        x_ccd, y_ccd = det.transform(Point2D(x, y), FOCAL_PLANE, PIXELS)
         x_ccd_dvcs.append(x_ccd)
         y_ccd_dvcs.append(y_ccd)
+    x_ccd_dvcs = np.array(x_ccd_dvcs)
+    y_ccd_dvcs = np.array(y_ccd_dvcs)
     return x_ccd_dvcs, y_ccd_dvcs
 
 
@@ -278,46 +277,6 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, verbose=None):
     dx_pix, dy_pix = dy_pix, dx_pix
 
     return dx_pix, dy_pix, model, zTA
-
-
-def predict_dx_dy(
-    reference_telescope,
-    test_telescope,
-    u_ocs,
-    v_ocs,
-    x_field_ocs,
-    y_field_ocs,
-    det,
-    rtp: Angle,
-):
-    rays = batoid.RayVector.fromStop(
-        x=u_ocs,
-        y=v_ocs,
-        optic=reference_telescope,
-        wavelength=700e-9,
-        theta_x=x_field_ocs,
-        theta_y=y_field_ocs,
-    )
-    fp_ref = reference_telescope.trace(rays.copy())
-    x_ref_ocs = fp_ref.x * 1e3  # m to mm
-    y_ref_ocs = fp_ref.y * 1e3  # m to mm
-    x_ref_ccs, y_ref_ccs = ocs_to_ccs(x_ref_ocs, y_ref_ocs, rtp)
-    x_ref_dvcs, y_ref_dvcs = ccs_to_dvcs(x_ref_ccs, y_ref_ccs)
-    x_ref_ccd_dvcs = []
-    y_ref_ccd_dvcs = []
-    for x, y in zip(x_ref_dvcs, y_ref_dvcs):
-        try:
-            x_ccd, y_ccd = det.transform(Point2D(x, y), FOCAL_PLANE, PIXELS)
-        except LengthError:
-            x_ccd, y_ccd = np.nan, np.nan
-        x_ref_ccd_dvcs.append(x_ccd)
-        y_ref_ccd_dvcs.append(y_ccd)
-
-    fp_test = test_telescope.trace(rays.copy())
-    x_test_ocs = fp_test.x * 1e3  # m to mm
-    y_test_ocs = fp_test.y * 1e3  # m to mm
-
-    return x_ref_ocs, y_ref_ocs, x_test_ocs, y_test_ocs
 
 
 @lru_cache
@@ -716,7 +675,7 @@ class HartmannSensitivityAnalysisConfig(
     )
     n_pupil_radii = pexConfig.Field[int](
         doc="Number of pupil radii to probe",
-        default=9,
+        default=7,
     )
     max_donuts = pexConfig.Field[int](
         doc="Maximum number of donuts to analyze",
@@ -806,13 +765,21 @@ class HartmannSensitivityAnalysis(
         if self._display is not None:
             self.update_display(reference_exposure, detections)
 
-        stamp_sets, ref_telescope = self.get_initial_stamp_sets(
+        stamp_sets, ref_telescope, test_telescopes = self.get_initial_stamp_sets(
             detections, reference_exposure, test_exposures
         )
         rtp = get_rtp(reference_exposure)
         patch_table = self.match_all_patches(stamp_sets, ref_telescope, rtp)
         self.remove_net_shift_and_rotation(patch_table)
         self.fit_displacements(patch_table)
+        self.predict_displacements(
+            patch_table,
+            detections,
+            ref_telescope,
+            test_telescopes,
+            reference_exposure.getDetector(),
+            rtp,
+        )
 
         if self.config.do_plot:
             self.log.info("Making plots")
@@ -891,7 +858,7 @@ class HartmannSensitivityAnalysis(
         )
 
         table = QTable()
-        table["idx"] = np.arange(len(peaks), dtype=np.int32)
+        table["donut_id"] = np.arange(len(peaks), dtype=np.int32)
         table["x_ref_ccd_dvcs"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
         table["y_ref_ccd_dvcs"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
         fluxes = []
@@ -958,8 +925,8 @@ class HartmannSensitivityAnalysis(
         # Filter to max_donuts brightest
         subtable = table[table["use"]]
         subtable.sort(keys="flux", reverse=True)
-        idxs = subtable["idx"][: self.config.max_donuts]
-        table["use"][~np.isin(table["idx"], idxs)] = False
+        idxs = subtable["donut_id"][: self.config.max_donuts]
+        table["use"][~np.isin(table["donut_id"], idxs)] = False
 
         self.log.info("Detected %d donuts", len(table))
         self.log.info("Selected %d donuts for analysis", np.sum(table["use"]))
@@ -975,7 +942,7 @@ class HartmannSensitivityAnalysis(
         self.log.info("  Connected; Fetching states")
         ref_state = get_state(reference_exposure, efd_client)
         test_states = [get_state(exp, efd_client) for exp in test_exposures]
-        self.log.info("  Fetched states")
+        self.log.info("  States fetched")
 
         # Make optics
         band = reference_exposure.filter.bandLabel
@@ -992,7 +959,7 @@ class HartmannSensitivityAnalysis(
             test_telescopes,
             detections,
         )
-        return stamp_sets, ref_telescope
+        return stamp_sets, ref_telescope, test_telescopes
 
     def get_telescope(self, band, state):
         # Handle sign flips and unit conversions
@@ -1032,7 +999,7 @@ class HartmannSensitivityAnalysis(
                 continue
             self.log.info(
                 "  Aligning detection %d at (x,y)=(%d,%d)",
-                detection["idx"],
+                detection["donut_id"],
                 detection["x_ref_ccd_dvcs"],
                 detection["y_ref_ccd_dvcs"],
             )
@@ -1069,7 +1036,7 @@ class HartmannSensitivityAnalysis(
                 detection["use"] = False
                 self.log.warn(
                     "  Could not extract reference stamp for detection %d; skipping",
-                    detection["idx"],
+                    detection["donut_id"],
                 )
                 continue
             ref_stamp_arr = ref_stamp.stamp_im.image.array
@@ -1103,18 +1070,24 @@ class HartmannSensitivityAnalysis(
                     detection["use"] = False
                     self.log.warn(
                         "  Aligned stamp for detection %d in exposure %d would be out of bounds; skipping",
-                        detection["idx"],
+                        detection["donut_id"],
                         test_exposure.info.getVisitInfo().id,
                     )
                     break
                 test_stamp = Stamp(test_exposure.maskedImage[test_box])
                 test_stamp_arr = test_stamp.stamp_im.image.array
-                offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=100)
+                offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=60)
+                self.log.info(
+                    "    Exposure %d: offset (y,x) = (%.2f, %.2f)",
+                    test_exposure.info.getVisitInfo().id,
+                    offset[0],
+                    offset[1],
+                )
                 if not np.isfinite(offset).all():
                     detection["use"] = False
                     self.log.warn(
                         "  Could not align detection %d in exposure %d; skipping",
-                        detection["idx"],
+                        detection["donut_id"],
                         test_exposure.info.getVisitInfo().id,
                     )
                     break
@@ -1132,7 +1105,7 @@ class HartmannSensitivityAnalysis(
                     detection["use"] = False
                     self.log.warn(
                         "  Could not extract aligned stamp for detection %d in exposure %d; skipping",
-                        detection["idx"],
+                        detection["donut_id"],
                         test_exposure.info.getVisitInfo().id,
                     )
                     break
@@ -1142,7 +1115,7 @@ class HartmannSensitivityAnalysis(
             test_stamps = Stamps(test_stamps)
             stamp_sets.append(
                 dict(
-                    donut_id=detection["idx"],
+                    donut_id=detection["donut_id"],
                     ref=ref_stamp,
                     x_ref_ccd_dvcs=x_ref_ccd_dvcs,
                     y_ref_ccd_dvcs=y_ref_ccd_dvcs,
@@ -1173,8 +1146,8 @@ class HartmannSensitivityAnalysis(
             for iexp, test_stamp in enumerate(stamp_set["tests"]):
                 self.log.info("  Matching in exposure %d", stamp_set["test_ids"][iexp])
                 dx, dy = match_patches(
-                    stamp_set["ref"].stamp_im.image.array,
                     test_stamp.stamp_im.image.array,
+                    stamp_set["ref"].stamp_im.image.array,
                     x.to_value(units.pix),
                     y.to_value(units.pix),
                     patch_size=30,
@@ -1230,6 +1203,63 @@ class HartmannSensitivityAnalysis(
                 dx_aligned, dy_aligned = align_offsets(x, y, dx, dy)
                 patch_table[f"dx_{idx}_aligned"][wdonut] = dx_aligned
                 patch_table[f"dy_{idx}_aligned"][wdonut] = dy_aligned
+
+    def predict_displacements(
+        self,
+        patch_table,
+        detection_table,
+        reference_telescope,
+        test_telescopes,
+        detector,
+        rtp: Angle,
+    ):
+        idxs = [
+            int(col[3:4])
+            for col in patch_table.colnames
+            if col.startswith("dx_") and col.endswith("_aligned")
+        ]
+        for idx in idxs:
+            patch_table[f"dx_{idx}_predict"] = np.nan
+            patch_table[f"dy_{idx}_predict"] = np.nan
+
+        for donut_id in np.unique(patch_table["donut_id"]):
+            select = patch_table["donut_id"] == donut_id
+            u = patch_table["u"][select].to_value(units.m)
+            v = patch_table["v"][select].to_value(units.m)
+            detection = detection_table[detection_table["donut_id"] == donut_id]
+            x_field_ocs = detection["x_ref_field_ocs"][0]
+            y_field_ocs = detection["y_ref_field_ocs"][0]
+            rays = get_rays(
+                reference_telescope,
+                u,
+                v,
+                x_field_ocs,
+                y_field_ocs,
+            )
+            x_ref, y_ref = trace_ocs_to_ccd(
+                rays,
+                reference_telescope,
+                detector,
+                rtp,
+            )
+            for idx, test_telescope in zip(idxs, test_telescopes):
+                x_test, y_test = trace_ocs_to_ccd(
+                    rays,
+                    test_telescope,
+                    detector,
+                    rtp,
+                )
+
+                dx_test = x_test - x_ref
+                dy_test = y_test - y_ref
+
+                dx_test_align, dy_test_align = align_offsets(
+                    x_ref, y_ref, dx_test, dy_test
+                )
+
+                patch_table[f"dx_{idx}_predict"][select] = dx_test_align
+                patch_table[f"dy_{idx}_predict"][select] = dy_test_align
+            self.log.info("finishing predictions for donut %d", donut_id)
 
     def update_display(
         self,
@@ -1408,8 +1438,8 @@ class HartmannSensitivityAnalysis(
                 y = np.array(coords["y"])
                 dx = np.array(coords[f"dx_{iexp}_aligned"])
                 dy = np.array(coords[f"dy_{iexp}_aligned"])
-                dx_fit = np.array(coords[f"dx_{iexp}_fit"])
-                dy_fit = np.array(coords[f"dy_{iexp}_fit"])
+                dx_predict = np.array(coords[f"dx_{iexp}_predict"])
+                dy_predict = np.array(coords[f"dy_{iexp}_predict"])
                 wgood = np.array(coords[f"use_fit_{iexp}"], dtype=bool)
 
                 ax = axs[idonut][iexp]
@@ -1431,19 +1461,7 @@ class HartmannSensitivityAnalysis(
                     y[wgood],
                     dx[wgood],
                     dy[wgood],
-                    color="g",
-                    scale_units="xy",
-                    angles="xy",
-                    scale=0.1,
-                    pivot="middle",
-                    width=0.002,
-                )
-                ax.quiver(
-                    x[~wgood],
-                    y[~wgood],
-                    dx[~wgood],
-                    dy[~wgood],
-                    color="r",
+                    color="k",
                     scale_units="xy",
                     angles="xy",
                     scale=0.1,
@@ -1453,11 +1471,10 @@ class HartmannSensitivityAnalysis(
                 ax.quiver(
                     x[wgood],
                     y[wgood],
-                    dx_fit[wgood],
-                    dy_fit[wgood],
-                    color="k",
-                    alpha=0.4,
-                    width=0.004,
+                    dx_predict[wgood],
+                    dy_predict[wgood],
+                    color="magenta",
+                    width=0.002,
                     scale_units="xy",
                     angles="xy",
                     scale=0.1,
