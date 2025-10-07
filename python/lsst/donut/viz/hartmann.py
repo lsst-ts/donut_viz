@@ -23,11 +23,7 @@ from lsst.geom import Box2I, Extent2I, Point2D, Point2I
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import Stamp, Stamps, SubtractBackgroundTask
 from lsst.pex.exceptions import LengthError
-
-# from lsst.summit.utils.efdUtils import getEfdData, getMostRecentRowWithDataBefore
 from lsst.ts.ofc import BendModeToForce, OFCData
-
-# from lsst_efd_client import EfdClient
 from matplotlib.figure import Figure
 from scipy.optimize import least_squares
 from scipy.signal import correlate
@@ -117,7 +113,7 @@ class EFD:
                 break
         statement = response["results"][0]
         if "series" not in statement:
-            raise ValueError(f"No data found for topic {topic} at time {time}.")
+            raise ValueError(f"No data found for topic {topic} at time {begin}.")
         series = statement["series"][0]
         result = pd.DataFrame(series.get("values", []), columns=series["columns"])
         if "time" in result:
