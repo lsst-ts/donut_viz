@@ -150,6 +150,8 @@ def ocs_to_ccs(x_ocs, y_ocs, rtp: Angle):
 
 
 def ccs_to_dvcs(x_ccs, y_ccs):
+    # Works for field angle and focal plane.  May need more care for pixels
+    # due to corner WF sensor rotations.
     return y_ccs, x_ccs
 
 
@@ -185,10 +187,8 @@ def trace_ocs_to_ccd(rays, telescope, det, rtp: Angle):
     return x_ccd_dvcs, y_ccd_dvcs
 
 
-def pupil_to_pixel(u_ocs, v_ocs, dx, dy, zTA_ccs, rtp):
-    crtp, srtp = np.cos(rtp), np.sin(rtp)
-    u_ccs = u_ocs * crtp + v_ocs * srtp
-    v_ccs = -u_ocs * srtp + v_ocs * crtp
+def pupil_to_pixel(u_ocs, v_ocs, dx, dy, zTA_ccs, rtp, nrot):
+    u_ccs, v_ccs = ocs_to_ccs(u_ocs, v_ocs, rtp)
     x, y = danish.pupil_to_focal(
         u_ccs,
         v_ccs,
@@ -197,7 +197,15 @@ def pupil_to_pixel(u_ocs, v_ocs, dx, dy, zTA_ccs, rtp):
         R_inner=4.18 * 0.612,
         focal_length=10.31,
     )
-    x, y = y, x  # CCS to DVCS
+    # CCS to DVCS
+    if nrot % 4 == 1:
+        x, y = -y, x
+    elif nrot % 4 == 2:
+        x, y = -x, -y
+    elif nrot % 4 == 3:
+        x, y = y, -x
+    x, y = y, x
+
     x /= 10e-6  # m to pixels
     y /= 10e-6
     x += dx
@@ -206,12 +214,18 @@ def pupil_to_pixel(u_ocs, v_ocs, dx, dy, zTA_ccs, rtp):
     return x, y
 
 
-def pixel_to_pupil(x, y, dx, dy, zTA_ccs, rtp):
+def pixel_to_pupil(x, y, dx, dy, zTA_ccs, rtp, nrot):
     x -= dx
     y -= dy
     x *= 10e-6  # pixels to m
     y *= 10e-6
     x, y = y, x  # DVCS to CCS
+    if nrot % 4 == 1:
+        x, y = y, -x
+    elif nrot % 4 == 2:
+        x, y = -x, -y
+    elif nrot % 4 == 3:
+        x, y = -y, x
     u_ccs, v_ccs = danish.focal_to_pupil(
         x,
         y,
@@ -220,13 +234,11 @@ def pixel_to_pupil(x, y, dx, dy, zTA_ccs, rtp):
         R_inner=4.18 * 0.612,
         focal_length=10.31,
     )
-    crtp, srtp = np.cos(rtp), np.sin(rtp)
-    u_ocs = u_ccs * crtp - v_ccs * srtp
-    v_ocs = u_ccs * srtp + v_ccs * crtp
+    u_ocs, v_ocs = ocs_to_ccs(u_ccs, v_ccs, rtp)
     return u_ocs, v_ocs
 
 
-def fit_danish(telescope, x_ccs, y_ccs, stamp, verbose=None):
+def fit_danish(telescope, x_ccs, y_ccs, stamp, nrot, verbose=None):
     if verbose is None:
         verbose = 0
     with open(Path(danish.datadir) / "RubinObsc.yaml") as f:
@@ -253,7 +265,11 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, verbose=None):
         pixel_scale=10e-6,
     )
 
-    arr = stamp.stamp_im.image.array.T  # Transpose DVCS -> CCS
+    arr = np.rot90(
+        stamp.stamp_im.image.array.T,
+        nrot
+    )  # DVCS -> CCS
+
     fitter = danish.SingleDonutModel(
         factory, z_ref=zTA, thx=x_ccs, thy=y_ccs, z_terms=(), npix=arr.shape[0]
     )
@@ -273,13 +289,24 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, verbose=None):
     # Convert offsets to actual pixel coordinates
     dx_pix = dx / (3600 * np.rad2deg(1 / 10.31) * 10e-6)  # arcsec -> pix
     dy_pix = dy / (3600 * np.rad2deg(1 / 10.31) * 10e-6)
-    dx_pix += arr.shape[1] // 2
-    dy_pix += arr.shape[0] // 2
 
-    # Flip back to DVCS
-    model = model.T
+    # CCS -> DVCS
+    model = np.rot90(
+        model,
+        -nrot
+    ).T
+    # CCS -> DVCS
+    if nrot % 4 == 1:
+        dx_pix, dy_pix = -dy_pix, dx_pix
+    elif nrot % 4 == 2:
+        dx_pix, dy_pix = -dx_pix, -dy_pix
+    elif nrot % 4 == 3:
+        dx_pix, dy_pix = dy_pix, -dx_pix
     dx_pix, dy_pix = dy_pix, dx_pix
 
+    # Warning: Might be off if not square
+    dx_pix += arr.shape[1] // 2
+    dy_pix += arr.shape[0] // 2
     return dx_pix, dy_pix, model, zTA
 
 
@@ -308,12 +335,6 @@ def get_state(exposure, efd_client):
         time=end,
         where=lambda df: df["salIndex"] == 2,
     )
-    # m2_df = getMostRecentRowWithDataBefore(
-    #     efd_client,
-    #     "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
-    #     timeToLookBefore=end,
-    #     where=lambda df: df["salIndex"] == 2,
-    # )
     out[0] = m2_df["z"]
     out[1] = m2_df["x"]
     out[2] = m2_df["y"]
@@ -325,12 +346,6 @@ def get_state(exposure, efd_client):
         time=end,
         where=lambda df: df["salIndex"] == 1,
     )
-    # cam_df = getMostRecentRowWithDataBefore(
-    #     efd_client,
-    #     "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
-    #     timeToLookBefore=end,
-    #     where=lambda df: df["salIndex"] == 1,
-    # )
     out[5] = cam_df["z"]
     out[6] = cam_df["x"]
     out[7] = cam_df["y"]
@@ -341,11 +356,6 @@ def get_state(exposure, efd_client):
         "lsst.sal.MTM1M3.logevent_appliedActiveOpticForces",
         time=end,
     )
-    # m1m3_event = getMostRecentRowWithDataBefore(
-    #     efd_client,
-    #     "lsst.sal.MTM1M3.logevent_appliedActiveOpticForces",
-    #     timeToLookBefore=end,
-    # )
     m1m3_forces = np.empty((156,))
     for i in range(156):
         m1m3_forces[i] = m1m3_event[f"zForces{i}"]
@@ -357,12 +367,6 @@ def get_state(exposure, efd_client):
             begin=begin,
             end=end,
         )
-        # getEfdData(
-        #     efd_client,
-        #     "lsst.sal.MTM2.axialForce",
-        #     begin=begin,
-        #     end=end,
-        # )
     )
     nrow = len(m2_telemetry)
     m2_forces = np.empty((nrow, 72), dtype=np.float64)
@@ -554,15 +558,17 @@ def stamps_to_stamp_sets(stamps):
     return stamp_sets
 
 
-def fit_displacements(x, y, dx, dy, radius):
+def fit_displacements(x, y, dx, dy):
     # Filter outliers in absolute displacement
     dr = np.hypot(dx, dy)
     quantiles = np.nanquantile(dr, [0.25, 0.5, 0.75])
-    threshold = quantiles[0] + 4.0 * np.ptp(quantiles[[0, 2]])
+    iqr = np.ptp(quantiles[[0, 2]])
+    threshold = quantiles[1] + 3.0 * iqr
 
     flag_0 = dr < threshold
 
     # Fit Zks to inliers
+    radius = np.hypot(x, y).max()
     zkBasis = zernikeBasis(28, x, y, R_outer=radius, R_inner=radius * 0.62)
     wgood = np.isfinite(dx) & np.isfinite(dy) & flag_0
     dx_coefs, *_ = np.linalg.lstsq(zkBasis.T[wgood], dx[wgood])
@@ -649,10 +655,6 @@ class HartmannSensitivityAnalysisConfig(
         doc="Defocus offset for the camera in mm",
         default=4.0,
     )
-    det_dz = pexConfig.Field[float](
-        doc="Defocus offset for the detector in mm",
-        default=0.0,
-    )
     min_flux = pexConfig.Field[float](
         doc="Minimum flux for analysis",
         default=2e6,
@@ -688,6 +690,14 @@ class HartmannSensitivityAnalysisConfig(
     max_exp_plot = pexConfig.Field[int](
         doc="Maximum number of exposures to plot",
         default=4,
+    )
+    fea_dir = pexConfig.Field[str](
+        doc="batoid_rubin fea_dir",
+        default="/sdf/home/j/jmeyers3/.local/batoid_rubin_data",
+    )
+    bend_dir = pexConfig.Field[str](
+        doc="batoid_rubin bend_dir",
+        default="/sdf/home/j/jmeyers3/.local/batoid_rubin_data",
     )
     isr = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
@@ -736,18 +746,6 @@ class HartmannSensitivityAnalysis(
         self.makeSubtask("subtractBackground")
         self._display = display
 
-        self._defocus = np.abs(
-            self.config.m2_dz + self.config.cam_dz + self.config.det_dz
-        )
-        self._donut_diam = 680.0 / 8.0 * self._defocus  # ~680 pixels for 8mm defocus
-        self._donut_radius = self._donut_diam / 2
-        self._binned_template_size = int(self._donut_diam * 1.15 / self.config.bin_size)
-        if self._binned_template_size % 2 == 0:
-            self._binned_template_size += 1
-        self._template_size = int(self._donut_diam * 1.15)
-        if self._template_size % 2 == 0:
-            self._template_size += 1
-
     def runQuantum(
         self,
         butlerQC: pipeBase.QuantumContext,
@@ -773,7 +771,9 @@ class HartmannSensitivityAnalysis(
             detections, reference_exposure, test_exposures
         )
         rtp = get_rtp(reference_exposure)
-        patch_table = self.match_all_patches(stamp_sets, ref_telescope, rtp)
+        detector = reference_exposure.getDetector()
+        nrot = detector.getOrientation().getNQuarter()
+        patch_table = self.match_all_patches(stamp_sets, ref_telescope, rtp, nrot)
         self.remove_net_shift_and_rotation(patch_table)
         self.fit_displacements(patch_table)
         self.predict_displacements(
@@ -781,7 +781,7 @@ class HartmannSensitivityAnalysis(
             detections,
             ref_telescope,
             test_telescopes,
-            reference_exposure.getDetector(),
+            detector,
             rtp,
         )
 
@@ -801,6 +801,22 @@ class HartmannSensitivityAnalysis(
             hartmann_unfiltered_plot=initial_fig,
             hartmann_filtered_plot=filtered_fig,
         )
+
+    def get_det_dz(self, exposure):
+        detector = exposure.getDetector()
+        orientation = detector.getOrientation()
+        height = orientation.getHeight()
+        height = -height  # because of DVCS to CCS
+        return height
+
+    def get_donut_radius(self, exposure):
+        det_dz = self.get_det_dz(exposure)
+        defocus = abs(
+            self.config.m2_dz + self.config.cam_dz + det_dz
+        )  # mm
+        donut_diam = 85.0 * defocus  # Hardcoded to LSSTCam
+        donut_radius = donut_diam / 2
+        return donut_radius
 
     def prepare_exposures(self, exposures, ref_index, run_isr=False, **isr_kwargs):
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
@@ -826,16 +842,21 @@ class HartmannSensitivityAnalysis(
 
     def detect(self, exposure):
         rtp = get_rtp(exposure)
+        donut_radius = self.get_donut_radius(exposure)
+        bin_size = self.config.bin_size
+        binned_template_size = int(2 * donut_radius * 1.15 / bin_size)
+        if binned_template_size % 2 == 0:
+            binned_template_size += 1
 
         template = np.zeros(
-            (self._binned_template_size, self._binned_template_size), dtype=float
+            (binned_template_size, binned_template_size), dtype=float
         )
         y, x = np.ogrid[
-            -self._binned_template_size // 2 : self._binned_template_size // 2,
-            -self._binned_template_size // 2 : self._binned_template_size // 2,
+            -binned_template_size // 2 : binned_template_size // 2,
+            -binned_template_size // 2 : binned_template_size // 2,
         ]
         r = np.hypot(x, y)
-        binned_radius = self._donut_radius / self.config.bin_size
+        binned_radius = donut_radius / bin_size
         template[r < binned_radius] = 1.0
         template[r < binned_radius * 0.62] = 0.0
         inner_hole = np.zeros_like(template)
@@ -845,7 +866,7 @@ class HartmannSensitivityAnalysis(
 
         exp = exposure.clone()
         mi = exp.getMaskedImage()
-        binned = afwMath.binImage(mi, self.config.bin_size)
+        binned = afwMath.binImage(mi, bin_size)
         exp.setMaskedImage(binned)
         arr = exp.image.array
         mask = exp.mask.array
@@ -863,8 +884,8 @@ class HartmannSensitivityAnalysis(
 
         table = QTable()
         table["donut_id"] = np.arange(len(peaks), dtype=np.int32)
-        table["x_ref_ccd_dvcs"] = (peaks[:, 1] * self.config.bin_size).astype(np.int32)
-        table["y_ref_ccd_dvcs"] = (peaks[:, 0] * self.config.bin_size).astype(np.int32)
+        table["x_ref_ccd_dvcs"] = (peaks[:, 1] * bin_size).astype(np.int32)
+        table["y_ref_ccd_dvcs"] = (peaks[:, 0] * bin_size).astype(np.int32)
         fluxes = []
         inner_fluxes = []
         outer_fluxes = []
@@ -873,8 +894,8 @@ class HartmannSensitivityAnalysis(
         x_field_ocs_list = []
         y_field_ocs_list = []
         for peak in peaks:
-            x_ccd_dvcs = peak[1] * self.config.bin_size
-            y_ccd_dvcs = peak[0] * self.config.bin_size
+            x_ccd_dvcs = peak[1] * bin_size
+            y_ccd_dvcs = peak[0] * bin_size
             # Get OCS coordinates
             x_field_dvcs, y_field_dvcs = exposure.getDetector().transform(
                 Point2D(x_ccd_dvcs, y_ccd_dvcs), PIXELS, FIELD_ANGLE
@@ -886,10 +907,10 @@ class HartmannSensitivityAnalysis(
             x_field_ocs_list.append(x_field_ocs)
             y_field_ocs_list.append(y_field_ocs)
 
-            xmin = peak[1] - self._binned_template_size // 2
-            xmax = peak[1] + self._binned_template_size // 2 + 1
-            ymin = peak[0] - self._binned_template_size // 2
-            ymax = peak[0] + self._binned_template_size // 2 + 1
+            xmin = peak[1] - binned_template_size // 2
+            xmax = peak[1] + binned_template_size // 2 + 1
+            ymin = peak[0] - binned_template_size // 2
+            ymax = peak[0] + binned_template_size // 2 + 1
             stamp = arr[ymin:ymax, xmin:xmax]
             bad_mask_planes = ["BAD", "CR", "INTRP", "SAT", "SUSPECT", "NO_DATA"]
             bitmask = exp.mask.getPlaneBitMask(bad_mask_planes)
@@ -939,7 +960,7 @@ class HartmannSensitivityAnalysis(
 
     def get_initial_stamp_sets(self, detections, reference_exposure, test_exposures):
         if sum(detections["use"]) == 0:
-            return []
+            return [], None, []
         self.log.info("Connecting to EFD")
         efd_client = EFD()
         # efd_client = EfdClient("usdf_efd")
@@ -950,9 +971,10 @@ class HartmannSensitivityAnalysis(
 
         # Make optics
         band = reference_exposure.filter.bandLabel
-        ref_telescope = self.get_telescope(band, ref_state - ref_state)
+        det_dz = self.get_det_dz(reference_exposure)
+        ref_telescope = self.get_telescope(band, np.zeros_like(ref_state), det_dz)
         test_telescopes = [
-            self.get_telescope(band, ts - ref_state) for ts in test_states
+            self.get_telescope(band, ts - ref_state, det_dz) for ts in test_states
         ]
 
         # Initial alignment of donuts
@@ -965,7 +987,7 @@ class HartmannSensitivityAnalysis(
         )
         return stamp_sets, ref_telescope, test_telescopes
 
-    def get_telescope(self, band, state):
+    def get_telescope(self, band, state, det_dz):
         # Handle sign flips and unit conversions
         state = np.array(state)
         state[[0, 1, 3, 5, 6, 8]] *= -1  # z and x are flipped
@@ -976,12 +998,12 @@ class HartmannSensitivityAnalysis(
             batoid.Optic.fromYaml(f"LSST_{band}.yaml")
             .withGloballyShiftedOptic("M2", [0, 0, self.config.m2_dz * 1e-3])
             .withGloballyShiftedOptic("LSSTCamera", [0, 0, self.config.cam_dz * 1e-3])
-            .withGloballyShiftedOptic("Detector", [0, 0, self.config.det_dz * 1e-3])
+            .withGloballyShiftedOptic("Detector", [0, 0, det_dz * 1e-3])
         )
         builder = LSSTBuilder(
             fiducial,
-            fea_dir="/home/j/jmeyers3/.local/batoid_rubin_data",
-            bend_dir="/home/j/jmeyers3/.local/batoid_rubin_data",
+            fea_dir=self.config.fea_dir,
+            bend_dir=self.config.bend_dir,
         )
         builder = builder.with_aos_dof(state)
         return builder.build()
@@ -996,7 +1018,10 @@ class HartmannSensitivityAnalysis(
     ):
         self.log.info("Aligning detections")
         rtp = get_rtp(reference_exposure)
-        stamp_size = self._template_size
+        donut_radius = self.get_donut_radius(reference_exposure)
+        stamp_size = int(2 * donut_radius * 1.15)
+        if stamp_size % 2 == 0:
+            stamp_size += 1
         stamp_sets = []
         for detection in detections:
             if not detection["use"]:
@@ -1135,12 +1160,12 @@ class HartmannSensitivityAnalysis(
             )
         return stamp_sets
 
-    def match_all_patches(self, stamp_sets, ref_telescope, rtp):
+    def match_all_patches(self, stamp_sets, ref_telescope, rtp, nrot):
         patch_table = None
         for stamp_set in stamp_sets:
             self.log.info("Matching patches in donut %d", stamp_set["donut_id"])
             u, v, x, y = self.choose_pupil_locations(
-                stamp_set, ref_telescope, rtp, nrad=self.config.n_pupil_radii
+                stamp_set, ref_telescope, rtp, nrad=self.config.n_pupil_radii, nrot=nrot
             )
             donut_patch_table = QTable()
             donut_patch_table["x"] = x
@@ -1166,12 +1191,13 @@ class HartmannSensitivityAnalysis(
                 patch_table = vstack([patch_table, donut_patch_table])
         return patch_table
 
-    def choose_pupil_locations(self, stamp_set, telescope, rtp, nrad):
+    def choose_pupil_locations(self, stamp_set, telescope, rtp, nrad, nrot):
         dx, dy, model, zTA = fit_danish(
             telescope,
             x_ccs=stamp_set["x_ref_field_ccs"],
             y_ccs=stamp_set["y_ref_field_ccs"],
             stamp=stamp_set["ref"],
+            nrot=nrot,
         )
 
         u, v = batoid.utils.hexapolar(
@@ -1180,7 +1206,7 @@ class HartmannSensitivityAnalysis(
             nrad=nrad,
             naz=int(nrad * 6.28 / (1 - 0.612)),
         )
-        x, y = pupil_to_pixel(u, v, dx, dy, zTA, rtp)
+        x, y = pupil_to_pixel(u, v, dx, dy, zTA, rtp, nrot)
 
         return u * units.m, v * units.m, x * units.pix, y * units.pix
 
@@ -1217,6 +1243,8 @@ class HartmannSensitivityAnalysis(
         detector,
         rtp: Angle,
     ):
+        if patch_table is None:
+            return
         idxs = [
             int(col[3:4])
             for col in patch_table.colnames
@@ -1263,7 +1291,6 @@ class HartmannSensitivityAnalysis(
 
                 patch_table[f"dx_{idx}_predict"][select] = dx_test_align
                 patch_table[f"dy_{idx}_predict"][select] = dy_test_align
-            self.log.info("finishing predictions for donut %d", donut_id)
 
     def update_display(
         self,
@@ -1273,6 +1300,7 @@ class HartmannSensitivityAnalysis(
         if self._display is None:
             raise RuntimeError("No display set")
         self._display.mtv(exposure)
+        donut_radius = self.get_donut_radius(exposure)
 
         for idx, source in enumerate(donutCatalog):
             x, y = source["x_ref_ccd_dvcs"], source["y_ref_ccd_dvcs"]
@@ -1280,7 +1308,7 @@ class HartmannSensitivityAnalysis(
             use = use and source["inner_ratio"] < self.config.max_inner_ratio
             use = use and source["outer_ratio"] < self.config.max_outer_ratio
             color = "green" if use else "red"
-            self._display.dot("o", x, y, size=self._donut_radius, ctype=color)
+            self._display.dot("o", x, y, size=donut_radius, ctype=color)
             self._display.dot(str(idx), x, y, ctype=color)
 
     def plot_initial(self, stamp_sets, patch_table):
@@ -1307,7 +1335,7 @@ class HartmannSensitivityAnalysis(
             ax.set_aspect("equal")
 
         for idonut in range(self.config.max_donuts):
-            for iexp in range(nexp):
+            for iexp in range(self.config.max_exp_plot):
                 ax = axs[idonut][iexp]
                 if idonut >= ndonut or iexp >= nexp:
                     fig.delaxes(ax)
@@ -1384,14 +1412,12 @@ class HartmannSensitivityAnalysis(
 
         for donut_id in donut_ids:
             select = patch_table["donut_id"] == donut_id
-            x = patch_table["x"][select]
-            y = patch_table["y"][select]
+            x = patch_table["x"][select].value
+            y = patch_table["y"][select].value
             for iexp in range(nexp):
                 dx = patch_table[f"dx_{iexp}_aligned"][select]
                 dy = patch_table[f"dy_{iexp}_aligned"][select]
-                dx_fit, dy_fit, use = fit_displacements(
-                    x, y, dx, dy, self._donut_radius
-                )
+                dx_fit, dy_fit, use = fit_displacements(x, y, dx, dy)
                 patch_table[f"dx_{iexp}_fit"][select] = dx_fit
                 patch_table[f"dy_{iexp}_fit"][select] = dy_fit
                 patch_table[f"use_fit_{iexp}"][select] = use
@@ -1420,7 +1446,7 @@ class HartmannSensitivityAnalysis(
             ax.set_aspect("equal")
 
         for idonut in range(self.config.max_donuts):
-            for iexp in range(nexp):
+            for iexp in range(self.config.max_exp_plot):
                 ax = axs[idonut][iexp]
                 if idonut >= ndonut or iexp >= nexp:
                     fig.delaxes(ax)
