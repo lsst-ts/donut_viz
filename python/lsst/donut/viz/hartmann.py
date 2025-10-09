@@ -1,6 +1,7 @@
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
+from random import random
 from time import sleep
 
 import astropy.units as units
@@ -57,7 +58,7 @@ class EFD:
         self.auth = efd_creds["username"], efd_creds["password"]
         self.url = "https://usdf-rsp.slac.stanford.edu/influxdb-enterprise-data/query"
 
-    def get_most_recent_row_before(self, topic, time, where=None):
+    def get_most_recent_row_before(self, topic, time, n_retries=10, where=None):
         import pandas as pd
 
         # Stealing from summit_utils and rubin_nights
@@ -68,58 +69,65 @@ class EFD:
         query = f'select * from "{topic}" '
         query += f"where time > '{earliest.utc.isot}Z' and time <= '{time.utc.isot}Z'"
         params = {"db": "efd", "q": query}
-        while True:
+
+        attempt = 0
+        while attempt < n_retries:
+            attempt += 1
             try:
                 response = requests.get(self.url, auth=self.auth, params=params).json()
             except ValueError:
-                print("Waiting for EFD...")
-                sleep(1.0)
+                sleep(0.5 + random())
                 continue
-            else:
-                break
-
-        statement = response["results"][0]
-        if "series" not in statement:
-            raise ValueError(f"No data found for topic {topic} at time {time}.")
-        series = statement["series"][0]
-        result = pd.DataFrame(series.get("values", []), columns=series["columns"])
-        if where is not None and not result.empty:
-            result = result[where(result)]
-
-        if "time" in result:
-            result = result.set_index(pd.to_datetime(result["time"]))
-            result = result.drop("time", axis=1)
-        return result.iloc[-1]
+            statement = response["results"][0]
+            if "series" not in statement:
+                # Also possibly transient...
+                sleep(0.5 + random())
+                continue
+            # Success
+            series = statement["series"][0]
+            result = pd.DataFrame(series.get("values", []), columns=series["columns"])
+            if where is not None and not result.empty:
+                result = result[where(result)]
+            if "time" in result:
+                result = result.set_index(pd.to_datetime(result["time"]))
+                result = result.drop("time", axis=1)
+            return result.iloc[-1]
+        raise ValueError(f"No data found for topic {topic} at time {time} after {n_retries} retries.")
 
     def get_efd_data(
         self,
         topic,
         begin,
         end,
+        n_retries=10,
     ):
         import pandas as pd
 
         query = f'select * from "{topic}" '
         query += f"where time > '{begin.utc.isot}Z' and time <= '{end.utc.isot}Z'"
         params = {"db": "efd", "q": query}
-        while True:
+
+        attempt = 0
+        while attempt < n_retries:
+            attempt += 1
             try:
                 response = requests.get(self.url, auth=self.auth, params=params).json()
             except ValueError:
-                print("Waiting for EFD...")
-                sleep(1.0)
+                sleep(0.5 + random())
                 continue
-            else:
-                break
-        statement = response["results"][0]
-        if "series" not in statement:
-            raise ValueError(f"No data found for topic {topic} at time {begin}.")
-        series = statement["series"][0]
-        result = pd.DataFrame(series.get("values", []), columns=series["columns"])
-        if "time" in result:
-            result = result.set_index(pd.to_datetime(result["time"]))
-            result = result.drop("time", axis=1)
-        return result
+            statement = response["results"][0]
+            if "series" not in statement:
+                # Also possibly transient...
+                sleep(0.5 + random())
+                continue
+            # Success
+            series = statement["series"][0]
+            result = pd.DataFrame(series.get("values", []), columns=series["columns"])
+            if "time" in result:
+                result = result.set_index(pd.to_datetime(result["time"]))
+                result = result.drop("time", axis=1)
+            return result
+        raise ValueError(f"No data found for topic {topic} between {begin} and {end} after {n_retries} retries.")
 
 
 def get_rtp(exposure):
