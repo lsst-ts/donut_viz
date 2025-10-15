@@ -3,6 +3,13 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.3.1
+
+-------------
+2.3.1
+-------------
+
+* Fix plotDonutFits to work with old aggregated data.
 
 .._lsst.ts.donut.viz-2.3.0
 

@@ -1287,7 +1287,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             axs[6].axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
         axs[6].axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
         axs[6].axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
-        color = "green" if row["used"] else "red"
+        color = "gray"
+        if "used" in row.columns:
+            color = "green" if row["used"] else "red"
         axs[6].spines["right"].set_edgecolor(color)
         axs[6].spines["right"].set_linewidth(3)
 
