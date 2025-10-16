@@ -8,7 +8,7 @@ import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy import units as u
 from astropy.table import QTable, Table, vstack
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
 from lsst.geom import Point2D, radians
 from lsst.pipe.base import connectionTypes as ct
 from lsst.ts.wep.task.donutStamps import DonutStamps
@@ -32,7 +32,7 @@ __all__ = [
     "AggregateAOSVisitTableTaskConfig",
     "AggregateAOSVisitTableTask",
     "AggregateAOSVisitTableCwfsTask",
-    "AggregateUnpairedAOSVisitTableCwfsTask",
+    "AggregateAOSVisitTableUnpairedCwfsTask",
     "AggregateDonutStampsTaskConnections",
     "AggregateDonutStampsTaskConfig",
     "AggregateDonutStampsTask",
@@ -135,7 +135,6 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             # just get any one, they're all the same
             if table_meta is None:
                 table_meta = zernike_table.meta
-
             if "estimatorInfo" in zernike_table.meta.keys():
                 for key, val in zernike_table.meta["estimatorInfo"].items():
                     if key not in estimator_meta:
@@ -318,7 +317,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        camera,
+        camera: Camera,
         visitInfoDict: dict,
         pairs: list,
         donutTables: dict,
@@ -537,7 +536,7 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        camera,
+        camera: Camera,
         donutTables: dict,
         qualityTables: dict,
     ) -> typing.List[QTable]:
@@ -658,7 +657,7 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
     @timeMethod
     def run(
         self,
-        camera,
+        camera: Camera,
         donutTables: dict,
         qualityTables: dict,
     ) -> typing.List[QTable]:
@@ -682,7 +681,6 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
         extraDetectorIds = [191, 195, 199, 203]
 
         for detector in donutTables.keys():
-
             if detector not in qualityTables.keys():
                 continue
 
@@ -826,6 +824,26 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
 
     @timeMethod
     def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
+        """
+        Create overall summary tables for the visit.
+
+        Parameters
+        ----------
+        adt : `astropy.table.Table`
+            Aggregated donut table.
+        azr : `astropy.table.Table`
+            Aggregated raw Zernike table.
+        aza : `astropy.table.Table`
+            Aggregated average Zernike table.
+
+        Returns
+        -------
+        avg_table : `astropy.table.Table`
+            Table with average donut and Zernike values by detector.
+        raw_table : `astropy.table.Table`
+            Table with donut and Zernike values from every
+            source that went into the averages.
+        """
         dets = np.unique(adt["detector"])
         avg_table = aza.copy()
         avg_keys = [
@@ -894,6 +912,26 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
 
     @timeMethod
     def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
+        """
+        Create overall summary tables for the visit.
+
+        Parameters
+        ----------
+        adt : `astropy.table.Table`
+            Aggregated donut table.
+        azr : `astropy.table.Table`
+            Aggregated raw Zernike table.
+        aza : `astropy.table.Table`
+            Aggregated average Zernike table.
+
+        Returns
+        -------
+        avg_table : `astropy.table.Table`
+            Table with average donut and Zernike values by detector.
+        raw_table : `astropy.table.Table`
+            Table with donut and Zernike values from every
+            source that went into the averages.
+        """
         extraDetectorNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         intraDetectorNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
         # Only take extra focal detector names
@@ -955,12 +993,32 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
         return avg_table, raw_table
 
 
-class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
+class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
     ConfigClass = AggregateAOSVisitTableTaskConfig
-    _DefaultName = "AggregateUnpairedAOSVisitTableCwfs"
+    _DefaultName = "AggregateAOSVisitTableUnpairedCwfs"
 
     @timeMethod
     def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
+        """
+        Create overall summary table for the visit.
+
+        Parameters
+        ----------
+        adt : `astropy.table.Table`
+            Aggregated donut table.
+        azr : `astropy.table.Table`
+            Aggregated raw Zernike table.
+        aza : `astropy.table.Table`
+            Aggregated average Zernike table.
+
+        Returns
+        -------
+        avg_table : `astropy.table.Table`
+            Table with average donut and Zernike values by detector.
+        raw_table : `astropy.table.Table`
+            Table with donut and Zernike values from every
+            source that went into the averages.
+        """
         dets = np.unique(adt["detector"])
         # Only take extra focal detector names
         avg_table = aza.copy()
@@ -977,7 +1035,9 @@ class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
             "th_W",
         ]
         for k in avg_keys:
-            avg_table[k] = np.nan  # Allocate
+            # Add keys into table. That way even if no donuts
+            # are present, the column will exist.
+            avg_table[k] = np.nan
 
         # Process average table
         for det in dets:
@@ -988,7 +1048,7 @@ class AggregateUnpairedAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
         # Process raw table
         raw_table = azr.copy()
         for k in avg_keys:
-            raw_table[k] = np.nan  # Allocate
+            raw_table[k] = np.nan
         for det in dets:
             w = raw_table["detector"] == det
             wadt = adt["detector"] == det

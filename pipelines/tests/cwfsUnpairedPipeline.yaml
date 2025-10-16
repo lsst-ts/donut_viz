@@ -40,8 +40,8 @@ tasks:
     class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
   aggregateDonutStampsUnpairedTask:
     class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
-  aggregateUnpairedAOSVisitTableCwfsTask:
-    class: lsst.donut.viz.AggregateUnpairedAOSVisitTableCwfsTask
+  aggregateAOSVisitTableUnpairedCwfsTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedCwfsTask
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:
@@ -50,15 +50,3 @@ tasks:
     class: lsst.donut.viz.PlotDonutUnpairedCwfsTask
     config:
       doRubinTVUpload: False
-  # plotCwfsPairingTask:
-  #   class: lsst.donut.viz.PlotCwfsPairingTask
-  #   config:
-  #     doRubinTVUpload: False
-  # plotPsfZernTask:
-  #   class: lsst.donut.viz.PlotPsfZernTask
-  #   config:
-  #     doRubinTVUpload: False
-  # plotDonutFitsTask:
-  #   class: lsst.donut.viz.PlotDonutFitsTask
-  #   config:
-  #     doRubinTVUpload: False

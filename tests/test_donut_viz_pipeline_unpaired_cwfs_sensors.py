@@ -389,7 +389,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(raw_out), 6)
         self.assertEqual(len(avg_out), 3)
 
-    def testAggDonutTablesRunMissingDate(self):
+    def testAggDonutTablesRunMissingData(self):
         donutTables = self.butler.query_datasets(
             "donutTable", collections=self.test_run_name
         )
