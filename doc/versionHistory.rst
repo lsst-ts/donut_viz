@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.4.0
+
+-------------
+2.4.0
+-------------
+
+* Add unpaired aggregation tasks.
+
 .._lsst.ts.donut.viz-2.3.3
 
 -------------
@@ -28,14 +36,6 @@ Version History
 -------------
 
 * Fix plotDonutFits to work with old aggregated data.
-
-.._lsst.ts.donut.viz-2.4.0
-
--------------
-2.4.0
--------------
-
-* Add unpaired aggregation tasks.
 
 .._lsst.ts.donut.viz-2.3.0
 

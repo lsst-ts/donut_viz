@@ -8,8 +8,7 @@ from lsst.donut.viz import (
     AggregateDonutStampsTask,
     AggregateDonutStampsTaskConfig,
     AggregateDonutStampsUnpairedTask,
-    AggregateDonutTablesCwfsTask,
-    AggregateDonutTablesCwfsTaskConfig,
+    AggregateDonutTablesUnpairedCwfsTask,
     AggregateZernikeTablesTask,
     AggregateZernikeTablesTaskConfig,
     PlotDonutUnpairedCwfsTask,
@@ -247,7 +246,7 @@ class TestDonutVizPipeline(TestCase):
         config = AggregateDonutStampsTaskConfig()
         task = AggregateDonutStampsTask(config=config)
         unpaired_datasets = self.butler.query_datasets(
-            "donutStamps", collections=self.test_run_name
+            "donutStampsCwfs", collections=self.test_run_name
         )
         quality_datasets = self.butler.query_datasets(
             "donutQualityTable", collections=self.test_run_name
@@ -276,7 +275,7 @@ class TestDonutVizPipeline(TestCase):
 
     def testAggDonutStampsRunMissingData(self):
         unpaired_datasets = self.butler.query_datasets(
-            "donutStamps", collections=self.test_run_name
+            "donutStampsCwfs", collections=self.test_run_name
         )
         quality_datasets = self.butler.query_datasets(
             "donutQualityTable", collections=self.test_run_name
@@ -302,7 +301,7 @@ class TestDonutVizPipeline(TestCase):
 
     def testAggDonutStampsMetadata(self):
         unpaired_datasets = self.butler.query_datasets(
-            "donutStamps", collections=self.test_run_name
+            "donutStampsCwfs", collections=self.test_run_name
         )
         agg_datasets = self.butler.query_datasets(
             "donutStampsUnpairedVisit", collections=self.test_run_name
@@ -342,7 +341,7 @@ class TestDonutVizPipeline(TestCase):
 
     def testAggDonutStampsSingleStamp(self):
         unpaired_datasets = self.butler.query_datasets(
-            "donutStamps", collections=self.test_run_name
+            "donutStampsCwfs", collections=self.test_run_name
         )
         quality_datasets = self.butler.query_datasets(
             "donutQualityTable", collections=self.test_run_name
@@ -419,6 +418,6 @@ class TestDonutVizPipeline(TestCase):
             np.where(qualityTables[191]["DEFOCAL_TYPE"] == "extra")
         )
 
-        task = AggregateDonutTablesCwfsTask(config=AggregateDonutTablesCwfsTaskConfig())
+        task = AggregateDonutTablesUnpairedCwfsTask()
         agg_donut_table = task.run(camera, donutTables, qualityTables)
         self.assertEqual(len(agg_donut_table), 2)
