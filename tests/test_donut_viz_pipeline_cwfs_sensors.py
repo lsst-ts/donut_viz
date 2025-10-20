@@ -89,9 +89,7 @@ class TestDonutVizPipeline(TestCase):
 
     def testAggregateZernikesAvg(self):
         average_dataset_list = list(
-            self.butler.query_datasets(
-                "aggregateZernikesAvg", collections=self.test_run_name
-            )
+            self.butler.query_datasets("aggregateZernikesAvg", collections=self.test_run_name)
         )
         self.assertEqual(len(average_dataset_list), 1)
         self.assertEqual(average_dataset_list[0].dataId["visit"], 4021123106000)
@@ -102,9 +100,7 @@ class TestDonutVizPipeline(TestCase):
 
     def testAggregateZernikesRaw(self):
         raw_dataset_list = list(
-            self.butler.query_datasets(
-                "aggregateZernikesRaw", collections=self.test_run_name
-            )
+            self.butler.query_datasets("aggregateZernikesRaw", collections=self.test_run_name)
         )
         self.assertEqual(len(raw_dataset_list), 1)
         self.assertEqual(raw_dataset_list[0].dataId["visit"], 4021123106000)
@@ -114,15 +110,11 @@ class TestDonutVizPipeline(TestCase):
             agg_zern_raw["detector"],
             sorted([det for det in self.extraDetectorNames for _ in range(2)]),
         )
-        self.assertCountEqual(
-            agg_zern_raw.meta.keys(), self.meta_keys + ["estimatorInfo"]
-        )
+        self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys + ["estimatorInfo"])
 
     def testAggregateDonuts(self):
         donut_table_list = list(
-            self.butler.query_datasets(
-                "aggregateDonutTable", collections=self.test_run_name
-            )
+            self.butler.query_datasets("aggregateDonutTable", collections=self.test_run_name)
         )
         self.assertEqual(len(donut_table_list), 1)
         self.assertEqual(donut_table_list[0].dataId["visit"], 4021123106000)
@@ -142,14 +134,10 @@ class TestDonutVizPipeline(TestCase):
 
     def testAggregateDonutStamps(self):
         intra_dataset_list = list(
-            self.butler.query_datasets(
-                "donutStampsIntraVisit", collections=self.test_run_name
-            )
+            self.butler.query_datasets("donutStampsIntraVisit", collections=self.test_run_name)
         )
         extra_dataset_list = list(
-            self.butler.query_datasets(
-                "donutStampsExtraVisit", collections=self.test_run_name
-            )
+            self.butler.query_datasets("donutStampsExtraVisit", collections=self.test_run_name)
         )
         self.assertEqual(len(intra_dataset_list), 1)
         self.assertEqual(len(extra_dataset_list), 1)
@@ -168,25 +156,19 @@ class TestDonutVizPipeline(TestCase):
 
     def testAggregateAOSVisitTableRaw(self):
         raw_visit_table_list = list(
-            self.butler.query_datasets(
-                "aggregateAOSVisitTableRaw", collections=self.test_run_name
-            )
+            self.butler.query_datasets("aggregateAOSVisitTableRaw", collections=self.test_run_name)
         )
         self.assertEqual(len(raw_visit_table_list), 1)
         self.assertEqual(raw_visit_table_list[0].dataId["visit"], 4021123106000)
         raw_visit_table = self.butler.get(raw_visit_table_list[0])
-        self.assertCountEqual(
-            raw_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo"]
-        )
+        self.assertCountEqual(raw_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo"])
         raw_zern_table = self.butler.get(
             "aggregateZernikesRaw",
             dataId=raw_visit_table_list[0].dataId,
             collections=self.test_run_name,
         )
         self.assertEqual(len(raw_zern_table), len(raw_visit_table))
-        np.testing.assert_array_equal(
-            raw_zern_table["zk_CCS"], raw_visit_table["zk_CCS"]
-        )
+        np.testing.assert_array_equal(raw_zern_table["zk_CCS"], raw_visit_table["zk_CCS"])
         donut_table = self.butler.get(
             "aggregateDonutTable",
             dataId=raw_visit_table_list[0].dataId,
@@ -200,9 +182,7 @@ class TestDonutVizPipeline(TestCase):
 
     def testAggregateAOSVisitTableAvg(self):
         avg_visit_table_list = list(
-            self.butler.query_datasets(
-                "aggregateAOSVisitTableAvg", collections=self.test_run_name
-            )
+            self.butler.query_datasets("aggregateAOSVisitTableAvg", collections=self.test_run_name)
         )
         self.assertEqual(len(avg_visit_table_list), 1)
         self.assertEqual(avg_visit_table_list[0].dataId["visit"], 4021123106000)
@@ -214,9 +194,7 @@ class TestDonutVizPipeline(TestCase):
             collections=self.test_run_name,
         )
         self.assertEqual(len(avg_zern_table), len(avg_visit_table))
-        np.testing.assert_array_equal(
-            avg_zern_table["zk_CCS"], avg_visit_table["zk_CCS"]
-        )
+        np.testing.assert_array_equal(avg_zern_table["zk_CCS"], avg_visit_table["zk_CCS"])
         donut_table = self.butler.get(
             "aggregateDonutTable",
             dataId=avg_visit_table_list[0].dataId,
@@ -230,43 +208,33 @@ class TestDonutVizPipeline(TestCase):
     def testPlotAOSTasks(self):
         # Test that plots exist in butler
         measured_dataset_list = list(
-            self.butler.query_datasets(
-                "measuredZernikePyramid", collections=self.test_run_name
-            )
+            self.butler.query_datasets("measuredZernikePyramid", collections=self.test_run_name)
         )
         self.assertEqual(len(measured_dataset_list), 1)
         self.assertEqual(measured_dataset_list[0].dataId["visit"], 4021123106000)
 
         intrinsic_dataset_list = list(
-            self.butler.query_datasets(
-                "intrinsicZernikePyramid", collections=self.test_run_name
-            )
+            self.butler.query_datasets("intrinsicZernikePyramid", collections=self.test_run_name)
         )
 
         self.assertEqual(len(intrinsic_dataset_list), 1)
         self.assertEqual(intrinsic_dataset_list[0].dataId["visit"], 4021123106000)
 
         residual_dataset_list = list(
-            self.butler.query_datasets(
-                "residualZernikePyramid", collections=self.test_run_name
-            )
+            self.butler.query_datasets("residualZernikePyramid", collections=self.test_run_name)
         )
         self.assertEqual(len(residual_dataset_list), 1)
         self.assertEqual(residual_dataset_list[0].dataId["visit"], 4021123106000)
 
     def testPlotCwfsPairingTask(self):
         # Test that plots exist in butler
-        dataset_list = list(
-            self.butler.query_datasets("pairingPlot", collections=self.test_run_name)
-        )
+        dataset_list = list(self.butler.query_datasets("pairingPlot", collections=self.test_run_name))
         self.assertEqual(len(dataset_list), 1)
         self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
 
     def testPlotCwfsPairingTaskRunMissingData(self):
         # Get only one detector
-        dataset_list = list(
-            self.butler.query_datasets("post_isr_image", collections=self.test_run_name)
-        )
+        dataset_list = list(self.butler.query_datasets("post_isr_image", collections=self.test_run_name))
 
         images = {}
         # pick just one of two available detectors
@@ -274,9 +242,7 @@ class TestDonutVizPipeline(TestCase):
             det = dataset.dataId["detector"]
             images[det] = self.butler.get(dataset).image.array
         table = self.butler.get(
-            self.butler.query_datasets(
-                "aggregateAOSVisitTableRaw", collections=self.test_run_name
-            )[0]
+            self.butler.query_datasets("aggregateAOSVisitTableRaw", collections=self.test_run_name)[0]
         )
         visit = dataset_list[0].dataId["exposure"]
 
@@ -290,17 +256,13 @@ class TestDonutVizPipeline(TestCase):
 
     def testPlotDonutFitsTask(self):
         # Test that plots exist in butler
-        dataset_list = list(
-            self.butler.query_datasets("donutFits", collections=self.test_run_name)
-        )
+        dataset_list = list(self.butler.query_datasets("donutFits", collections=self.test_run_name))
         self.assertEqual(len(dataset_list), 1)
         self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
 
     def testPlotDonutCwfsTask(self):
         # Test that plots exist in butler
-        dataset_list = list(
-            self.butler.query_datasets("donutPlot", collections=self.test_run_name)
-        )
+        dataset_list = list(self.butler.query_datasets("donutPlot", collections=self.test_run_name))
         self.assertEqual(len(dataset_list), 1)
         self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
 
@@ -308,15 +270,9 @@ class TestDonutVizPipeline(TestCase):
         # Aggregate only 3 of 4 detectors
         config = AggregateDonutStampsTaskConfig()
         task = AggregateDonutStampsTask(config=config)
-        intra_datasets = self.butler.query_datasets(
-            "donutStampsIntra", collections=self.test_run_name
-        )
-        extra_datasets = self.butler.query_datasets(
-            "donutStampsExtra", collections=self.test_run_name
-        )
-        quality_datasets = self.butler.query_datasets(
-            "donutQualityTable", collections=self.test_run_name
-        )
+        intra_datasets = self.butler.query_datasets("donutStampsIntra", collections=self.test_run_name)
+        extra_datasets = self.butler.query_datasets("donutStampsExtra", collections=self.test_run_name)
+        quality_datasets = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
         donut_stamps_intra = [self.butler.get(dataset) for dataset in intra_datasets]
         donut_stamps_extra = [self.butler.get(dataset) for dataset in extra_datasets]
         quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
@@ -347,23 +303,15 @@ class TestDonutVizPipeline(TestCase):
     def testPlotPsfZernTask(self):
         # Test that plots exist in butler
         psf_zern_dataset_list = list(
-            self.butler.query_datasets(
-                "psfFromZernPanel", collections=self.test_run_name
-            )
+            self.butler.query_datasets("psfFromZernPanel", collections=self.test_run_name)
         )
         self.assertEqual(len(psf_zern_dataset_list), 1)
         self.assertEqual(psf_zern_dataset_list[0].dataId["visit"], 4021123106000)
 
     def testAggDonutStampsRunMissingData(self):
-        intra_datasets = self.butler.query_datasets(
-            "donutStampsIntra", collections=self.test_run_name
-        )
-        extra_datasets = self.butler.query_datasets(
-            "donutStampsExtra", collections=self.test_run_name
-        )
-        quality_datasets = self.butler.query_datasets(
-            "donutQualityTable", collections=self.test_run_name
-        )
+        intra_datasets = self.butler.query_datasets("donutStampsIntra", collections=self.test_run_name)
+        extra_datasets = self.butler.query_datasets("donutStampsExtra", collections=self.test_run_name)
+        quality_datasets = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
         donut_stamps_intra = [self.butler.get(dataset) for dataset in intra_datasets]
         donut_stamps_extra = [self.butler.get(dataset) for dataset in extra_datasets]
         quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
@@ -379,18 +327,12 @@ class TestDonutVizPipeline(TestCase):
         # Test that outputs are still created
         agg_donut_config = AggregateDonutStampsTaskConfig()
         agg_donut_task = AggregateDonutStampsTask(config=agg_donut_config)
-        task_out = agg_donut_task.run(
-            donut_stamps_intra, donut_stamps_extra, quality_tables
-        )
+        task_out = agg_donut_task.run(donut_stamps_intra, donut_stamps_extra, quality_tables)
         self.assertEqual(len(task_out), 2)
 
     def testAggDonutStampsMetadata(self):
-        intra_datasets = self.butler.query_datasets(
-            "donutStampsIntra", collections=self.test_run_name
-        )
-        extra_datasets = self.butler.query_datasets(
-            "donutStampsExtra", collections=self.test_run_name
-        )
+        intra_datasets = self.butler.query_datasets("donutStampsIntra", collections=self.test_run_name)
+        extra_datasets = self.butler.query_datasets("donutStampsExtra", collections=self.test_run_name)
         intra_agg_datasets = self.butler.query_datasets(
             "donutStampsIntraVisit", collections=self.test_run_name
         )
@@ -423,37 +365,23 @@ class TestDonutVizPipeline(TestCase):
 
         # Test that values are correctly set
         for key in visit_keys[:7]:
-            self.assertEqual(
-                intra_agg_stamps.metadata[key], donut_stamps_intra.metadata[key]
-            )
-            self.assertEqual(
-                extra_agg_stamps.metadata[key], donut_stamps_extra.metadata[key]
-            )
-            self.assertEqual(
-                intra_agg_stamps.metadata[key], extra_agg_stamps.metadata[key]
-            )
+            self.assertEqual(intra_agg_stamps.metadata[key], donut_stamps_intra.metadata[key])
+            self.assertEqual(extra_agg_stamps.metadata[key], donut_stamps_extra.metadata[key])
+            self.assertEqual(intra_agg_stamps.metadata[key], extra_agg_stamps.metadata[key])
         # Separate out BORESIGHT_ALT_RAD and BORESIGHT_AZ_RAD
         # which should be nan
         for key in visit_keys[7:]:
             self.assertTrue(
-                np.isnan(intra_agg_stamps.metadata[key])
-                and np.isnan(donut_stamps_intra.metadata[key])
+                np.isnan(intra_agg_stamps.metadata[key]) and np.isnan(donut_stamps_intra.metadata[key])
             )
             self.assertTrue(
-                np.isnan(extra_agg_stamps.metadata[key])
-                and np.isnan(donut_stamps_extra.metadata[key])
+                np.isnan(extra_agg_stamps.metadata[key]) and np.isnan(donut_stamps_extra.metadata[key])
             )
 
     def testAggDonutStampsSingleStamp(self):
-        intra_datasets = self.butler.query_datasets(
-            "donutStampsIntra", collections=self.test_run_name
-        )
-        extra_datasets = self.butler.query_datasets(
-            "donutStampsExtra", collections=self.test_run_name
-        )
-        quality_datasets = self.butler.query_datasets(
-            "donutQualityTable", collections=self.test_run_name
-        )
+        intra_datasets = self.butler.query_datasets("donutStampsIntra", collections=self.test_run_name)
+        extra_datasets = self.butler.query_datasets("donutStampsExtra", collections=self.test_run_name)
+        quality_datasets = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
         donut_stamps_intra = [self.butler.get(dataset) for dataset in intra_datasets]
         donut_stamps_extra = [self.butler.get(dataset) for dataset in extra_datasets]
         quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
@@ -470,18 +398,12 @@ class TestDonutVizPipeline(TestCase):
         # Test that outputs are still created
         agg_donut_config = AggregateDonutStampsTaskConfig()
         agg_donut_task = AggregateDonutStampsTask(config=agg_donut_config)
-        task_out = agg_donut_task.run(
-            donut_stamps_intra, donut_stamps_extra, quality_tables
-        )
+        task_out = agg_donut_task.run(donut_stamps_intra, donut_stamps_extra, quality_tables)
         self.assertEqual(len(task_out), 2)
 
     def testAggZernikeTablesRunMissingData(self):
-        zernike_tables = self.butler.query_datasets(
-            "zernikes", collections=self.test_run_name
-        )
-        zernike_table_list = [
-            self.butler.get(zernike_table) for zernike_table in zernike_tables
-        ]
+        zernike_tables = self.butler.query_datasets("zernikes", collections=self.test_run_name)
+        zernike_table_list = [self.butler.get(zernike_table) for zernike_table in zernike_tables]
         zernike_table_list = [copy(zernike_table_list[0]) for i in range(4)]
         # First check that original dataset is length more than 0
         self.assertEqual(len(zernike_table_list[0]), 3)
@@ -489,20 +411,14 @@ class TestDonutVizPipeline(TestCase):
         zernike_table_list[0].remove_rows(np.arange(3))
 
         # Test that outputs are still created
-        agg_zern_task = AggregateZernikeTablesTask(
-            config=AggregateZernikeTablesTaskConfig()
-        )
+        agg_zern_task = AggregateZernikeTablesTask(config=AggregateZernikeTablesTaskConfig())
         raw_out, avg_out = agg_zern_task.run(zernike_table_list)
         self.assertEqual(len(raw_out), 6)
         self.assertEqual(len(avg_out), 3)
 
     def testAggDonutTablesRunMissingDate(self):
-        donutTables = self.butler.query_datasets(
-            "donutTable", collections=self.test_run_name
-        )
-        qualityTables = self.butler.query_datasets(
-            "donutQualityTable", collections=self.test_run_name
-        )
+        donutTables = self.butler.query_datasets("donutTable", collections=self.test_run_name)
+        qualityTables = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
 
         visitInfoDict = dict()
         for donutTableRef in donutTables:
@@ -511,20 +427,12 @@ class TestDonutVizPipeline(TestCase):
             if visit_id in visitInfoDict:
                 continue
             visitInfoDict[visit_id] = convertDictToVisitInfo(table.meta["visit_info"])
-        donutTables = {
-            ref.dataId["detector"]: self.butler.get(ref) for ref in donutTables
-        }
-        qualityTables = {
-            ref.dataId["detector"]: self.butler.get(ref) for ref in qualityTables
-        }
-        camera = self.butler.get(
-            "camera", dataId={"instrument": "LSSTCam"}, collections="LSSTCam/calib"
-        )
+        donutTables = {ref.dataId["detector"]: self.butler.get(ref) for ref in donutTables}
+        qualityTables = {ref.dataId["detector"]: self.butler.get(ref) for ref in qualityTables}
+        camera = self.butler.get("camera", dataId={"instrument": "LSSTCam"}, collections="LSSTCam/calib")
 
         # Remove all extra-focal donuts from one detector
-        qualityTables[191].remove_rows(
-            np.where(qualityTables[191]["DEFOCAL_TYPE"] == "extra")
-        )
+        qualityTables[191].remove_rows(np.where(qualityTables[191]["DEFOCAL_TYPE"] == "extra"))
 
         task = AggregateDonutTablesCwfsTask(config=AggregateDonutTablesCwfsTaskConfig())
         agg_donut_table = task.run(camera, donutTables, qualityTables)
@@ -533,9 +441,7 @@ class TestDonutVizPipeline(TestCase):
     def testPlotPsfZernTaskMissingData(self):
         # Test that if detectors have different numbers of zernikes
         # the plot still gets made.
-        zernike_datasets = self.butler.query_datasets(
-            "zernikes", collections=self.test_run_name
-        )
+        zernike_datasets = self.butler.query_datasets("zernikes", collections=self.test_run_name)
         zernikes = [self.butler.get(dataset) for dataset in zernike_datasets]
         zernikes = [copy(zernikes[0]) for i in range(4)]
         zernikes_missing_data = copy(zernikes)

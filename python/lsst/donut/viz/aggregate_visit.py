@@ -133,9 +133,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         meta["parallacticAngle"] = table_meta["extra"]["boresight_par_angle_rad"]
         meta["rotAngle"] = table_meta["extra"]["boresight_rot_angle_rad"]
         rtp = (
-            meta["parallacticAngle"] * radians
-            - meta["rotAngle"] * radians
-            - (np.pi / 2 * radians)
+            meta["parallacticAngle"] * radians - meta["rotAngle"] * radians - (np.pi / 2 * radians)
         ).asRadians()
         meta["rotTelPos"] = rtp
         meta["ra"] = table_meta["extra"]["boresight_ra_rad"]
@@ -169,9 +167,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Add average danish fwhm values into metadata of average table.
         if "fwhm" in out_raw.meta["estimatorInfo"].keys():
             out_avg.meta["estimatorInfo"] = dict()
-            out_avg.meta["estimatorInfo"]["fwhm"] = np.median(
-                out_raw.meta["estimatorInfo"]["fwhm"]
-            )
+            out_avg.meta["estimatorInfo"]["fwhm"] = np.median(out_raw.meta["estimatorInfo"]["fwhm"])
 
         return out_raw, out_avg
 
@@ -275,16 +271,13 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             visitInfoDict[visit_id] = convertDictToVisitInfo(table.meta["visit_info"])
 
         if hasattr(inputRefs, "donut_visit_pair_table"):
-            pairs = self.pairer.run(
-                visitInfoDict, butlerQC.get(inputRefs.donut_visit_pair_table)
-            )
+            pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donut_visit_pair_table))
         else:
             pairs = self.pairer.run(visitInfoDict)
 
         # Make dictionaries to match visits and detectors
         donutTables = {
-            (ref.dataId["visit"], ref.dataId["detector"]): butlerQC.get(ref)
-            for ref in inputRefs.donutTables
+            (ref.dataId["visit"], ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables
         }
         qualityTables = {
             (ref.dataId["visit"], ref.dataId["detector"]): butlerQC.get(ref)
@@ -334,10 +327,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
         # Raise error if there's no matches
         if len(extra_keys) == 0:
-            raise RuntimeError(
-                "No (visit, detector) matches found between "
-                "the donut and quality tables"
-            )
+            raise RuntimeError("No (visit, detector) matches found between the donut and quality tables")
 
         pairTables = {}
         for pair in pairs:
@@ -363,12 +353,8 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 qualityTable = qualityTables[(pair.extra, detector)]
 
                 # Get rows of quality table for this exposure
-                intraQualityTable = qualityTable[
-                    qualityTable["DEFOCAL_TYPE"] == "intra"
-                ]
-                extraQualityTable = qualityTable[
-                    qualityTable["DEFOCAL_TYPE"] == "extra"
-                ]
+                intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
+                extraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
 
                 if (len(extraQualityTable) == 0) or (len(intraQualityTable) == 0):
                     continue
@@ -385,14 +371,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
                     # Add field angle in CCS to the table
                     pts = tform.applyForward(
-                        [
-                            Point2D(x, y)
-                            for x, y in zip(table["centroid_x"], table["centroid_y"])
-                        ]
+                        [Point2D(x, y) for x, y in zip(table["centroid_x"], table["centroid_y"])]
                     )
-                    table["thx_CCS"] = [
-                        pt.y for pt in pts
-                    ]  # Transpose from DVCS to CCS
+                    table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
                     table["thy_CCS"] = [pt.x for pt in pts]
                     table["detector"] = det.getName()
 
@@ -453,9 +434,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 out.meta["average"][k] = ((a1 + a2) / 2).wrapCtr().asRadians()
 
             # Easier to average the MJDs
-            out.meta["average"]["mjd"] = 0.5 * (
-                out.meta["extra"]["mjd"] + out.meta["intra"]["mjd"]
-            )
+            out.meta["average"]["mjd"] = 0.5 * (out.meta["extra"]["mjd"] + out.meta["intra"]["mjd"])
 
             # Calculate coordinates in different reference frames
             q = out.meta["average"]["parallacticAngle"]
@@ -526,13 +505,8 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         camera = butlerQC.get(inputRefs.camera)
 
         # Make dictionaries to match detectors
-        donutTables = {
-            (ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables
-        }
-        qualityTables = {
-            (ref.dataId["detector"]): butlerQC.get(ref)
-            for ref in inputRefs.qualityTables
-        }
+        donutTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables}
+        qualityTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.qualityTables}
 
         aggTable = self.run(camera, donutTables, qualityTables)
         butlerQC.put(aggTable, outputRefs.aggregateDonutTable)
@@ -599,10 +573,7 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
 
                 # Add field angle in CCS to the table
                 pts = tform.applyForward(
-                    [
-                        Point2D(x, y)
-                        for x, y in zip(table["centroid_x"], table["centroid_y"])
-                    ]
+                    [Point2D(x, y) for x, y in zip(table["centroid_x"], table["centroid_y"])]
                 )
                 table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
                 table["thy_CCS"] = [pt.x for pt in pts]
@@ -769,17 +740,11 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                     # If one table has more rows than the other,
                     # trim the longer one
                     if wintra.sum() > wextra.sum():
-                        wintra[wintra] = [True] * wextra.sum() + [False] * (
-                            wintra.sum() - wextra.sum()
-                        )
+                        wintra[wintra] = [True] * wextra.sum() + [False] * (wintra.sum() - wextra.sum())
                     elif wextra.sum() > wintra.sum():
-                        wextra[wextra] = [True] * wintra.sum() + [False] * (
-                            wextra.sum() - wintra.sum()
-                        )
+                        wextra[wextra] = [True] * wintra.sum() + [False] * (wextra.sum() - wintra.sum())
                     # ought to be the same length now
-                    raw_table[k][w] = 0.5 * (
-                        adt[k][wadt][wintra] + adt[k][wadt][wextra]
-                    )
+                    raw_table[k][w] = 0.5 * (adt[k][wadt][wintra] + adt[k][wadt][wextra])
                     if k + "_intra" not in raw_table.colnames:
                         raw_table[k + "_intra"] = np.nan
                         raw_table[k + "_extra"] = np.nan
@@ -844,13 +809,9 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
                 # If one table has more rows than the other,
                 # trim the longer one
                 if wintra.sum() > wextra.sum():
-                    wintra[wintra] = [True] * wextra.sum() + [False] * (
-                        wintra.sum() - wextra.sum()
-                    )
+                    wintra[wintra] = [True] * wextra.sum() + [False] * (wintra.sum() - wextra.sum())
                 elif wextra.sum() > wintra.sum():
-                    wextra[wextra] = [True] * wintra.sum() + [False] * (
-                        wextra.sum() - wintra.sum()
-                    )
+                    wextra[wextra] = [True] * wintra.sum() + [False] * (wextra.sum() - wintra.sum())
                 # ought to be the same length now
                 raw_table[k][w] = 0.5 * (adt[k][wintra] + adt[k][wextra])
                 if k + "_intra" not in raw_table.colnames:
@@ -915,9 +876,7 @@ class AggregateDonutStampsTaskConfig(
 
     def validate(self):
         if self.maxDonutsPerDetector < 1:
-            raise pexConfig.FieldValidationError(
-                "maxDonutsPerDetector must be at least 1"
-            )
+            raise pexConfig.FieldValidationError("maxDonutsPerDetector must be at least 1")
 
 
 class AggregateDonutStampsTask(pipeBase.PipelineTask):
@@ -964,20 +923,12 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                 continue
 
             # Load the quality table and determine which donuts were selected
-            intraQualitySelect = quality[quality["DEFOCAL_TYPE"] == "intra"][
-                "FINAL_SELECT"
-            ]
-            extraQualitySelect = quality[quality["DEFOCAL_TYPE"] == "extra"][
-                "FINAL_SELECT"
-            ]
+            intraQualitySelect = quality[quality["DEFOCAL_TYPE"] == "intra"]["FINAL_SELECT"]
+            extraQualitySelect = quality[quality["DEFOCAL_TYPE"] == "extra"]["FINAL_SELECT"]
 
             # Select donuts used in Zernike estimation
-            intraStampsSelect = DonutStamps(
-                [intra[i] for i in range(len(intra)) if intraQualitySelect[i]]
-            )
-            extraStampsSelect = DonutStamps(
-                [extra[i] for i in range(len(extra)) if extraQualitySelect[i]]
-            )
+            intraStampsSelect = DonutStamps([intra[i] for i in range(len(intra)) if intraQualitySelect[i]])
+            extraStampsSelect = DonutStamps([extra[i] for i in range(len(extra)) if extraQualitySelect[i]])
 
             if intraStampsMetadata is None or extraStampsMetadata is None:
                 # Create metadata for stamps
@@ -1002,25 +953,13 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                     extraStampsMetadata[key] = extra.metadata[key]
 
             # Append the requested number of donuts
-            intraStampsList.append(
-                intraStampsSelect[: self.config.maxDonutsPerDetector]
-            )
-            extraStampsList.append(
-                extraStampsSelect[: self.config.maxDonutsPerDetector]
-            )
+            intraStampsList.append(intraStampsSelect[: self.config.maxDonutsPerDetector])
+            extraStampsList.append(extraStampsSelect[: self.config.maxDonutsPerDetector])
 
-        intraStampsListRavel = [
-            stamp for stampList in intraStampsList for stamp in stampList
-        ]
-        extraStampsListRavel = [
-            stamp for stampList in extraStampsList for stamp in stampList
-        ]
+        intraStampsListRavel = [stamp for stampList in intraStampsList for stamp in stampList]
+        extraStampsListRavel = [stamp for stampList in extraStampsList for stamp in stampList]
 
-        intraStampsRavel = DonutStamps(
-            intraStampsListRavel, metadata=intraStampsMetadata
-        )
-        extraStampsRavel = DonutStamps(
-            extraStampsListRavel, metadata=extraStampsMetadata
-        )
+        intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=intraStampsMetadata)
+        extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extraStampsMetadata)
 
         return intraStampsRavel, extraStampsRavel

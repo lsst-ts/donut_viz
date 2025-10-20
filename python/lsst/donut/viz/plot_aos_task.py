@@ -157,9 +157,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "zk_measurement_pyramid"
-            plotFile = makePlotFile(
-                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-            )
+            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
             zkPyramid.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(instrument),
@@ -170,9 +168,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
             )
 
             plotName = "zk_residual_pyramid"
-            plotFile = makePlotFile(
-                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-            )
+            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
             residPyramid.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(instrument),
@@ -218,12 +214,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
         nollIndices = aos_raw.meta["nollIndices"]
 
         # check if there is data for any corner sensor
-        if (
-            np.sum(
-                ["SW" in detName for detName in np.unique(aos_raw["detector"].value)]
-            )
-            > 0
-        ):
+        if np.sum(["SW" in detName for detName in np.unique(aos_raw["detector"].value)]) > 0:
             # in that case, shift x,y positions
             # towards the center, along the diagonal
             # rotate the original CCS into OCS,
@@ -253,9 +244,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
             xy_outer=4.18,
             xy_inner=4.18 * 0.612,
         )
-        intrinsic = np.array(
-            [z.coef for z in dzs(aos_raw["thx_OCS"], aos_raw["thy_OCS"])]
-        ).T[4:29]
+        intrinsic = np.array([z.coef for z in dzs(aos_raw["thx_OCS"], aos_raw["thy_OCS"])]).T[4:29]
         intrinsic = intrinsic[: len(zk)]
         intrinsicPyramid = self.doPyramid(x, y, intrinsic, rtp, q, nollIndices)
 
@@ -372,9 +361,7 @@ class PlotDonutTaskConfig(
         doc="Upload to RubinTV",
         default=False,
     )
-    doS11only = pexConfig.Field(
-        dtype=bool, doc="Use only S11 in FAM mode", default=False
-    )
+    doS11only = pexConfig.Field(dtype=bool, doc="Use only S11 in FAM mode", default=False)
 
 
 class PlotDonutTask(pipeBase.PipelineTask):
@@ -416,15 +403,11 @@ class PlotDonutTask(pipeBase.PipelineTask):
             locationConfig = getAutomaticLocationConfig()
             # seq_num is sometimes different for
             # intra vs extra-focal if pistoning
-            for defocal_type, visit_id in zip(
-                ["extra", "intra"], [visitExtra, visitIntra]
-            ):
+            for defocal_type, visit_id in zip(["extra", "intra"], [visitExtra, visitIntra]):
                 day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit_id)
 
                 plotName = "fp_donut_gallery"
-                plotFile = makePlotFile(
-                    locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-                )
+                plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
                 fig_dict[defocal_type].savefig(plotFile)
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(inst),
@@ -435,9 +418,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 )
 
     @timeMethod
-    def run(
-        self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
-    ):
+    def run(self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str):
         visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
         visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
 
@@ -468,9 +449,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
 
         fig_dict = dict()
 
-        for donutStampSet, visit in zip(
-            [donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]
-        ):
+        for donutStampSet, visit in zip([donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]):
             fig = make_figure(figsize=(11, 8.5))
             aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
             for donut in donutStampSet:
@@ -596,9 +575,7 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "fp_donut_gallery"
-            plotFile = makePlotFile(
-                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-            )
+            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(inst),
@@ -609,9 +586,7 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
             )
 
     @timeMethod
-    def run(
-        self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
-    ):
+    def run(self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str):
         visit = donutStampsIntra.metadata.getArray("VISIT")[0]
         # LSST detector layout
         q = donutStampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
@@ -800,9 +775,7 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "fp_pairing_plot"
-            plotFile = makePlotFile(
-                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-            )
+            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(inst),
@@ -839,9 +812,7 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
                 # handle negative regions in the image for plotting
                 arr = np.copy(images[k])
                 arr[np.where(arr < 0)] = 0
-                ax.imshow(
-                    np.rot90(stretchDataMidTone(arr), -nquarter).T, cmap="Greys_r"
-                )
+                ax.imshow(np.rot90(stretchDataMidTone(arr), -nquarter).T, cmap="Greys_r")
                 if is_extra:
                     dettable = table[table["detector"] == camera[extra_det].getName()]
                     dx1 = dettable["centroid_x_extra"]
@@ -891,9 +862,7 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
                 ax.text(x, y, str(k), transform=ax.transAxes, color="red", fontsize=13)
             else:
                 ax.axis("off")
-        fig.subplots_adjust(
-            left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.1
-        )
+        fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.1)
         fig.suptitle(f"{visit}", fontsize=15)
         return fig
 
@@ -960,9 +929,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "psf_zk_panel"
-            plotFile = makePlotFile(
-                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-            )
+            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
             zkPanel.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(instrument),
@@ -1022,11 +989,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
                 angles_set = True
 
         psf = [
-            [
-                np.sqrt(np.sum(convertZernikesToPsfWidth(pair_zset) ** 2))
-                for pair_zset in det
-            ]
-            for det in zs
+            [np.sqrt(np.sum(convertZernikesToPsfWidth(pair_zset) ** 2)) for pair_zset in det] for det in zs
         ]
 
         fig = make_figure(**kwargs)
@@ -1158,9 +1121,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             locationConfig = getAutomaticLocationConfig()
             instrument = inputRefs.aggregateAOSRaw.dataId["instrument"]
             plotName = "donut_fits"
-            plotFile = makePlotFile(
-                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-            )
+            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(instrument),
@@ -1235,9 +1196,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             (1.0, 0.0, 0.0),  # Red
         ]
         positions = [0.0, 1 / 11, 1.0]
-        cmap = LinearSegmentedColormap.from_list(
-            "cyan_white_magenta", list(zip(positions, colors))
-        )
+        cmap = LinearSegmentedColormap.from_list("cyan_white_magenta", list(zip(positions, colors)))
 
         vmax = np.nanquantile(imgs[0], 0.99)
         axs[0].imshow(imgs[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
@@ -1251,9 +1210,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         axs[6].axhline(0, color="k", lw=0.5)
         axs[6].set_ylim(-2.5, 2.5)
         axs[6].set_xlim(3.5, 28.5)
-        axs[6].scatter(
-            [4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=10, lw=0.5
-        )
+        axs[6].scatter([4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=10, lw=0.5)
         axs[6].scatter([7, 17], [2.2] * 2, marker="$\u2191$", c="k", s=10, lw=0.5)
         axs[6].scatter([8, 16], [2.2] * 2, marker="$\u2192$", c="k", s=10, lw=0.5)
         axs[6].scatter([5, 13, 23], [2.2] * 3, marker=(2, 2, 45), c="k", s=10, lw=0.5)
@@ -1331,12 +1288,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         wavelength = self.wavelengths[bandpass]
         telescope = batoid.Optic.fromYaml(f"LSST_{bandpass}.yaml")
-        intra_telescope = telescope.withGloballyShiftedOptic(
-            "Detector", [0, 0, -1.5e-3]
-        )
-        extra_telescope = telescope.withGloballyShiftedOptic(
-            "Detector", [0, 0, +1.5e-3]
-        )
+        intra_telescope = telescope.withGloballyShiftedOptic("Detector", [0, 0, -1.5e-3])
+        extra_telescope = telescope.withGloballyShiftedOptic("Detector", [0, 0, +1.5e-3])
 
         # Get the trim from EFD: applied corrections
         startTime = record.timespan.begin
@@ -1431,40 +1384,28 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             for defocal, sw, col in zip(["intra", "extra"], ["SW1", "SW0"], [0, 3]):
                 raftName = f"{raft}_{sw}"
                 detId = camera.get(raftName).getId()
-                axdict[raft][0][col].set_title(
-                    f"{defocal} {raftName} ({detId})", x=0.95
-                )
+                axdict[raft][0][col].set_title(f"{defocal} {raftName} ({detId})", x=0.95)
 
             # get donuts corresponding to a given corner from
             # aggregatedDonutStamps
-            idxToAggIntra = (
-                np.array(donutStampsIntra.metadata.getArray("DET_NAME"))
-                == f"{raft}_SW1"
-            )
+            idxToAggIntra = np.array(donutStampsIntra.metadata.getArray("DET_NAME")) == f"{raft}_SW1"
             donutStampsIntraSel = np.array(donutStampsIntra)[idxToAggIntra]
             intra_x = [stamp.centroid_position.x for stamp in donutStampsIntraSel]
             intra_y = [stamp.centroid_position.y for stamp in donutStampsIntraSel]
 
-            idxToAggExtra = (
-                np.array(donutStampsExtra.metadata.getArray("DET_NAME"))
-                == f"{raft}_SW0"
-            )
+            idxToAggExtra = np.array(donutStampsExtra.metadata.getArray("DET_NAME")) == f"{raft}_SW0"
             donutStampsExtraSel = np.array(donutStampsExtra)[idxToAggExtra]
             extra_x = [stamp.centroid_position.x for stamp in donutStampsExtraSel]
             extra_y = [stamp.centroid_position.y for stamp in donutStampsExtraSel]
 
             for irow, row in enumerate(rows[:4]):
                 # intra
-                dists = np.hypot(
-                    intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"]
-                )
+                dists = np.hypot(intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"])
                 idx = np.argmin(dists)
                 # select stamps from the subset of aggregated donuts
                 # corresponding to current corner
                 intra_stamp = donutStampsIntraSel[idx]
-                intra_img = np.rot90(
-                    intra_stamp.stamp_im.image.array[1:, 1:], -nquarter + 2
-                ).T
+                intra_img = np.rot90(intra_stamp.stamp_im.image.array[1:, 1:], -nquarter + 2).T
                 intra_model, intra_fwhm = self.getModel(
                     telescope, intra_telescope, row, intra_img, wavelength, "intra"
                 )
@@ -1473,14 +1414,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 intra_model /= np.sum(intra_model)
 
                 # extra
-                dists = np.hypot(
-                    extra_x - row["centroid_x_extra"], extra_y - row["centroid_y_extra"]
-                )
+                dists = np.hypot(extra_x - row["centroid_x_extra"], extra_y - row["centroid_y_extra"])
                 idx = np.argmin(dists)
                 extra_stamp = donutStampsExtraSel[idx]
-                extra_img = np.rot90(
-                    extra_stamp.stamp_im.image.array[1:, 1:], -nquarter
-                ).T
+                extra_img = np.rot90(extra_stamp.stamp_im.image.array[1:, 1:], -nquarter).T
                 extra_model, extra_fwhm = self.getModel(
                     telescope, extra_telescope, row, extra_img, wavelength, "extra"
                 )
@@ -1496,9 +1433,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     blur=blur[irow],
                 )
 
-        def format_group(
-            vals, label, wrap_width=2, rigid=False, label_width=20, prec=3, max_int=None
-        ):
+        def format_group(vals, label, wrap_width=2, rigid=False, label_width=20, prec=3, max_int=None):
             """
             Format DOF group for rigid-body or bending modes.
             """
@@ -1634,13 +1569,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "filter": record.physical_filter,
             "observation reason": record.observation_reason,
             "science program": record.science_program,
-            "elevation": (
-                90 if record.zenith_angle is None else 90 - record.zenith_angle
-            ),
+            "elevation": (90 if record.zenith_angle is None else 90 - record.zenith_angle),
             "azimuth": 0 if record.azimuth is None else record.azimuth,
-            "rotator": (
-                0 if len(rotData) == 0 else rotData["actualPosition"].values.mean()
-            ),
+            "rotator": (0 if len(rotData) == 0 else rotData["actualPosition"].values.mean()),
         }
         col = 3
 
