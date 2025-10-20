@@ -80,7 +80,6 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ):
-
         zernike_tables = butlerQC.get(inputRefs.zernikeTable)
         out_raw, out_avg = self.run(zernike_tables)
 
@@ -90,7 +89,6 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
 
     @timeMethod
     def run(self, zernike_tables: typing.List[QTable]) -> tuple[Table, Table]:
-
         raw_tables = []
         avg_tables = []
         table_meta = None
@@ -933,7 +931,6 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-
         intraStampsOut, extraStampsOut = self.run(
             butlerQC.get(inputRefs.donutStampsIntra),
             butlerQC.get(inputRefs.donutStampsExtra),

@@ -438,7 +438,6 @@ class PlotDonutTask(pipeBase.PipelineTask):
     def run(
         self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
     ):
-
         visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
         visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
 
@@ -472,7 +471,6 @@ class PlotDonutTask(pipeBase.PipelineTask):
         for donutStampSet, visit in zip(
             [donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]
         ):
-
             fig = make_figure(figsize=(11, 8.5))
             aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
             for donut in donutStampSet:
@@ -614,7 +612,6 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
     def run(
         self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
     ):
-
         visit = donutStampsIntra.metadata.getArray("VISIT")[0]
         # LSST detector layout
         q = donutStampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
@@ -950,7 +947,6 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-
         zernikes = butlerQC.get(inputRefs.zernikes)
 
         zkPanel = self.run(zernikes, figsize=(11, 14))
@@ -1520,7 +1516,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             else:
                 # Bending-mode formatting (column-major)
                 n = len(vals)
-                labels = [f"b{i+1}" for i in range(n)]
+                labels = [f"b{i + 1}" for i in range(n)]
                 formatted = [f"{v:.{prec}f}" for v in vals]
                 int_parts = [f.split(".")[0] for f in formatted]
                 frac_parts = [f.split(".")[1] for f in formatted]

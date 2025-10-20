@@ -33,7 +33,7 @@ def zernikePyramid(
     filename=None,
     fig=None,
     cmap="seismic",
-    **kwargs
+    **kwargs,
 ):
     """Make a multi-zernike plot in a pyramid shape.
 
