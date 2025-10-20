@@ -3,6 +3,15 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.3.2
+
+-------------
+2.3.2
+-------------
+
+* Synchronizes FAM donut pipeline with corner pipeline.
+* Adds stricter max field radius to avoid significantly vignetted donuts.
+
 .._lsst.ts.donut.viz-2.3.1
 
 -------------
