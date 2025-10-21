@@ -8,7 +8,6 @@ tasks:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       measurementTask.nSigmaDetection: 5.0
-      donutSelector.maxFieldDist: 1.78
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
