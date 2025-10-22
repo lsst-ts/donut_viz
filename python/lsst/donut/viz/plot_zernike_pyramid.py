@@ -7,9 +7,7 @@ from utilities import get_cat, rose
 from zernike_pyramid import zernikePyramid
 
 
-def plotZernikePyramid(
-    butler, extra_exposure_id, intra_exposure_id=None, instrument="LSSTCam"
-):
+def plotZernikePyramid(butler, extra_exposure_id, intra_exposure_id=None, instrument="LSSTCam"):
     cat, q, rot, rtp, band = get_cat(
         butler,
         extra_exposure_id,

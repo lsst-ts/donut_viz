@@ -56,11 +56,7 @@ def psfPanel(
         det_nrows = 1
         ncols = len(detname)
     else:
-        det_nrows = (
-            len(detname) // maxcol + 1
-            if len(detname) % maxcol != 0
-            else len(detname) // maxcol
-        )
+        det_nrows = len(detname) // maxcol + 1 if len(detname) % maxcol != 0 else len(detname) // maxcol
         ncols = maxcol
 
     gs = GridSpec(

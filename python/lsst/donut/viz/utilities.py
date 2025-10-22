@@ -31,9 +31,7 @@ def get_cat(butler, extra_exposure_id, intra_exposure_id=None, instrument="LSSTC
         if len(cat) != len(cat2):
             continue
 
-        pts = tform.applyForward(
-            [Point2D(x, y) for x, y in zip(cat["centroid_x"], cat["centroid_y"])]
-        )
+        pts = tform.applyForward([Point2D(x, y) for x, y in zip(cat["centroid_x"], cat["centroid_y"])])
         cat["thx_CCS"] = [pt.y for pt in pts]  # Note x,y => y,x
         cat["thy_CCS"] = [-pt.x for pt in pts]  # Why the - sign?
 

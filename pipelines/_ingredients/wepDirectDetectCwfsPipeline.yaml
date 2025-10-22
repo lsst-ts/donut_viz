@@ -35,6 +35,7 @@ tasks:
       connections.exposure: post_isr_image
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 20
+      donutSelector.maxFieldDist: 1.78
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:

@@ -35,6 +35,7 @@ tasks:
       connections.exposure: post_isr_image
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 40
+      donutSelector.maxFieldDist: 1.78
   generateDonutFromRefitWcsTask:
     class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
     config:

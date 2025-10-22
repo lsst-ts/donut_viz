@@ -21,6 +21,7 @@ tasks:
       connections.exposure: post_isr_image
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 20
+      donutSelector.maxFieldDist: 1.78
   cutOutDonutsScienceSensorGroupTask:
     class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:

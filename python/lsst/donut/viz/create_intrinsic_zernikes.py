@@ -105,9 +105,7 @@ def createIntrinsicZernikes():
         )
         fig.savefig(f"zk_{f}.png")
 
-        fig2 = zernikePyramid(
-            thx, thy, resid.T[4:], cmap="seismic", s=2, vmin=-0.01, vmax=0.01
-        )
+        fig2 = zernikePyramid(thx, thy, resid.T[4:], cmap="seismic", s=2, vmin=-0.01, vmax=0.01)
         fig2.savefig(f"resid_{f}.png")
         print()
 

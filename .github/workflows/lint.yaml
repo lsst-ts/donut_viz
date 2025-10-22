@@ -13,14 +13,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install
         run: |
-          $CONDA/bin/conda install python=3.11 -y
+          $CONDA/bin/conda install python=3.12 -y
           $CONDA/bin/conda install -c lsstts ts-pre-commit-config -y
           $CONDA/bin/conda install -c conda-forge pre-commit -y
           $CONDA/bin/generate_pre_commit_conf --skip-pre-commit-install
+
+      - name: Show pre-commit config
+        run: cat .pre-commit-config.yaml
 
       - name: Run pre commit checks
         run: $CONDA/bin/pre-commit run --all
