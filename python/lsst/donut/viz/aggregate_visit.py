@@ -540,10 +540,12 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         for detector in donutTables.keys():
             if detector not in extraDetectorIds:
                 continue
-
             det_extra = camera[detector]
             det_intra = camera[detector + 1]
-
+            # Catch a case of incomplete corner ingestion (intra-focal missing)
+            if detector + 1 not in donutTables.keys():
+                self.log.warning(f"{detector + 1} is  not in donutTables, skipping that corner.")
+                continue
             # Load the donut catalog table, and the donut quality table
             extraDonutTable = donutTables[detector]
             intraDonutTable = donutTables[detector + 1]
