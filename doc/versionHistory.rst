@@ -3,6 +3,15 @@
 ##################
 Version History
 ##################
+
+.._lsst.ts.donut.viz-2.3.3
+
+-------------
+2.3.3
+-------------
+
+* Ensure correct aggregation when intra-focal detector is missing.
+
 .._lsst.ts.donut.viz-2.3.2
 
 -------------
