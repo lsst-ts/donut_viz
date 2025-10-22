@@ -159,9 +159,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         meta["alt"] = det_meta["boresight_alt_rad"]
         # Average mjds
         if unpaired_det_type is None:
-            meta["mjd"] = 0.5 * (
-                table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"]
-            )
+            meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
         else:
             meta["mjd"] = det_meta["mjd"]
         meta["nollIndices"] = noll_indices
@@ -187,9 +185,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Add average danish fwhm values into metadata of average table.
         if "fwhm" in out_raw.meta["estimatorInfo"].keys():
             out_avg.meta["estimatorInfo"] = dict()
-            out_avg.meta["estimatorInfo"]["fwhm"] = np.nanmedian(
-                out_raw.meta["estimatorInfo"]["fwhm"]
-            )
+            out_avg.meta["estimatorInfo"]["fwhm"] = np.nanmedian(out_raw.meta["estimatorInfo"]["fwhm"])
 
         return out_raw, out_avg
 
@@ -704,10 +700,7 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
 
             # Add field angle in CCS to the table
             pts = tform.applyForward(
-                [
-                    Point2D(x, y)
-                    for x, y in zip(table["centroid_x"], table["centroid_y"])
-                ]
+                [Point2D(x, y) for x, y in zip(table["centroid_x"], table["centroid_y"])]
             )
             table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
             table["thy_CCS"] = [pt.x for pt in pts]
@@ -1251,7 +1244,6 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-
         stampsOut = self.run(
             butlerQC.get(inputRefs.donutStampsIn),
             butlerQC.get(inputRefs.qualityTables),
@@ -1279,9 +1271,7 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
             qualitySelect = quality["FINAL_SELECT"]
 
             # Select donuts used in Zernike estimation
-            stampsSelect = DonutStamps(
-                [stamps[i] for i in range(len(stamps)) if qualitySelect[i]]
-            )
+            stampsSelect = DonutStamps([stamps[i] for i in range(len(stamps)) if qualitySelect[i]])
 
             if stampsMetadata is None:
                 # Create metadata for stamps

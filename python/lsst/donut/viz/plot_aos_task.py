@@ -754,9 +754,7 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "fp_donut_gallery"
-            plotFile = makePlotFile(
-                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
-            )
+            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(inst),
@@ -768,7 +766,6 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
 
     @timeMethod
     def run(self, donutStampsUnpaired: DonutStamps, inst: str):
-
         visit = donutStampsUnpaired.metadata.getArray("VISIT")[0]
         # LSST detector layout
         q = donutStampsUnpaired.metadata["BORESIGHT_PAR_ANGLE_RAD"]
