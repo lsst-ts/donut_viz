@@ -18,7 +18,7 @@ from astropy.coordinates import Angle
 from astropy.table import QTable, vstack
 from astropy.time import Time
 from batoid_rubin import LSSTBuilder
-from galsim.zernike import zernikeBasis
+from galsim.zernike import zernikeBasis, zernikeGradBases, zernikeRotMatrix
 from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE, PIXELS
 from lsst.geom import Box2I, Extent2I, Point2D, Point2I
 from lsst.ip.isr import IsrTaskLSST
@@ -637,6 +637,24 @@ class HartmannSensitivityAnalysisConnections(
         storageClass="Plot",
         name="hartmann_filtered_plot",
     )
+    hartmann_residual_plot = ct.Output(
+        doc="Output Hartmann residual plot",
+        dimensions=("group", "instrument", "detector"),
+        storageClass="Plot",
+        name="hartmann_residual_plot",
+    )
+    hartmann_zernikes = ct.Output(
+        doc="Output Hartmann Zernike coefficients",
+        dimensions=("group", "instrument", "detector"),
+        storageClass="AstropyQTable",
+        name="hartmann_zernikes",
+    )
+    hartmann_exposure_table = ct.Output(
+        doc="Output Hartmann exposure table",
+        dimensions=("group", "instrument", "detector"),
+        storageClass="AstropyQTable",
+        name="hartmann_exposure_table",
+    )
 
 
 class HartmannSensitivityAnalysisConfig(
@@ -682,6 +700,10 @@ class HartmannSensitivityAnalysisConfig(
     n_pupil_radii = pexConfig.Field[int](
         doc="Number of pupil radii to probe",
         default=7,
+    )
+    zk_max = pexConfig.Field[int](
+        doc="Maximum Zernike to fit",
+        default=28,
     )
     max_donuts = pexConfig.Field[int](
         doc="Maximum number of donuts to analyze",
@@ -767,8 +789,10 @@ class HartmannSensitivityAnalysis(
         if self._display is not None:
             self.update_display(reference_exposure, detections)
 
-        stamp_sets, ref_telescope, test_telescopes = self.get_initial_stamp_sets(
-            detections, reference_exposure, test_exposures
+        stamp_sets, ref_telescope, test_telescopes, exposure_table = (
+            self.get_initial_stamp_sets(
+                detections, reference_exposure, test_exposures
+            )
         )
         rtp = get_rtp(reference_exposure)
         detector = reference_exposure.getDetector()
@@ -785,13 +809,17 @@ class HartmannSensitivityAnalysis(
             rtp,
         )
 
+        zernikes = self.fit_zernikes(patch_table, rtp, nrot)
+
         if self.config.do_plot:
             self.log.info("Making plots")
             initial_fig = self.plot_initial(stamp_sets, patch_table)
             filtered_fig = self.plot_filtered(stamp_sets, patch_table)
+            resid_fig = self.plot_residual(stamp_sets, patch_table)
         else:
             initial_fig = None
             filtered_fig = None
+            resid_fig = None
 
         return pipeBase.Struct(
             hartmann_detection_table=detections,
@@ -800,6 +828,9 @@ class HartmannSensitivityAnalysis(
             hartmann_analysis_table=patch_table,
             hartmann_unfiltered_plot=initial_fig,
             hartmann_filtered_plot=filtered_fig,
+            hartmann_residual_plot=resid_fig,
+            hartmann_zernikes=zernikes,
+            hartmann_exposure_table=exposure_table
         )
 
     def get_det_dz(self, exposure):
@@ -960,7 +991,7 @@ class HartmannSensitivityAnalysis(
 
     def get_initial_stamp_sets(self, detections, reference_exposure, test_exposures):
         if sum(detections["use"]) == 0:
-            return [], None, []
+            return [], None, [], None
         self.log.info("Connecting to EFD")
         efd_client = EFD()
         # efd_client = EfdClient("usdf_efd")
@@ -968,6 +999,17 @@ class HartmannSensitivityAnalysis(
         ref_state = get_state(reference_exposure, efd_client)
         test_states = [get_state(exp, efd_client) for exp in test_exposures]
         self.log.info("  States fetched")
+        exposure_table = QTable()
+        group_id = np.arange(-1, len(test_exposures), dtype=np.int32)
+        exp_id = [reference_exposure.info.getVisitInfo().id]
+        exp_id.extend([
+            exp.info.getVisitInfo().id for exp in test_exposures
+        ])
+        states = [ref_state]
+        states.extend(test_states)
+        exposure_table["group_id"] = group_id
+        exposure_table["exp_id"] = exp_id
+        exposure_table["state"] = states
 
         # Make optics
         band = reference_exposure.filter.bandLabel
@@ -985,7 +1027,7 @@ class HartmannSensitivityAnalysis(
             test_telescopes,
             detections,
         )
-        return stamp_sets, ref_telescope, test_telescopes
+        return stamp_sets, ref_telescope, test_telescopes, exposure_table
 
     def get_telescope(self, band, state, det_dz):
         # Handle sign flips and unit conversions
@@ -1292,6 +1334,82 @@ class HartmannSensitivityAnalysis(
                 patch_table[f"dx_{idx}_predict"][select] = dx_test_align
                 patch_table[f"dy_{idx}_predict"][select] = dy_test_align
 
+    def fit_zernikes(self, patch_table, rtp, nrot):
+        if patch_table is None:
+            return None
+        donut_ids = np.unique(patch_table["donut_id"])
+        ndonut = len(donut_ids)
+        nexp = len(
+            [
+                col
+                for col in patch_table.colnames
+                if col.startswith("dx_") and col.endswith("_aligned")
+            ]
+        )
+        zk_table = QTable()
+        # Make columns
+        zk_table["donut_id"] = donut_ids
+        tmp = np.full(self.config.zk_max + 1, np.nan)
+        for iexp in range(nexp):
+            zk_table[f"zk_{iexp}_ccs"] = [tmp]*ndonut
+            zk_table[f"zk_{iexp}_ocs"] = [tmp]*ndonut
+            zk_table[f"zk_{iexp}_ccs_predict"] = [tmp]*ndonut
+            zk_table[f"zk_{iexp}_ocs_predict"] = [tmp]*ndonut
+
+        for donut_id in donut_ids:
+            wpatch = patch_table["donut_id"] == donut_id
+            wzk = np.where(zk_table["donut_id"] == donut_id)[0][0]
+            focal_length = 10.31
+            for iexp in range(nexp):
+                use = patch_table[f"use_fit_{iexp}"][wpatch]
+                dx = patch_table[f"dx_{iexp}_aligned"][wpatch][use]  # DVCS
+                dy = patch_table[f"dy_{iexp}_aligned"][wpatch][use]
+                dxp = patch_table[f"dx_{iexp}_predict"][wpatch][use]  # DVCS
+                dyp = patch_table[f"dy_{iexp}_predict"][wpatch][use]
+                u = patch_table["u"][wpatch][use]  # OCS
+                v = patch_table["v"][wpatch][use]
+                # Rotate DVCS -> CCS
+                if nrot % 4 == 1:
+                    dx, dy = -dy, dx
+                    dxp
+                elif nrot % 4 == 2:
+                    dx, dy = -dx, -dy
+                    dxp, dyp = -dxp, -dyp
+                elif nrot % 4 == 3:
+                    dx, dy = dy, -dx
+                    dxp, dyp = dyp, -dxp
+                dx, dy = dy, dx
+                dxp, dyp = dyp, dxp
+                # And CCS -> OCS
+                dx, dy = ccs_to_ocs(dx, dy, rtp)
+                dxp, dyp = ccs_to_ocs(dxp, dyp, rtp)
+                A = np.hstack(
+                    zernikeGradBases(
+                        self.config.zk_max,
+                        u, v,
+                        R_outer=4.18,
+                        R_inner=4.18 * 0.612,
+                    )
+                ).T * focal_length
+                dx *= 10.0  # microns
+                dy *= 10.0  # microns
+                dxp *= 10.0  # microns
+                dyp *= 10.0  # microns
+                b = np.hstack([dx, dy])
+                bp = np.hstack([dxp, dyp])
+                zk_ocs, *_ =  np.linalg.lstsq(A, b, rcond=None)
+                rot = zernikeRotMatrix(self.config.zk_max, rtp.to_value(units.rad))
+                zk_ccs = rot @ zk_ocs
+                zk_ocs_predict, *_ = np.linalg.lstsq(A, bp, rcond=None)
+                zk_ccs_predict = rot @ zk_ocs_predict
+
+                zk_table[f"zk_{iexp}_ccs"][wzk] = zk_ccs
+                zk_table[f"zk_{iexp}_ocs"][wzk] = zk_ocs
+                zk_table[f"zk_{iexp}_ccs_predict"][wzk] = zk_ccs_predict
+                zk_table[f"zk_{iexp}_ocs_predict"][wzk] = zk_ocs_predict
+
+        return zk_table
+
     def update_display(
         self,
         exposure,
@@ -1509,6 +1627,87 @@ class HartmannSensitivityAnalysis(
                     angles="xy",
                     scale=0.1,
                     pivot="middle",
+                )
+                ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
+        return fig
+
+    def plot_residual(self, stamp_sets, patch_table):
+        ndonut = len(stamp_sets)
+        if ndonut == 0:
+            nexp = 0
+        else:
+            nexp = len(stamp_sets[0]["tests"])
+
+        figsize = (3 * self.config.max_exp_plot, 3 * self.config.max_donuts)
+        fig = Figure(figsize=figsize, dpi=200)
+        grispec_kw = dict(
+            left=0.04, right=0.98, bottom=0.02, top=0.96, wspace=0.01, hspace=0.01
+        )
+        axs = fig.subplots(
+            nrows=self.config.max_donuts,
+            ncols=self.config.max_exp_plot,
+            gridspec_kw=grispec_kw,
+            squeeze=False,
+        )
+        for ax in axs.ravel():
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_aspect("equal")
+
+        for idonut in range(self.config.max_donuts):
+            for iexp in range(self.config.max_exp_plot):
+                ax = axs[idonut][iexp]
+                if idonut >= ndonut or iexp >= nexp:
+                    fig.delaxes(ax)
+                    continue
+                stamp_set = stamp_sets[idonut]
+                if idonut == 0:
+                    ax.set_title(stamp_set["test_ids"][iexp])
+                if iexp == 0:
+                    label = (
+                        idonut,
+                        (
+                            int(stamp_set["x_ref_ccd_dvcs"]),
+                            int(stamp_set["y_ref_ccd_dvcs"]),
+                        ),
+                    )
+                    ax.set_ylabel(label)
+                coords = patch_table[patch_table["donut_id"] == stamp_set["donut_id"]]
+                x = np.array(coords["x"])
+                y = np.array(coords["y"])
+                dx = np.array(coords[f"dx_{iexp}_aligned"])
+                dy = np.array(coords[f"dy_{iexp}_aligned"])
+                dx_predict = np.array(coords[f"dx_{iexp}_predict"])
+                dy_predict = np.array(coords[f"dy_{iexp}_predict"])
+                dx_resid = dx - dx_predict
+                dy_resid = dy - dy_predict
+                wgood = np.array(coords[f"use_fit_{iexp}"], dtype=bool)
+
+                ax = axs[idonut][iexp]
+                vmax = np.quantile(stamp_set["ref"].stamp_im.image.array, 0.99)
+                resid = (
+                    stamp_set["ref"].stamp_im.image.array
+                    - stamp_set["tests"][iexp].stamp_im.image.array
+                )
+
+                ax.imshow(
+                    resid,
+                    origin="lower",
+                    cmap="bwr",
+                    vmin=-vmax,
+                    vmax=vmax,
+                )
+                Q = ax.quiver(
+                    x[wgood],
+                    y[wgood],
+                    dx_resid[wgood],
+                    dy_resid[wgood],
+                    color="k",
+                    scale_units="xy",
+                    angles="xy",
+                    scale=0.1,
+                    pivot="middle",
+                    width=0.002,
                 )
                 ax.quiverkey(Q, 0.12, 0.88, 3, "3 pixels")
         return fig
