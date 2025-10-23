@@ -14,7 +14,7 @@ tasks:
       python: |
         from lsst.ts.wep.task import EstimateZernikesDanishTask
         config.estimateZernikes.retarget(EstimateZernikesDanishTask)
-      donutStampSelector.maxSelect: 5
+      donutStampSelector.maxSelect: 8
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.selectWithMaxPowerGrad: False
       estimateZernikes.binning: 2
