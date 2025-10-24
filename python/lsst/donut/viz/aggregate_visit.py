@@ -103,17 +103,20 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         for zernike_table in zernike_tables:
             if len(zernike_table) == 0:
                 continue
-            det_meta = None
-            unpaired_det_type = None
-            # Check for empty dictionaries when unpaired task runs
-            if not zernike_table.meta["intra"]:
-                det_meta = zernike_table.meta["extra"]
-                unpaired_det_type = "extra"
-            elif not zernike_table.meta["extra"]:
-                det_meta = zernike_table.meta["intra"]
-                unpaired_det_type = "intra"
-            else:
-                det_meta = zernike_table.meta["extra"]
+
+            # Get the populated metadata dictionary
+            intra_meta = zernike_table.meta["intra"]
+            extra_meta = zernike_table.meta["extra"]
+
+            # Check if both are empty
+            if not intra_meta and not extra_meta:
+                self.log.warning("Both intra and extra metadata are empty dictionaries. Skipping this table.")
+                continue
+
+            # Select metadata and determine if unpaired
+            det_meta = extra_meta or intra_meta
+            unpaired_det_type = not (intra_meta and extra_meta)
+
             raw_table = Table()
             zernikes_merged = []
             noll_indices = []
@@ -159,7 +162,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         meta["alt"] = det_meta["boresight_alt_rad"]
         meta["band"] = det_meta["band"]
         # Average mjds
-        if unpaired_det_type is None:
+        if unpaired_det_type is False:
             meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
         else:
             meta["mjd"] = det_meta["mjd"]

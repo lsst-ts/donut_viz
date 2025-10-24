@@ -50,8 +50,8 @@ class TestDonutVizPipeline(TestCase):
         if cls.test_run_name in collections_list:
             clean_up_cmd = writeCleanUpRepoCmd(cls.test_repo_dir, cls.test_run_name)
             runProgram(clean_up_cmd)
-        cls.extraDetectorNames = ["R00_SW0"]  # Only one detector pair used in tests
-        cls.intraDetectorNames = ["R00_SW1"]
+        cls.extra_detector_names = ["R00_SW0"]  # Only one detector pair used in tests
+        cls.intra_detector_names = ["R00_SW1"]
 
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
@@ -88,7 +88,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(average_dataset_list[0].dataId["visit"], 4021123106000)
         agg_zern_avg = self.butler.get(average_dataset_list[0])
         self.assertEqual(len(agg_zern_avg), 2)
-        self.assertCountEqual(agg_zern_avg["detector"], self.extraDetectorNames + self.intraDetectorNames)
+        self.assertCountEqual(agg_zern_avg["detector"], self.extra_detector_names + self.intra_detector_names)
         self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys)
 
     def testAggregateZernikesRaw(self):
@@ -101,7 +101,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(agg_zern_raw), 4)
         self.assertCountEqual(
             agg_zern_raw["detector"],
-            [self.extraDetectorNames[0]] * 2 + [self.intraDetectorNames[0]] * 2,
+            [self.extra_detector_names[0]] * 2 + [self.intra_detector_names[0]] * 2,
         )
         self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys + ["estimatorInfo"])
 
@@ -113,7 +113,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(donut_table_list[0].dataId["visit"], 4021123106000)
         agg_donut_table = self.butler.get(donut_table_list[0])
         self.assertEqual(len(agg_donut_table), 4)
-        all_detectors = self.extraDetectorNames + self.intraDetectorNames
+        all_detectors = self.extra_detector_names + self.intra_detector_names
         self.assertCountEqual(
             agg_donut_table["detector"],
             sorted([det for det in all_detectors for _ in range(2)]),
