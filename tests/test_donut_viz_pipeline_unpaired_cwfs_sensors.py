@@ -41,6 +41,7 @@ class TestDonutVizPipeline(TestCase):
             "rotTelPos",
             "visit",
             "nollIndices",
+            "band",
         ]
 
         cls.butler = Butler(cls.test_repo_dir)
@@ -122,6 +123,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertCountEqual(agg_donut_table.meta.keys(), ["visitInfo"])
         donut_meta_keys = self.meta_keys + ["focusZ"]
         donut_meta_keys.remove("nollIndices")
+        donut_meta_keys.remove("band")  # not in donutTable metadata
         self.assertCountEqual(agg_donut_table.meta["visitInfo"].keys(), donut_meta_keys)
 
     def testAggregateDonutStamps(self):
