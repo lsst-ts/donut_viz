@@ -1,7 +1,6 @@
 from copy import copy
 from pathlib import Path
 
-import batoid
 import danish
 import galsim
 import lsst.afw
@@ -1259,25 +1258,20 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "R00_SW0",
             instConfigFile,
         )
-        self.obsc = self.instrument.obscuration
-        self.fL = self.instrument.focalLength
-        self.R_outer = self.instrument.radius
-        self.wavelengths = self.instrument.wavelength
-        self.pixel_scale = self.instrument.pixelSize
+        obsc = self.instrument.obscuration
+        focal_length = self.instrument.focalLength
+        r_outer = self.instrument.radius
+        pixel_scale = self.instrument.pixelSize
         self.factory = danish.DonutFactory(
-            R_outer=self.R_outer,
-            R_inner=self.R_outer * self.obsc,
+            R_outer=r_outer,
+            R_inner=r_outer * obsc,
             mask_params=self.mask_params,
-            focal_length=self.fL,
-            pixel_scale=self.pixel_scale,
+            focal_length=focal_length,
+            pixel_scale=pixel_scale,
         )
         self.ndonuts = self.config.nDonutsPerCorner
         self.zk_ymin = self.config.zkYmin
         self.zk_ymax = self.config.zkYmax
-
-        # Set placeholders for defocused telescopes
-        self.wavelength = None
-        self.telescope = None
 
         # Setup danish algo
         self.danish_algo = DanishAlgorithm()
@@ -1325,12 +1319,40 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 filename=plotFile,
             )
 
-    def getModel(self, row, stamp_extra, stamp_intra):
-        if self.wavelength is None or self.telescope is None:
-            self.setTelescopeAndWavelength(row.meta["band"])
+    def getModel(self, zk_ccs_micron, noll_indices, danish_meta, stamp_extra, stamp_intra):
+        """Generate the danish donut model images
+        for a pair of extra- and intra-focal donuts.
 
-        zk_CCS = row["zk_CCS"] * 1e-6  # convert to meters
-        noll_indices = row.meta["nollIndices"]
+        Parameters
+        ----------
+        zk_ccs_micron : `numpy.ndarray`
+            Zernike coefficients in microns in CCS coordinates.
+        noll_indices : `list` of `int`
+            List of Noll indices corresponding to the Zernike coefficients.
+        danish_meta : `dict`
+            Metadata required by the danish model. All of this metadata is
+            available as included metadata with aggregateAOSVisitTableRaw.
+            Includes:
+            - model_dx: list(float, float)
+            - model_dy: list(float, float)
+            - fwhm: float
+            - model_sky_level: list(float, float)
+        stamp_extra : `DonutStamp`
+            Donut stamp for the extra-focal donut.
+        stamp_intra : `DonutStamp`
+            Donut stamp for the intra-focal donut.
+
+        Returns
+        -------
+        input_images : `list` of `numpy.ndarray`
+            List of images input to danish in proper CCS
+            orientation and returned as [extra-focal image, intra-focal image].
+        model_images : `list` of `numpy.ndarray`
+            List of model images returned as
+            [extra-focal model image, intra-focal model image].
+        """
+
+        zk_CCS = zk_ccs_micron * 1e-6  # convert to meters
         dz_terms = [(1, j) for j in noll_indices]
         wep_im_extra = stamp_extra.wep_im
         wep_im_intra = stamp_intra.wep_im
@@ -1358,6 +1380,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             nollIndices=noll_indices,
             instrument=self.instrument,
         )
+        input_images = [img_extra, img_intra]
 
         zk_fit = zk_CCS - np.nanmean([zk_extra_intrinsic, zk_intra_intrinsic], axis=0)
 
@@ -1372,15 +1395,15 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         )
 
         model_images = model.model(
-            row.meta["estimatorInfo"]["model_dx"][row.index],
-            row.meta["estimatorInfo"]["model_dy"][row.index],
-            row.meta["estimatorInfo"]["fwhm"][row.index],
+            danish_meta["model_dx"],
+            danish_meta["model_dy"],
+            danish_meta["fwhm"],
             zk_fit,
-            sky_levels=row.meta["estimatorInfo"]["model_sky_level"][row.index],
+            sky_levels=danish_meta["model_sky_level"],
             fluxes=np.sum([img_extra, img_intra], axis=(1, 2)),
         )
 
-        return model_images
+        return input_images, model_images
 
     def computeResidualStats(self, img, model):
         """
@@ -1480,10 +1503,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         axs[6].spines["right"].set_edgecolor(color)
         axs[6].spines["right"].set_linewidth(3)
 
-    def setTelescopeAndWavelength(self, bandpass: str) -> None:
-        self.wavelength = self.wavelengths[bandpass]
-        self.telescope = batoid.Optic.fromYaml(f"LSST_{bandpass}.yaml")
-
     def run(
         self,
         aos_raw,
@@ -1523,8 +1542,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         bandpass = donutStampsIntra.getBandpasses()[0]
         assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
         assert all([bandpass == bp for bp in donutStampsExtra.getBandpasses()])
-
-        self.setTelescopeAndWavelength(bandpass)
+        noll_indices = aos_raw.meta["nollIndices"]
 
         # Get the trim from EFD: applied corrections
         startTime = record.timespan.begin
@@ -1665,17 +1683,22 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 idx = np.argmin(dists)
                 extra_stamp = donutStampsExtraSel[idx]
 
-                extra_model, intra_model = self.getModel(
-                    row,
+                danish_meta = {key: value[irow] for key, value in row.meta["estimatorInfo"].items()}
+                imgs, model_imgs = self.getModel(
+                    row["zk_CCS"],
+                    noll_indices,
+                    danish_meta,
                     extra_stamp,
                     intra_stamp,
                 )
+                extra_img = imgs[0]
+                intra_img = imgs[1]
+                extra_model = model_imgs[0]
+                intra_model = model_imgs[1]
 
-                intra_img = intra_stamp.wep_im.image
                 intra_img /= np.sum(intra_img)
                 intra_model /= np.sum(intra_model)
 
-                extra_img = extra_stamp.wep_im.image
                 extra_img /= np.sum(extra_img)
                 extra_model /= np.sum(extra_model)
 

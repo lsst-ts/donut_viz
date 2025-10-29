@@ -4,6 +4,15 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.5.0
+
+-------------
+2.5.0
+-------------
+
+* Update getModel in plotDonutFits to use new danish parameters saved in butler metadata to create model image instead of reoptimizing.
+* Allow getModel in plotDonutFits to be used easily in interactive mode with the butler metadata.
+
 .._lsst.ts.donut.viz-2.4.2
 
 -------------
