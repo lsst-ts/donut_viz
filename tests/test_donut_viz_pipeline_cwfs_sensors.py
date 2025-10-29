@@ -96,7 +96,7 @@ class TestDonutVizPipeline(TestCase):
         agg_zern_avg = self.butler.get(average_dataset_list[0])
         self.assertEqual(len(agg_zern_avg), 1)
         self.assertCountEqual(agg_zern_avg["detector"], self.extraDetectorNames)
-        self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys)
+        self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys + ["estimatorInfo"])
 
     def testAggregateZernikesRaw(self):
         raw_dataset_list = list(
@@ -187,7 +187,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(avg_visit_table_list), 1)
         self.assertEqual(avg_visit_table_list[0].dataId["visit"], 4021123106000)
         avg_visit_table = self.butler.get(avg_visit_table_list[0])
-        self.assertCountEqual(avg_visit_table.meta.keys(), self.meta_keys)
+        self.assertCountEqual(avg_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo"])
         avg_zern_table = self.butler.get(
             "aggregateZernikesAvg",
             dataId=avg_visit_table_list[0].dataId,
