@@ -1,18 +1,21 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_Danish.yaml
 tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.sourceLimit: 40
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      estimateZernikes.convergeTol: 10.0e-9
-      estimateZernikes.compGain: 0.75
-      estimateZernikes.compSequence: [4, 4, 6, 6, 13, 13, 13, 13]
-      estimateZernikes.maxIter: 50
-      estimateZernikes.requireConverge: True
-      estimateZernikes.maskKwargs: { "doMaskBlends": False }
+      donutStampSelector.maxSelect: 20
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+    config:
+      maxDonutsPerDetector: 20
+
 
 # Define pipeline steps
 subsets:
@@ -22,21 +25,19 @@ subsets:
       - generateDonutDirectDetectTask
       - cutOutDonutsCwfsPairTask
       - reassignCwfsCutoutsPairTask
+  step1b-detectors:
+    subset:
       - calcZernikesTask
     description: |
       This step processes the input images with ISR,
       finds and cuts out the donut stamps,
       and estimates the Zernike coefficients from the donut pairs.
-  step1b-visits:
+  step2-visits:
     subset:
       - aggregateZernikeTablesTask
       - aggregateDonutTablesCwfsTask
       - aggregateAOSVisitTableCwfsTask
-      - plotAOSTask
       - aggregateDonutStampsTask
-      - plotDonutCwfsTask
-      - plotPairingTask
-      - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
@@ -45,5 +46,7 @@ subsets:
 steps:
   - label: step1a-detectors
     dimensions: [visit, detector]
-  - label: step1b-visits
+  - label: step1b-detectors
+    dimensions: [visit, detector]
+  - label: step2-visits
     dimensions: [visit]

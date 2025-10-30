@@ -1,0 +1,73 @@
+description: rapid analysis pipeline for LSSTCam
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.sourceLimit: 40
+  calcZernikesUnpairedTask:
+    class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
+    config:
+      python: |
+        from lsst.ts.wep.task import EstimateZernikesDanishTask
+        config.estimateZernikes.retarget(EstimateZernikesDanishTask)
+      connections.donutStamps: "donutStampsCwfs"
+      donutStampSelector.maxSelect: 20
+      donutStampSelector.maxFracBadPixels: 2.0e-4
+      donutStampSelector.useCustomSnLimit: True
+      donutStampSelector.minSignalToNoise: 100
+      estimateZernikes.binning: 2
+      estimateZernikes.nollIndices:
+        [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
+      estimateZernikes.saveHistory: False
+      donutStampSelector.selectWithMaxPowerGrad: False
+      estimateZernikes.lstsqKwargs:
+        ftol: 1.0e-3
+        xtol: 1.0e-3
+        gtol: 1.0e-3
+  aggregateDonutStampsUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
+    config:
+      connections.donutStampsIn: "donutStampsCwfs"
+      maxDonutsPerDetector: 20
+  aggregateDonutTablesUnpairedCwfsTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
+  aggregateUnpairedAOSVisitTableCwfsTask:
+    class: lsst.donut.viz.AggregateUnpairedAOSVisitTableCwfsTask
+
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsCwfsPairTask
+  step1b-detectors:
+    subset:
+      - calcZernikesUnpairedTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
+  step2-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesUnpairedCwfsTask
+      - aggregateUnpairedAOSVisitTableCwfsTask
+      - aggregateDonutStampsUnpairedTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-detectors
+    dimensions: [visit, detector]
+  - label: step2-visits
+    dimensions: [visit]

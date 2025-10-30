@@ -1,26 +1,27 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectScienceGroupPipeline.yaml
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/production/lsstCamScienceSensorRapidAnalysisPipeline_Danish.yaml
 tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.sourceLimit: 40
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       python: |
         from lsst.ts.wep.task import EstimateZernikesDanishTask
         config.estimateZernikes.retarget(EstimateZernikesDanishTask)
-      donutStampSelector.maxSelect: 5
-      donutStampSelector.maxFracBadPixels: 2.0e-4
-      donutStampSelector.selectWithMaxPowerGrad: False
-      estimateZernikes.binning: 2
-      estimateZernikes.nollIndices:
-        [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
-      estimateZernikes.saveHistory: False
+      donutStampSelector.maxSelect: 20
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+    config:
+      maxDonutsPerDetector: 20
 
 # Define pipeline steps
 subsets:
@@ -29,20 +30,19 @@ subsets:
       - isr
       - generateDonutDirectDetectTask
       - cutOutDonutsScienceSensorGroupTask
+  step1b-visits:
+    subset:
       - calcZernikesTask
     description: |
       This step processes the input images with ISR,
       finds and cuts out the donut stamps,
       and estimates the Zernike coefficients from the donut pairs.
-  step1b-visits:
+  step2-visits:
     subset:
       - aggregateZernikeTablesTask
       - aggregateDonutTablesGroupTask
       - aggregateAOSVisitTableTask
-      - plotAOSTask
       - aggregateDonutStampsTask
-      - plotDonutTask
-      - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
@@ -52,4 +52,6 @@ steps:
   - label: step1a-detectors
     dimensions: [detector]
   - label: step1b-visits
+    dimensions: []
+  - label: step2-visits
     dimensions: []
