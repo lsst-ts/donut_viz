@@ -14,7 +14,6 @@ from astropy import units as u
 from astropy.table import Table
 from astropy.time import Time
 from lsst.summit.utils.efdUtils import (
-    getEfdData,
     getMostRecentRowWithDataBefore,
     makeEfdClient,
 )
@@ -148,7 +147,6 @@ class PlotAOSTask(pipeBase.PipelineTask):
         # aos_avg = butlerQC.get(inputRefs.aggregateAOSAvg)
 
         zkPyramid, residPyramid, intrinsicPyramid = self.plotZernikePyramids(aos_raw)
-
         butlerQC.put(zkPyramid, outputRefs.measuredZernikePyramid)
         butlerQC.put(residPyramid, outputRefs.residualZernikePyramid)
         butlerQC.put(intrinsicPyramid, outputRefs.intrinsicZernikePyramid)
@@ -1241,6 +1239,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
+        self.efd_client = makeEfdClient()
+
         mask_params_fn = Path(danish.datadir) / "RubinObsc.yaml"
         with open(mask_params_fn) as f:
             self.mask_params = yaml.safe_load(f)
@@ -1306,9 +1306,38 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 filename=plotFile,
             )
 
-    def getModel(self, telescope, defocused_telescope, row, img, wavelength, inex):
-        thx = row[f"thx_CCS_{inex}"]
-        thy = row[f"thy_CCS_{inex}"]
+    def getModel(self, telescope, defocused_telescope, row, img, wavelength, inex, thx=None, thy=None):
+        """Generate theoretical donut model.
+
+        Parameters
+        ----------
+        telescope : batoid.Optic
+            In-focus telescope optical model
+        defocused_telescope : batoid.Optic
+            Defocused telescope optical model
+        row : astropy.table.Row
+            AOS catalog row with Zernike coefficients
+        img : np.ndarray
+            Observed donut image
+        wavelength : float
+            Wavelength in meters
+        inex : str
+            Focal type ("intra" or "extra") for field name lookup
+        thx : float, optional
+            CCS field angle x (if provided, overrides row lookup)
+        thy : float, optional
+            CCS field angle y (if provided, overrides row lookup)
+
+        Returns
+        -------
+        model : np.ndarray
+            Theoretical donut model
+        fwhm : float
+            Fitted FWHM parameter
+        """
+        if thx is None or thy is None:
+            thx = row[f"thx_CCS_{inex}"]
+            thy = row[f"thy_CCS_{inex}"]
         zk_CCS = row["zk_CCS"]
         nollIndices = row.meta["nollIndices"]
 
@@ -1468,7 +1497,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Get the trim from EFD: applied corrections
         startTime = record.timespan.begin
-        endTime = record.timespan.end
         efd_client = makeEfdClient()
         efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
         states_val = np.empty(
@@ -1487,14 +1515,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 states_val[i] = event[f"aggregatedDoF{i}"]
             if "visitId" in event.keys():
                 visit_logevent = event["visitId"]
-
-        # Get the rotator angle
-        rotData = getEfdData(
-            client=efd_client,
-            topic="lsst.sal.MTRotator.rotation",
-            begin=startTime,
-            end=endTime,
-        )
 
         # Prepare figure
         fig = make_figure(figsize=(16, 11))
@@ -1746,7 +1766,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "science program": record.science_program,
             "elevation": (90 if record.zenith_angle is None else 90 - record.zenith_angle),
             "azimuth": 0 if record.azimuth is None else record.azimuth,
-            "rotator": (0 if len(rotData) == 0 else rotData["actualPosition"].values.mean()),
+            "rotator": 0,
         }
         col = 3
 
