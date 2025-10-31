@@ -4,6 +4,15 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.4.1
+
+-------------
+2.4.1
+-------------
+
+* Add PlotDonutFitsUnpairedTask for visualizing unpaired donut fits.
+* Update PlotDonutFitsTask.getModel to support optional thx/thy parameters for unpaired donut visualization.
+
 .._lsst.ts.donut.viz-2.4.0
 
 -------------
