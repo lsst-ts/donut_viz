@@ -17,7 +17,9 @@ from lsst.donut.viz import (
     PlotDonutCwfsTaskConfig,
     PlotPsfZernTask,
     PlotPsfZernTaskConfig,
+    PlotDonutFitsTask,
 )
+from lsst.donut.viz.utilities import get_day_obs_seq_num_from_visitid
 from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.utils import (
@@ -259,6 +261,37 @@ class TestDonutVizPipeline(TestCase):
         dataset_list = list(self.butler.query_datasets("donutFits", collections=self.test_run_name))
         self.assertEqual(len(dataset_list), 1)
         self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
+
+    def testPlotDonutFitsTaskRunMissingData(self):
+        table_ref = list(
+            self.butler.registry.queryDatasets(
+                "aggregateAOSVisitTableRaw", collections=self.test_run_name
+            ).expanded()
+        )[0]
+        table = self.butler.get(table_ref)
+        stamps_extra = self.butler.get(
+            self.butler.query_datasets("donutStampsExtraVisit", collections=self.test_run_name)[0]
+        )
+        stamps_intra = self.butler.get(
+            self.butler.query_datasets("donutStampsIntraVisit", collections=self.test_run_name)[0]
+        )
+        camera = LsstCam().getCamera()
+
+        self.task = PlotDonutFitsTask()
+        day_obs, seq_num = get_day_obs_seq_num_from_visitid(4021123106000)
+        record = table_ref.dataId.records["visit"]
+
+        table.meta["estimatorInfo"] = {"fwhm": [1.5, 1.5]}
+        # Test that median shifts are output to log
+        with self.assertLogs(logger=self.task.log.logger, level="WARNING") as cm:
+            self.task.run(table, stamps_intra, stamps_extra, camera, day_obs, seq_num, record)
+        for idx, warn_output in zip(range(2), cm.output):
+            err_msg = str(
+                "WARNING:lsst.plotDonutFitsTask:No model plot produced for R00, "
+                + f"donut index: {idx}. Required metadata for danish model not found in "
+                + "aggregateAOSVisitTableRaw."
+            )
+            self.assertEqual(warn_output, err_msg)
 
     def testPlotDonutCwfsTask(self):
         # Test that plots exist in butler
