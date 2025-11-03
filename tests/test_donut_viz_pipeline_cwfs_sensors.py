@@ -262,7 +262,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(dataset_list), 1)
         self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
 
-    def testPlotDonutFitsTaskRunMissingData(self):
+    def testPlotDonutFitsTaskRunMissingMetadata(self):
         table_ref = list(
             self.butler.registry.queryDatasets(
                 "aggregateAOSVisitTableRaw", collections=self.test_run_name
@@ -292,6 +292,21 @@ class TestDonutVizPipeline(TestCase):
                 + "aggregateAOSVisitTableRaw."
             )
             self.assertEqual(warn_output, err_msg)
+
+        # Test getModel function
+        err_msg = str(
+            "danish_meta must contain the following keys: "
+            + "['fwhm', 'model_dx', 'model_dy', 'model_sky_level'], but only contains: {'fwhm'}"
+        )
+        with self.assertRaises(ValueError) as cm:
+            self.task.getModel(
+                table[0]["zk_CCS"],
+                table.meta["nollIndices"],
+                table.meta["estimatorInfo"],
+                stamps_extra,
+                stamps_intra,
+            )
+        self.assertEqual(str(cm.exception), err_msg)
 
     def testPlotDonutCwfsTask(self):
         # Test that plots exist in butler

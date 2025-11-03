@@ -1275,6 +1275,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Setup danish algo
         self.danish_algo = DanishAlgorithm()
+        self.danish_model_keys = ["fwhm", "model_dx", "model_dy", "model_sky_level"]
 
     @timeMethod
     def runQuantum(
@@ -1351,6 +1352,12 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             List of model images returned as
             [extra-focal model image, intra-focal model image].
         """
+        necessary_keys = set(self.danish_model_keys)
+        if set(danish_meta.keys()) & necessary_keys != necessary_keys:
+            raise ValueError(
+                f"danish_meta must contain the following keys: {sorted(necessary_keys)}, "
+                f"but only contains: {set(danish_meta.keys())}"
+            )
 
         zk_CCS = zk_ccs_micron * 1e-6  # convert to meters
         dz_terms = [(1, j) for j in noll_indices]
@@ -1683,7 +1690,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 idx = np.argmin(dists)
                 extra_stamp = donutStampsExtraSel[idx]
 
-                necessary_keys = set(["fwhm", "model_dx", "model_dy", "model_sky_level"])
+                necessary_keys = set(self.danish_model_keys)
                 if set(row.meta["estimatorInfo"].keys()) & necessary_keys != necessary_keys:
                     self.log.warning(
                         f"No model plot produced for {raft}, donut index: {irow}. "
