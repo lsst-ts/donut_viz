@@ -8,7 +8,7 @@ tasks:
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
     config:
-      maxDonutsPerDetector: 4
+      maxDonutsPerDetector: 8
   aggregateAOSVisitTableCwfsTask:
     class: lsst.donut.viz.AggregateAOSVisitTableCwfsTask
   plotAOSTask:
