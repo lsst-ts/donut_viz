@@ -15,6 +15,7 @@ from astropy.table import Table
 from astropy.time import Time
 from lsst.summit.utils.efdUtils import (
     getMostRecentRowWithDataBefore,
+    getEfdData,
     makeEfdClient,
 )
 from lsst.summit.utils.plotting import stretchDataMidTone
@@ -1225,6 +1226,14 @@ class PlotDonutFitsTaskConfig(
         doc="Upload to RubinTV",
         default=False,
     )
+    nDonutsPerCorner = pexConfig.Field(
+        dtype=int,
+        doc="Number of donuts per corner (integer, default: 8).\
+This sets the number of rows per corner in the figure layout.",
+        default=8,
+    )
+    zkYmin = pexConfig.Field(dtype=float, doc="Lower limit on Zernike plot (default: -1 micron).", default=-1)
+    zkYmax = pexConfig.Field(dtype=float, doc="Upper limit on Zernike plot (default: +1 micron).", default=1)
 
 
 class PlotDonutFitsTask(pipeBase.PipelineTask):
@@ -1262,6 +1271,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             focal_length=self.fL,
             pixel_scale=self.pixel_scale,
         )
+        self.ndonuts = self.config.nDonutsPerCorner
+        self.zk_ymin = self.config.zkYmin
+        self.zk_ymax = self.config.zkYmax
 
     @timeMethod
     def runQuantum(
@@ -1393,6 +1405,43 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         model = fitter.model(*result.x, [])
         return model, fwhm
 
+    def computeResidualStats(self, img, model):
+        """
+        Compute summary statistics of the residuals between an
+        image and the model.
+
+        Parameters
+        ----------
+        img : ndarray
+            The observed image array.
+        model : ndarray
+            The model image array of the same shape as `img`.
+
+        Returns
+        -------
+        pos_res : float
+            Sum of the absolute values of positive residuals
+            (where `img - model > 0`).
+        neg_res : float
+            Sum of the absolute values of negative residuals
+            (where `img - model < 0`).
+        tot_res : float
+            Sum of the absolute values of all residuals.
+
+        Notes
+        -----
+        Residuals are computed as `res = img - model`. This function
+        provides a simple way to quantify asymmetry between positive
+        and negative deviations as well as the overall magnitude of
+        the residuals.
+        """
+        # Compute residual stats
+        res = img - model
+        pos_res = np.sum(np.abs(res[res > 0]))
+        neg_res = np.sum(np.abs(res[res < 0]))
+        tot_res = np.sum(np.abs(res))
+        return pos_res, neg_res, tot_res
+
     def plotResults(self, axs, imgs, models, row, blur):
         colors = [
             (0.0, 0.0, 1.0),  # Blue
@@ -1407,12 +1456,16 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         axs[0].text(5, 150, f"blur: {blur:5.3f}")
         axs[1].imshow(models[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
         axs[2].imshow(imgs[0] - models[0], cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
+        _, _, ttl_res = self.computeResidualStats(imgs[0], models[0])
+        axs[2].text(5, 150, f"res: {ttl_res:5.3f}")
         axs[3].imshow(imgs[1], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
         axs[4].imshow(models[1], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
         axs[5].imshow(imgs[1] - models[1], cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
+        _, _, ttl_res = self.computeResidualStats(imgs[1], models[1])
+        axs[5].text(5, 150, f"res: {ttl_res:5.3f}")
         axs[6].bar(row.meta["nollIndices"], row["zk_CCS"], color="k")
         axs[6].axhline(0, color="k", lw=0.5)
-        axs[6].set_ylim(-2.5, 2.5)
+        axs[6].set_ylim(self.zk_ymin, self.zk_ymax)
         axs[6].set_xlim(3.5, 28.5)
         axs[6].scatter([4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=10, lw=0.5)
         axs[6].scatter([7, 17], [2.2] * 2, marker="$\u2191$", c="k", s=10, lw=0.5)
@@ -1497,7 +1550,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Get the trim from EFD: applied corrections
         startTime = record.timespan.begin
-        efd_client = makeEfdClient()
+        endTime = record.timespan.end
         efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
         states_val = np.empty(
             50,
@@ -1506,7 +1559,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         # catch test data that may have historic day_obs
         if day_obs > 20250101:
             event = getMostRecentRowWithDataBefore(
-                efd_client,
+                self.efd_client,
                 efd_topic,
                 timeToLookBefore=Time(startTime, scale="utc"),
             )
@@ -1516,11 +1569,33 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             if "visitId" in event.keys():
                 visit_logevent = event["visitId"]
 
+        # Get the rotator angle
+        rotData = getEfdData(
+            client=self.efd_client,
+            topic="lsst.sal.MTRotator.rotation",
+            begin=startTime,
+            end=endTime,
+        )
         # Prepare figure
-        fig = make_figure(figsize=(16, 11))
+        # number of rafts per column and rows
+        ncols_donut = 7  # 7 columns per donut
+        # 3 for intra-focal  image / model / residuals,
+        # 3 for extra-focal  image / model / residuals,
+        # 1 for Zernike fit result
+        # desired square size per cell (in inches)
+        cell_size = 1.0  # tweak as needed
+
+        # total width per raft (7 columns)
+        raft_width = ncols_donut * cell_size
+        raft_height = self.ndonuts * cell_size
+        # since we have 2 rafts per row in the top 2 rows
+        fig_height = 2 * raft_height + 3.8  # + space for bottom panel
+        fig_width = 2 * raft_width
+
+        fig = make_figure(figsize=(fig_width, fig_height))
         axdict = {}
         gs0 = GridSpec(
-            nrows=3,
+            nrows=4,
             ncols=2,
             left=0.03,
             right=0.97,
@@ -1528,18 +1603,18 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             top=0.95,
             wspace=0.04,
             hspace=0.12,
-            height_ratios=[2, 2, 1],
+            height_ratios=[4, 4, 0.5, 2],
         )
         for i, j, raft in [(0, 0, "R00"), (0, 1, "R40"), (1, 0, "R04"), (1, 1, "R44")]:
             gs1 = GridSpecFromSubplotSpec(
-                nrows=4,
+                nrows=self.ndonuts,
                 ncols=1,
                 subplot_spec=gs0[i, j],
                 wspace=0.0,
                 hspace=0.0,
             )
             axdict[raft] = []
-            for k in range(4):
+            for k in range(self.ndonuts):
                 gs2 = GridSpecFromSubplotSpec(
                     nrows=1,
                     ncols=7,
@@ -1556,7 +1631,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     axs.append(ax)
                 axdict[raft].append(axs)
 
-        bottom_ax = fig.add_subplot(gs0[2, :])
+        middle_ax = fig.add_subplot(gs0[2, :])
+        middle_ax.set_xticks([])
+        middle_ax.set_yticks([])
+
+        bottom_ax = fig.add_subplot(gs0[3, :])
         bottom_ax.set_xticks([])
         bottom_ax.set_yticks([])
         # a single value per donut
@@ -1593,7 +1672,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             extra_x = [stamp.centroid_position.x for stamp in donutStampsExtraSel]
             extra_y = [stamp.centroid_position.y for stamp in donutStampsExtraSel]
 
-            for irow, row in enumerate(rows[:4]):
+            # catching the case when we may wish to plot 8 donuts,
+            # but the aggregated table has less than that
+            nrows_plot = min(self.ndonuts, len(rows))
+
+            for irow, row in enumerate(rows[:nrows_plot]):
                 # intra
                 dists = np.hypot(intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"])
                 idx = np.argmin(dists)
@@ -1627,6 +1710,103 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     row=row,
                     blur=blur[irow],
                 )
+            # turn off unused axes
+            if nrows_plot < len(axdict[raft]):
+                for j in range(nrows_plot, len(axdict[raft])):
+                    for ax in axdict[raft][j]:
+                        ax.axis("off")
+
+        # add middle-axis text with the average Zernike value per corner
+
+        # ---  Filter and average per detector ---
+
+        # If information whether a given pair was used in Zernike average
+        # is not present in the aggregate, print average of all Zernikes
+        # That way we do not need another required input
+        # (such as `aggregateAOSVisitTableAvg`)
+        mask = aos_raw["used"] if "used" in aos_raw.columns else np.ones(len(aos_raw), dtype="bool")
+        aos_used = aos_raw[mask]
+
+        detectors = np.unique(aos_used["detector"])
+
+        rows = []
+        for det in detectors:
+            sel = aos_used["detector"] == det
+            mean_zk = np.mean(aos_used["zk_CCS"][sel], axis=0)
+            rows.append((det, mean_zk))
+
+        tab_avg = Table(rows=rows, names=("detector", "zk_CCS_mean"))
+
+        # --- Get the Zernike indices (column labels) ---
+        nollIndices = aos_raw.meta["nollIndices"]
+
+        # Limit to first 15 indices (e.g., Z4–Z19)
+        max_cols = 26
+        nollIndices = nollIndices[:max_cols]
+        col_labels = [f"Z{n}" for n in nollIndices]  # eg. Z4, Z15
+        row_labels = [det[:3] for det in detectors.data]  # eg. R00, R40
+
+        # --- Prepare data for table display ---
+        table_data = []
+        for det in detectors:
+            mean_zk = tab_avg["zk_CCS_mean"][tab_avg["detector"] == det][0]
+            mean_zk = mean_zk[:max_cols]
+            row = [f"{v:7.3f}" for v in mean_zk]  # format to 3 decimals
+            table_data.append(row)
+
+        # --- Create the table inside the middle_ax ---
+        bbox = [0.05, 0.05, 0.85, 0.85]  # [xmin, ymin, width, height],
+        table = middle_ax.table(
+            cellText=table_data,
+            rowLabels=row_labels,
+            colLabels=col_labels,
+            loc="left",
+            cellLoc="center",
+            bbox=bbox,
+        )
+
+        # Adjust table style
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+
+        # Set monospace font for all cells FIRST
+        for (row, col), cell in table.get_celld().items():
+            cell.get_text().set_fontfamily("monospace")
+            # Center align all data cells
+            if row > 0 and col >= 0:  # data cells only
+                cell.get_text().set_horizontalalignment("center")
+
+        # Loop through all cells
+        for (row, col), cell in table.get_celld().items():
+            # Hide all lines first
+            cell.visible_edges = ""
+
+            # Keep horizontal line below header (row == 0)
+            if row == 0:
+                cell.visible_edges += "B"  # bottom border
+
+            # Keep vertical line after row labels (col == -1 means row label)
+            if col == -1:
+                cell.visible_edges += "R"  # right border
+
+        # Move all data rows slightly down
+        for row in range(1, len(row_labels) + 1):  # row=1..4 (data rows)
+            for col in range(-1, len(col_labels)):
+                cell = table[(row, col)]
+                text = cell.get_text()
+                text.set_verticalalignment("top")  # align to top of cell
+                cell.set_height(cell.get_height() * 0.8)  # shrink cell to enhance offset
+
+        # Adjust row label alignment and padding
+        for row in range(1, len(row_labels) + 1):
+            cell = table[(row, -1)]
+            text = cell.get_text()
+            text.set_horizontalalignment("right")  # right-align within cell
+            cell.PAD = 0.2  # add more padding
+
+        # Hide the axis frame
+        middle_ax.axis("off")
+        middle_ax.set_title("Average Zernike Coefficients per Detector", fontsize=12, pad=10)
 
         def format_group(vals, label, wrap_width=2, rigid=False, label_width=20, prec=3, max_int=None):
             """
@@ -1694,7 +1874,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Layout for 4 columns
         col_xpos = [0.05, 0.28, 0.51, 0.72]  # relative x positions in axes coords
-        y_start = 0.8
+        y_start = 0.95
         y_step = 0.07  # tighter spacing so we can fit more
 
         # --- Precompute max integer width for rigid-body numbers ---
@@ -1766,7 +1946,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "science program": record.science_program,
             "elevation": (90 if record.zenith_angle is None else 90 - record.zenith_angle),
             "azimuth": 0 if record.azimuth is None else record.azimuth,
-            "rotator": 0,
+            "rotator": (0 if len(rotData) == 0 else rotData["actualPosition"].values.mean()),
+            "Zernike plot range": f"{self.zk_ymin:.1f} to {self.zk_ymax:.1f} microns",
         }
         col = 3
 
