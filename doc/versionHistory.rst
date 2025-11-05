@@ -4,6 +4,13 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.4.2
+
+-------------
+2.4.2
+-------------
+* Expand plotDonutFits to accommodate more donuts.
+
 .._lsst.ts.donut.viz-2.4.1
 
 -------------
