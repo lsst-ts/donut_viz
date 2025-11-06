@@ -11,8 +11,11 @@ from lsst.donut.viz import (
     AggregateDonutTablesUnpairedCwfsTask,
     AggregateZernikeTablesTask,
     AggregateZernikeTablesTaskConfig,
+    PlotDonutFitsUnpairedTask,
     PlotDonutUnpairedCwfsTask,
 )
+from lsst.donut.viz.utilities import get_day_obs_seq_num_from_visitid
+from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task import DonutStamps
 from lsst.ts.wep.utils import (
     convertDictToVisitInfo,
@@ -212,6 +215,50 @@ class TestDonutVizPipeline(TestCase):
         dataset_list = list(self.butler.query_datasets("donutPlot", collections=self.test_run_name))
         self.assertEqual(len(dataset_list), 1)
         self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
+
+    def testPlotDonutFitsUnpairedCwfsTask(self):
+        # Test that plots exist in butler
+        dataset_list = list(self.butler.query_datasets("donutFitsUnpaired", collections=self.test_run_name))
+        self.assertEqual(len(dataset_list), 1)
+        self.assertEqual(dataset_list[0].dataId["visit"], 4021123106000)
+
+    def testPlotDonutFitsUnpairedCwfsTaskRunMissingMetadata(self):
+        table_ref = list(
+            self.butler.registry.queryDatasets(
+                "aggregateAOSVisitTableRaw", collections=self.test_run_name
+            ).expanded()
+        )[0]
+        aos_raw = self.butler.get(table_ref)
+        zk_avg = self.butler.get(
+            self.butler.query_datasets("aggregateAOSVisitTableAvg", collections=self.test_run_name)[0]
+        )
+        aggregate_donut_table = self.butler.get(
+            self.butler.query_datasets("aggregateDonutTable", collections=self.test_run_name)[0]
+        )
+        donut_stamps_unpaired = self.butler.get(
+            self.butler.query_datasets("donutStampsUnpairedVisit", collections=self.test_run_name)[0]
+        )
+        camera = LsstCam().getCamera()
+
+        self.task = PlotDonutFitsUnpairedTask()
+        day_obs, seq_num = get_day_obs_seq_num_from_visitid(4021123106000)
+        record = table_ref.dataId.records["visit"]
+
+        aos_raw.meta["estimatorInfo"] = {"fwhm": [1.5, 1.5]}
+        # Test that warnings are output to log when metadata is missing
+        with self.assertLogs(logger=self.task.log.logger, level="WARNING") as cm:
+            self.task.run(
+                aos_raw,
+                zk_avg,
+                aggregate_donut_table,
+                donut_stamps_unpaired,
+                camera,
+                day_obs,
+                seq_num,
+                record,
+            )
+        # Check that warnings were logged for missing metadata
+        self.assertGreater(len(cm.output), 0)
 
     def testPlotDonutUnpairedCwfsRunMissingData(self):
         # Aggregate only 3 of 4 detectors

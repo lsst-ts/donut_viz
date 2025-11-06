@@ -1269,9 +1269,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             focal_length=focal_length,
             pixel_scale=pixel_scale,
         )
-        self.ndonuts = self.config.nDonutsPerCorner
-        self.zk_ymin = self.config.zkYmin
-        self.zk_ymax = self.config.zkYmax
 
         # Setup danish algo
         self.danish_algo = DanishAlgorithm()
@@ -1472,7 +1469,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         axs[5].text(5, 150, f"res: {ttl_res:5.3f}")
         axs[6].bar(row.meta["nollIndices"], row["zk_CCS"], color="k")
         axs[6].axhline(0, color="k", lw=0.5)
-        axs[6].set_ylim(self.zk_ymin, self.zk_ymax)
+        axs[6].set_ylim(self.config.zkYmin, self.config.zkYmax)
         axs[6].set_xlim(3.5, 28.5)
         axs[6].scatter([4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=10, lw=0.5)
         axs[6].scatter([7, 17], [2.2] * 2, marker="$\u2191$", c="k", s=10, lw=0.5)
@@ -1546,6 +1543,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         fig: matplotlib.pyplot.figure
             The figure.
         """
+        ndonuts = self.config.nDonutsPerCorner
+
         bandpass = donutStampsIntra.getBandpasses()[0]
         assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
         assert all([bandpass == bp for bp in donutStampsExtra.getBandpasses()])
@@ -1590,7 +1589,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # total width per raft (7 columns)
         raft_width = ncols_donut * cell_size
-        raft_height = self.ndonuts * cell_size
+        raft_height = ndonuts * cell_size
         # since we have 2 rafts per row in the top 2 rows
         fig_height = 2 * raft_height + 3.8  # + space for bottom panel
         fig_width = 2 * raft_width
@@ -1610,14 +1609,14 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         )
         for i, j, raft in [(0, 0, "R00"), (0, 1, "R40"), (1, 0, "R04"), (1, 1, "R44")]:
             gs1 = GridSpecFromSubplotSpec(
-                nrows=self.ndonuts,
+                nrows=ndonuts,
                 ncols=1,
                 subplot_spec=gs0[i, j],
                 wspace=0.0,
                 hspace=0.0,
             )
             axdict[raft] = []
-            for k in range(self.ndonuts):
+            for k in range(ndonuts):
                 gs2 = GridSpecFromSubplotSpec(
                     nrows=1,
                     ncols=7,
@@ -1675,7 +1674,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
             # catching the case when we may wish to plot 8 donuts,
             # but the aggregated table has less than that
-            nrows_plot = min(self.ndonuts, len(rows))
+            nrows_plot = min(ndonuts, len(rows))
 
             for irow, row in enumerate(rows[:nrows_plot]):
                 # intra
@@ -1961,7 +1960,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "elevation": (90 if record.zenith_angle is None else 90 - record.zenith_angle),
             "azimuth": 0 if record.azimuth is None else record.azimuth,
             "rotator": (0 if len(rotData) == 0 else rotData["actualPosition"].values.mean()),
-            "Zernike plot range": f"{self.zk_ymin:.1f} to {self.zk_ymax:.1f} microns",
+            "Zernike plot range": f"{self.config.zkYmin:.1f} to {self.config.zkYmax:.1f} microns",
         }
         col = 3
 
