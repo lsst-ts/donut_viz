@@ -53,3 +53,7 @@ tasks:
     class: lsst.donut.viz.PlotDonutUnpairedCwfsTask
     config:
       doRubinTVUpload: False
+  plotDonutFitsUnpairedTask:
+    class: lsst.donut.viz.PlotDonutFitsUnpairedTask
+    config:
+      doRubinTVUpload: False
