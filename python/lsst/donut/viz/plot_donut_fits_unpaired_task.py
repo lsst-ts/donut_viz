@@ -1,6 +1,7 @@
 """Task for plotting unpaired donut fits visualization."""
 
 import batoid
+import danish
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
 import lsst.pex.config as pexConfig
@@ -12,6 +13,7 @@ from lsst.utils.timer import timeMethod
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+from scipy.optimize import least_squares
 
 try:
     from lsst.rubintv.production.utils import getAutomaticLocationConfig, makePlotFile
@@ -121,12 +123,15 @@ class PlotDonutFitsUnpairedTaskConfig(
         doc="EFD topic name for degree of freedom logevent.",
         default="lsst.sal.MTAOS.logevent_degreeOfFreedom",
     )
-    maxDonutsToPlot = pexConfig.Field(
+    nDonutsPerCorner = pexConfig.Field(
         dtype=int,
-        doc="Maximum number of donuts to plot in the visualization. \
+        doc="Number of donuts per corner (integer, default: 4).\
+        This sets the maximum number of donuts to plot in the visualization. \
         Limited by the 2x2 grid layout of the plot axes.",
         default=4,
     )
+    zkYmin = pexConfig.Field(dtype=float, doc="Lower limit on Zernike plot (default: -1 micron).", default=-1)
+    zkYmax = pexConfig.Field(dtype=float, doc="Upper limit on Zernike plot (default: +1 micron).", default=1)
 
 
 class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
@@ -139,6 +144,12 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
 
     ConfigClass = PlotDonutFitsUnpairedTaskConfig
     _DefaultName = "plotDonutFitsUnpairedTask"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Cache instrument obscuration and focal length
+        self.obsc = self.instrument.obscuration
+        self.fl = self.instrument.focalLength
 
     # Helpers
     def _safeNormalize(self, arr: np.ndarray) -> np.ndarray:
@@ -577,6 +588,102 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
                 filename=plotFile,
             )
 
+    def getModelBase(self, telescope, defocused_telescope, row, img, wavelength, inex, thx=None, thy=None):
+        """Generate theoretical donut model for single defocal position.
+
+        Note: This method diverges from the parent class's `getModel`
+        implementation (see `plot_aos_task.py`). Unlike paired donuts,
+        unpaired donut stamps are not always centered from TARTs, so we
+        need to refit the donut stamps (centers and FWHM) at the time of
+        model generation using `least_squares` optimization. This is why
+        we use `danish.SingleDonutModel` with refitting rather than the
+        parent's approach that relies on pre-fitted metadata from the AOS
+        catalog.
+
+        Parameters
+        ----------
+        telescope : batoid.Optic
+            In-focus telescope optical model
+        defocused_telescope : batoid.Optic
+            Defocused telescope optical model
+        row : astropy.table.Row
+            AOS catalog row with Zernike coefficients and metadata
+        img : np.ndarray
+            Observed donut image to fit
+        wavelength : float
+            Wavelength in meters
+        inex : str
+            Focal type identifier ("intra" or "extra")
+        thx : float, optional
+            Field angle x in CCS coordinates. If None, extracted from row.
+        thy : float, optional
+            Field angle y in CCS coordinates. If None, extracted from row.
+
+        Returns
+        -------
+        model : np.ndarray
+            Theoretical donut model image
+        fwhm : float
+            Fitted FWHM parameter from the optimization
+        """
+        if thx is None or thy is None:
+            thx = row[f"thx_CCS_{inex}"]
+            thy = row[f"thy_CCS_{inex}"]
+        zk_CCS = row["zk_CCS"]
+        nollIndices = row.meta["nollIndices"]
+
+        z_intrinsic = (
+            batoid.zernikeGQ(
+                telescope,
+                thx,
+                thy,
+                wavelength,
+                jmax=28,
+                eps=self.obsc,
+            )
+            * wavelength
+        )
+        z_ref = (
+            batoid.zernikeTA(
+                defocused_telescope,
+                thx,
+                thy,
+                wavelength,
+                jmax=78,
+                eps=self.obsc,
+                focal_length=self.fl,
+            )
+            * wavelength
+        )
+        zk = z_ref.copy()
+        for ij, j in enumerate(nollIndices):
+            zk[j] += zk_CCS[ij] * 1e-6 - z_intrinsic[j]
+
+        fitter = danish.SingleDonutModel(
+            self.factory,
+            z_ref=zk,
+            z_terms=tuple(),  # only fitting x/y/fwhm
+            thx=thx,
+            thy=thy,
+            npix=img.shape[0],
+        )
+
+        guess = [0.0, 0.0, 0.7]
+        sky_level = 10000  # What!?
+        result = least_squares(
+            fitter.chi,
+            guess,
+            jac=fitter.jac,
+            ftol=1e-3,
+            xtol=1e-3,
+            gtol=1e-3,
+            args=(img, sky_level),
+        )
+        dx, dy, fwhm = result.x
+
+        model = fitter.model(*result.x, [])
+        return model, fwhm
+
     def getModel(
         self,
         telescope,
@@ -634,8 +741,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         thx = row["thx_CCS"]
         thy = row["thy_CCS"]
 
-        # Call parent's getModel method with pre-extracted thx/thy
-        return super().getModel(
+        return self.getModelBase(
             telescope, defocused_telescope, row, img, wavelength, focal_type, thx=thx, thy=thy
         )
 
@@ -717,7 +823,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
             raise ValueError(msg) from e
 
         # Use avg Zernikes with individual position
-        return super().getModel(
+        return self.getModelBase(
             telescope,
             defocused_telescope,
             temp_row,
@@ -835,7 +941,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         normalized_data = []
         vmax_global = 0
         for i, data in enumerate(donut_data):
-            if i >= self.config.maxDonutsToPlot:
+            if i >= self.config.nDonutsPerCorner:
                 break
 
             img = data["img"]
@@ -860,7 +966,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
 
         # Process each donut for plotting
         for i, data in enumerate(donut_data):
-            if i >= self.config.maxDonutsToPlot:  # Only process up to configured limit
+            if i >= self.config.nDonutsPerCorner:  # Only process up to configured limit
                 break
 
             img = data["img"]
@@ -1032,7 +1138,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         # Get bandpass and wavelength
         bandpass = donutStampsUnpaired.getBandpasses()[0]
         assert all([bandpass == bp for bp in donutStampsUnpaired.getBandpasses()])
-        wavelength = self.wavelengths[bandpass]
+        wavelength = self.instrument.wavelength[bandpass]
 
         # Create telescope models with configured defocus for unpaired donuts
         telescope, intra_telescope, extra_telescope = self._buildTelescopeModels(bandpass)
@@ -1090,7 +1196,21 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         # Get blur information
         donut_blur = np.zeros(len(aos_raw))
         if "fwhm" in aos_raw.meta["estimatorInfo"].keys():
-            donut_blur = np.array(aos_raw.meta["estimatorInfo"].get("fwhm"))
+            fwhm_data = np.array(aos_raw.meta["estimatorInfo"].get("fwhm"))
+            if len(fwhm_data) == len(aos_raw):
+                donut_blur = fwhm_data
+            elif len(fwhm_data) > 0:
+                # If fwhm is shorter, try to broadcast or use first value
+                # This handles cases where fwhm might be per-detector
+                # or per-pair
+                self.log.warning(
+                    "fwhm array length (%d) does not match aos_raw length (%d). "
+                    "Using first value for all rows.",
+                    len(fwhm_data),
+                    len(aos_raw),
+                )
+                donut_blur[:] = fwhm_data[0]
+            # else: keep zeros if fwhm_data is empty
 
         # Prepare to compute precise row-label positions from actual axes
         top_row_centers = [None] * 12
