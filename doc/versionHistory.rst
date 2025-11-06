@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.5.1
+
+-------------
+2.5.1
+-------------
+
+* Add test for PlotDonutFitsUnpairedTask with missing metadata scenario.
+
 .._lsst.ts.donut.viz-2.5.0
 
 -------------
