@@ -37,4 +37,8 @@ tasks:
     config:
       estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 27, 28]
       estimateZernikes.saveHistory: False
-      donutStampSelector.maxSelect: 8
+      donutStampSelector.maxSelect: 16 # Same max density as half size WFS chips (currently at 8 on CWFS)
+      donutStampSelector.maxFracBadPixels: 2.0e-4
+      donutStampSelector.selectWithMaxPowerGrad: False
+      estimateZernikes.binning: 2
+      donutStampSelector.minSignalToNoise: 100
