@@ -4,6 +4,16 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-2.6.0
+
+-------------
+2.6.0
+-------------
+
+* Rearrange production pipelines.
+* Add LSSTCam USDF processsing pipelines.
+* Move more commonalities into the ingredients to make it easier to maintain consistent pipelines.
+
 .._lsst.ts.donut.viz-2.5.1
 
 -------------

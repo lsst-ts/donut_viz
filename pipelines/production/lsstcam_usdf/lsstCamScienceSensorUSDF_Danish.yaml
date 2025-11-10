@@ -1,28 +1,27 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepRefitWcsCwfsPipeline.yaml
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/production/lsstCamScienceSensorRapidAnalysisPipeline_Danish.yaml
 tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.sourceLimit: 40
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       python: |
         from lsst.ts.wep.task import EstimateZernikesDanishTask
         config.estimateZernikes.retarget(EstimateZernikesDanishTask)
-      estimateZernikes.binning: 2
+      donutStampSelector.maxSelect: 20
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
-  aggregateDonutTablesCwfsTask:
-    class: lsst.donut.viz.AggregateDonutTablesCwfsTask
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
     config:
-      connections.donutTables: refitWcsDonutTable
-  plotDonutFitsTask: # donut viz task that applies only to Danish
-    class: lsst.donut.viz.PlotDonutFitsTask
-    config:
-      doRubinTVUpload: True
+      maxDonutsPerDetector: 20
 
 # Define pipeline steps
 subsets:
@@ -30,25 +29,20 @@ subsets:
     subset:
       - isr
       - generateDonutDirectDetectTask
-      - generateDonutFromRefitWcsTask
-      - cutOutDonutsCwfsPairTask
-      - reassignCwfsCutoutsPairTask
+      - cutOutDonutsScienceSensorGroupTask
+  step1b-visits:
+    subset:
       - calcZernikesTask
     description: |
       This step processes the input images with ISR,
       finds and cuts out the donut stamps,
       and estimates the Zernike coefficients from the donut pairs.
-  step1b-visits:
+  step2-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesCwfsTask
-      - aggregateAOSVisitTableCwfsTask
-      - plotAOSTask
+      - aggregateDonutTablesGroupTask
+      - aggregateAOSVisitTableTask
       - aggregateDonutStampsTask
-      - plotDonutCwfsTask
-      - plotPairingTask
-      - plotPsfZernTask
-      - plotDonutFitsTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
@@ -56,6 +50,8 @@ subsets:
 
 steps:
   - label: step1a-detectors
-    dimensions: [visit, detector]
+    dimensions: [detector]
   - label: step1b-visits
-    dimensions: [visit]
+    dimensions: []
+  - label: step2-visits
+    dimensions: []

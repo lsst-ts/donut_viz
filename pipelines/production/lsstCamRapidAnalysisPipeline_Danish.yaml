@@ -4,30 +4,13 @@ imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
 tasks:
-  generateDonutDirectDetectTask:
-    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
-    config:
-      measurementTask.nSigmaDetection: 5.0
-  cutOutDonutsCwfsPairTask:
-    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
-    config:
-      donutStampSize: 160
-      initialCutoutPadding: 40
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       python: |
         from lsst.ts.wep.task import EstimateZernikesDanishTask
         config.estimateZernikes.retarget(EstimateZernikesDanishTask)
-      donutStampSelector.maxSelect: 8
-      donutStampSelector.maxFracBadPixels: 2.0e-4
-      donutStampSelector.useCustomSnLimit: True
-      donutStampSelector.minSignalToNoise: 100
-      donutStampSelector.selectWithMaxPowerGrad: False
       estimateZernikes.binning: 2
-      estimateZernikes.nollIndices:
-        [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
-      estimateZernikes.saveHistory: False
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
         xtol: 1.0e-3
