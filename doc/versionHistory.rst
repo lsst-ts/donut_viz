@@ -3,6 +3,13 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.6.1
+
+-------------
+2.6.1
+-------------
+
+* Turn on doApplyGains for wepDirectDetect, wepRefitWcs, and TARTS pipelines.
 
 .._lsst.ts.donut.viz-2.6.0
 
