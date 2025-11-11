@@ -3,6 +3,16 @@
 ##################
 Version History
 ##################
+.._lsst.ts.donut.viz-2.6.2
+
+-------------
+2.6.2
+-------------
+
+* Fix USDF Unpaired Danish Pipeline.
+* Add Unpaired pipeline for RA.
+* Add base ISR config for all AOS pipelines.
+
 .._lsst.ts.donut.viz-2.6.1
 
 -------------

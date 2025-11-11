@@ -1,4 +1,6 @@
 description: wep direct detect pipeline
+imports:
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/aosBaseIsr.yaml
 
 tasks:
   isr:

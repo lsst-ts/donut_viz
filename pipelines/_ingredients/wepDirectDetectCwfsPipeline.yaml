@@ -1,34 +1,8 @@
 description: wep direct detect pipeline for wavefront sensors
+imports:
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/aosBaseIsr.yaml
 
 tasks:
-  isr:
-    class: lsst.ip.isr.IsrTaskLSST
-    config:
-      connections.outputExposure: post_isr_image
-      # Although we don't have to apply the amp offset corrections, we do want
-      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
-      doAmpOffset: False
-      ampOffset.doApplyAmpOffset: False
-      # Turn off slow steps in ISR but mask saturated pixels
-      doBrighterFatter: False
-      doSaturation: True
-      crosstalk.doQuadraticCrosstalkCorrection: False
-      qa.saveStats: False
-      doStandardStatistics: False
-      doInterpolate: False
-      doVariance: False
-      doDeferredCharge: False
-      doDefect: False
-      doApplyGains: True
-      doBias: False
-      doFlat: True
-      doDark: False
-      doLinearize: False
-      doSuspect: False
-      doSetBadRegions: False
-      doBootstrap: False
-      doCrosstalk: False
-      doITLEdgeBleedMask: False
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
@@ -59,4 +33,3 @@ tasks:
       estimateZernikes.nollIndices:
         [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
       estimateZernikes.saveHistory: False
-
