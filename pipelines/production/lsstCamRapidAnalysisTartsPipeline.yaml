@@ -20,7 +20,7 @@ tasks:
       doVariance: False
       doDeferredCharge: False
       doDefect: False
-      doApplyGains: False
+      doApplyGains: True
       doBias: False
       doFlat: True
       doDark: False
