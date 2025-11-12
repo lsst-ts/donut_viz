@@ -122,7 +122,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             for col_name in zernike_table.meta["opd_columns"]:
                 zernikes_merged.append(zernike_table[col_name].to(u.um).value)
             zernikes_merged = np.array(zernikes_merged).T
-            noll_indices = zernike_table.meta["noll_indices"]
+            noll_indices = np.array(zernike_table.meta["noll_indices"])
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
             raw_table["detector"] = det_meta["det_name"]
             raw_table["used"] = zernike_table["used"][1:]
