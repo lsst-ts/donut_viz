@@ -3,6 +3,15 @@
 ##################
 Version History
 ##################
+
+.._lsst.ts.donut.viz-2.6.3
+
+-------------
+2.6.3
+-------------
+
+* Add compatibility with new WEP intrinsics, deviation and opd columns.
+
 .._lsst.ts.donut.viz-2.6.2
 
 -------------
