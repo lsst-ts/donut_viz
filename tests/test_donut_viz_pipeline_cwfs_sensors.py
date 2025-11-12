@@ -62,7 +62,7 @@ class TestDonutVizPipeline(TestCase):
         cls.extraDetectorNames = ["R00_SW0"]  # Only one detector pair used in tests
         cls.intraDetectorNames = ["R00_SW1"]
 
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.camera_name = "LSSTCam"
         test_pipeline = os.path.join(
