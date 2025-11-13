@@ -139,6 +139,10 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
             raw_table["detector"] = det_meta["det_name"]
             raw_table["used"] = zernike_table["used"][1:]
+            if "extra_donut_id" in zernike_table.colnames:
+                raw_table["extra_donut_id"] = zernike_table["extra_donut_id"][1:]
+            if "intra_donut_id" in zernike_table.colnames:
+                raw_table["intra_donut_id"] = zernike_table["intra_donut_id"][1:]
             raw_tables.append(raw_table)
             avg_table = Table()
             avg_table["zk_CCS"] = np.atleast_2d(zernikes_merged[0])
@@ -1021,7 +1025,7 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
             # donut id can't be averaged like coordinates or centroids,
             # so we process it separately
             k = "donut_id"
-            if k in adt.colnames():  # safeguard against older data
+            if k in adt.colnames:  # safeguard against older data
                 nrows = len(raw_table)
                 dtype = adt[k].dtype
                 if k + "_intra" not in raw_table.colnames:
