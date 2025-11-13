@@ -1,0 +1,28 @@
+description: rapid analysis pipeline for LSSTCam
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
+    exclude:
+      - reassignCwfsCutoutsPairTask
+      - calcZernikesTask
+tasks:
+  calcZernikesUnpairedTask:
+    class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
+    config:
+      connections.donutStamps: donutStampsCwfs
+      python: |
+        from lsst.ts.wep.task import EstimateZernikesDanishTask
+        config.estimateZernikes.retarget(EstimateZernikesDanishTask)
+      donutStampSelector.maxSelect: 8
+      donutStampSelector.maxFracBadPixels: 2.0e-4
+      donutStampSelector.useCustomSnLimit: True
+      donutStampSelector.minSignalToNoise: 100
+      estimateZernikes.binning: 2
+      donutStampSelector.selectWithMaxPowerGrad: False
+      estimateZernikes.nollIndices:
+        [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
+      estimateZernikes.saveHistory: False
+      estimateZernikes.lstsqKwargs:
+        ftol: 1.0e-3
+        xtol: 1.0e-3
+        gtol: 1.0e-3
