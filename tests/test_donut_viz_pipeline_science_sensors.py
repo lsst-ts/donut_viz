@@ -56,7 +56,7 @@ class TestDonutVizPipeline(TestCase):
             clean_up_cmd = writeCleanUpRepoCmd(cls.test_repo_dir, cls.test_run_name)
             runProgram(clean_up_cmd)
 
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.camera_name = "LSSTCam"
         test_pipeline = os.path.join(

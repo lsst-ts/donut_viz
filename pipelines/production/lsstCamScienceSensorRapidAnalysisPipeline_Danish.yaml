@@ -10,7 +10,6 @@ tasks:
       python: |
         from lsst.ts.wep.task import EstimateZernikesDanishTask
         config.estimateZernikes.retarget(EstimateZernikesDanishTask)
-      donutStampSelector.maxSelect: 5
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
         xtol: 1.0e-3
