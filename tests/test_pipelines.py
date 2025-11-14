@@ -39,12 +39,26 @@ class TestPipeline(unittest.TestCase):
         cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
         cls.butler = Butler(cls.repoDir)
 
-    def testPipeline(self):
+    def testRapidAnalysisPipelines(self):
         packageDir = getPackageDir("donut_viz")
         # only test production pipelines
         pipelinePattern = Path(packageDir) / "pipelines" / "production"
         files = glob(pipelinePattern.as_posix() + "/*.yaml")
         for filename in files:
+            print(f"Testing pipeline from file: {filename}")
+            pipeline = Pipeline.fromFile(filename)
+            self.assertIsInstance(pipeline, Pipeline)
+            pipeline = pipeline.to_graph(registry=self.butler.registry)
+            self.assertIsInstance(pipeline, PipelineGraph)
+
+    def testUSDFPipelines(self):
+        packageDir = getPackageDir("donut_viz")
+        # only test production pipelines
+        pipelinePattern = Path(packageDir) / "pipelines" / "production" / "lsstcam_usdf"
+        files = glob(pipelinePattern.as_posix() + "/*.yaml")
+        for filename in files:
+            if filename.endswith("_InFocus.yaml"):
+                continue  # skip InFocus pipelines for now
             print(f"Testing pipeline from file: {filename}")
             pipeline = Pipeline.fromFile(filename)
             self.assertIsInstance(pipeline, Pipeline)

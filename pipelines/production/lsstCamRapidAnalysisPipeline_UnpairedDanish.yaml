@@ -1,0 +1,37 @@
+description: rapid analysis pipeline for LSSTCam
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsUnpairedPipeline.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsUnpairedPipeline.yaml
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsCwfsPairTask
+      - calcZernikesUnpairedTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
+  step1b-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesUnpairedCwfsTask
+      - aggregateAOSVisitTableUnpairedCwfsTask
+      - aggregateDonutStampsUnpairedTask
+      - plotAOSTask
+      - plotDonutUnpairedCwfsTask
+      - plotDonutFitsUnpairedTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-visits
+    dimensions: [visit]

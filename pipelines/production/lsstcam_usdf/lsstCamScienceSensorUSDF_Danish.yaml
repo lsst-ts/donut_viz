@@ -1,7 +1,11 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - $DONUT_VIZ_DIR/pipelines/production/lsstCamScienceSensorRapidAnalysisPipeline_Danish.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamScienceSensorRapidAnalysisPipeline_Danish.yaml
+    exclude:
+      - plotAOSTask
+      - plotDonutTask
+      - plotPsfZernTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
