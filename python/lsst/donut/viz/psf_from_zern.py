@@ -1,19 +1,20 @@
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
+from typing import Any
 
 
 def psfPanel(
-    xs,
-    ys,
-    psf,
-    detname,
-    dettype="LSSTComCam",
-    fig=None,
-    figsize=(11, 14),
-    maxcol=3,
-    cmap="cool",
-    **kwargs,
+    xs: list[list[float]],
+    ys: list[list[float]],
+    psf: list[list[float]],
+    detname: list[str],
+    dettype: str = "LSSTComCam",
+    fig: Figure | None = None,
+    figsize: tuple[float, float] = (11, 14),
+    maxcol: int = 3,
+    cmap: str = "cool",
+    **kwargs: Any,
 ) -> Figure:
     """Make a per-detector psf scatter plot
 

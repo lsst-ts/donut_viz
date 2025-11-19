@@ -1,6 +1,8 @@
 """Task for plotting unpaired donut fits visualization."""
 
 import batoid
+from pathlib import Path
+import yaml
 import danish
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
@@ -14,14 +16,22 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from scipy.optimize import least_squares
+import lsst.afw.cameraGeom as Camera
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from matplotlib.axes import Axes
+from astropy.table import Table, QTable, Row
+from lsst.daf.butler.dimensions import DimensionRecord
+from typing import Any, cast
+from lsst.summit.utils.efdUtils import makeEfdClient
+from lsst.ts.wep.utils import getTaskInstrument
+from lsst.ts.wep.estimation import DanishAlgorithm
 
 try:
+    from lsst.rubintv.production.uploaders import MultiUploader
     from lsst.rubintv.production.utils import getAutomaticLocationConfig, makePlotFile
 except ImportError:
-    getAutomaticLocationConfig = None
-    makePlotFile = None
+    MultiUploader = None
 
-from .plot_aos_task import PlotDonutFitsTask
 from .utilities import get_day_obs_seq_num_from_visitid, get_instrument_channel_name
 
 __all__ = [
@@ -33,7 +43,7 @@ __all__ = [
 
 class PlotDonutFitsUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "instrument"),
+    dimensions=("visit", "instrument"),  # type: ignore
 ):
     aggregateAOSRaw = ct.Input(
         doc="AOS raw catalog",
@@ -76,65 +86,69 @@ class PlotDonutFitsUnpairedTaskConnections(
 
 class PlotDonutFitsUnpairedTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=PlotDonutFitsUnpairedTaskConnections,
+    pipelineConnections=PlotDonutFitsUnpairedTaskConnections,  # type: ignore
 ):
-    doRubinTVUpload = pexConfig.Field(
+    doRubinTVUpload: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         doc="Upload to RubinTV",
         default=False,
     )
-    matchThresholdPx = pexConfig.Field(
+    matchThresholdPx: pexConfig.Field = pexConfig.Field(
         dtype=float,
         doc="Maximum AOS↔stamp centroid separation (pixels) for matching.",
         default=10.0,
     )
-    duplicateThresholdPx = pexConfig.Field(
+    duplicateThresholdPx: pexConfig.Field = pexConfig.Field(
         dtype=float,
         doc="Minimum centroid separation between selected stamps to avoid duplicates (px).",
         default=50.0,
     )
-    defocusMm = pexConfig.Field(
+    defocusMm: pexConfig.Field = pexConfig.Field(
         dtype=float,
         doc="Detector defocus magnitude (meters) used for intra/extra models.",
         default=1.5e-3,
     )
-    imgMaxFrac = pexConfig.Field(
+    imgMaxFrac: pexConfig.Field = pexConfig.Field(
         dtype=float,
         doc="Quantile used for vmax in image display (0-1).",
         default=0.99,
     )
-    imgMinFracScale = pexConfig.Field(
+    imgMinFracScale: pexConfig.Field = pexConfig.Field(
         dtype=float,
         doc="Scale divisor for vmin = -vmax/imgMinFracScale.",
         default=10.0,
     )
-    residualScaleDiv = pexConfig.Field(
+    residualScaleDiv: pexConfig.Field = pexConfig.Field(
         dtype=float,
         doc="Residual scaling divisor for vmin/vmax = ±vmax/residualScaleDiv.",
         default=3.0,
     )
-    enableEfdQuery = pexConfig.Field(
+    enableEfdQuery: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         doc="Enable querying EFD for telescope control data.",
         default=True,
     )
-    efdTopic = pexConfig.Field(
+    efdTopic: pexConfig.Field = pexConfig.Field(
         dtype=str,
         doc="EFD topic name for degree of freedom logevent.",
         default="lsst.sal.MTAOS.logevent_degreeOfFreedom",
     )
-    nDonutsPerCorner = pexConfig.Field(
+    nDonutsPerCorner: pexConfig.Field = pexConfig.Field(
         dtype=int,
         doc="Number of donuts per corner (integer, default: 4).\
         This sets the maximum number of donuts to plot in the visualization. \
         Limited by the 2x2 grid layout of the plot axes.",
         default=4,
     )
-    zkYmin = pexConfig.Field(dtype=float, doc="Lower limit on Zernike plot (default: -1 micron).", default=-1)
-    zkYmax = pexConfig.Field(dtype=float, doc="Upper limit on Zernike plot (default: +1 micron).", default=1)
+    zkYmin: pexConfig.Field = pexConfig.Field(
+        dtype=float, doc="Lower limit on Zernike plot (default: -1 micron).", default=-1
+    )
+    zkYmax: pexConfig.Field = pexConfig.Field(
+        dtype=float, doc="Upper limit on Zernike plot (default: +1 micron).", default=1
+    )
 
 
-class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
+class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
     """Task for plotting unpaired donut fits.
 
     Inherits from PlotDonutFitsTask. This task reuses the initialization
@@ -145,8 +159,42 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
     ConfigClass = PlotDonutFitsUnpairedTaskConfig
     _DefaultName = "plotDonutFitsUnpairedTask"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.config: PlotDonutFitsUnpairedTaskConfig = cast(PlotDonutFitsUnpairedTaskConfig, self.config)
+
+        if self.config.doRubinTVUpload:
+            if not MultiUploader:
+                raise RuntimeError("MultiUploader is not available")
+            self.uploader = MultiUploader()
+
+        self.efd_client = makeEfdClient()
+
+        mask_params_fn = Path(danish.datadir) / "RubinObsc.yaml"
+        with open(mask_params_fn) as f:
+            self.mask_params = yaml.safe_load(f)
+        instConfigFile = None
+        self.instrument = getTaskInstrument(
+            "LSSTCam",
+            "R00_SW0",
+            instConfigFile,
+        )
+        obsc = self.instrument.obscuration
+        focal_length = self.instrument.focalLength
+        r_outer = self.instrument.radius
+        pixel_scale = self.instrument.pixelSize
+        self.factory = danish.DonutFactory(
+            R_outer=r_outer,
+            R_inner=r_outer * obsc,
+            mask_params=self.mask_params,
+            focal_length=focal_length,
+            pixel_scale=pixel_scale,
+        )
+
+        # Setup danish algo
+        self.danish_algo = DanishAlgorithm()
+        self.danish_model_keys = ["fwhm", "model_dx", "model_dy", "model_sky_level"]
+
         # Cache instrument obscuration and focal length
         self.obsc = self.instrument.obscuration
         self.fl = self.instrument.focalLength
@@ -161,7 +209,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
             return np.zeros_like(arr)
         return arr / total
 
-    def _getCmap(self):
+    def _getCmap(self) -> LinearSegmentedColormap:
         # Cache custom colormap on first use
         if getattr(self, "_cached_cmap", None) is None:
             colors = [
@@ -175,7 +223,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
             )
         return self._cached_cmap
 
-    def _buildTelescopeModels(self, bandpass: str):
+    def _buildTelescopeModels(self, bandpass: str) -> tuple[batoid.Optic, batoid.Optic, batoid.Optic]:
         telescope = batoid.Optic.fromYaml(f"LSST_{bandpass}.yaml")
         dz = float(self.config.defocusMm)
         intra_telescope = telescope.withGloballyShiftedOptic(
@@ -189,7 +237,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         return telescope, intra_telescope, extra_telescope
 
     # Small plotting helpers to reduce duplication
-    def _imshow_img(self, ax, img_norm, vmax, cmap):
+    def _imshow_img(self, ax: Axes, img_norm: np.ndarray, vmax: float, cmap: LinearSegmentedColormap) -> None:
         ax.imshow(
             img_norm,
             cmap=cmap,
@@ -198,7 +246,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
             interpolation="nearest",
         )
 
-    def _imshow_residual(self, ax, residual):
+    def _imshow_residual(self, ax: Axes, residual: np.ndarray) -> None:
         vmax_residual = float(np.nanmax(np.abs(residual)))
         if not np.isfinite(vmax_residual) or vmax_residual == 0.0:
             vmax_residual = 1.0
@@ -212,7 +260,19 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
             interpolation="nearest",
         )
 
-    def _plot_zernike_bars(self, ax, row, title=None, xlabel=None, ylabel=None, fontsize=10):
+    def _plot_zernike_bars(
+        self,
+        ax: Axes,
+        row: Row,
+        title: str | None = None,
+        xlabel: str | None = None,
+        ylabel: str | None = None,
+        fontsize: int = 10,
+    ) -> None:
+        if row is None or "zk_CCS" not in row.colnames:
+            raise ValueError("Invalid row data for Zernike bar plot.")
+        if row.meta is None:
+            raise ValueError("Row metadata missing nollIndices for Zernike bar plot.")
         ax.bar(row.meta["nollIndices"], row["zk_CCS"], color="k")
         ax.axhline(0, color="k", lw=0.5)
         zk_max = np.nanmax(np.abs(row["zk_CCS"]))
@@ -243,7 +303,16 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         ax.axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
         ax.axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
 
-    def _render_combined_zk(self, ax, donut_data):
+    def _render_combined_zk(self, ax: Axes, donut_data: list[dict]) -> None:
+        """Render combined Zernike coefficients from multiple donuts.
+
+        Parameters
+        ----------
+        ax : Axes
+            Matplotlib Axes to render the plot on.
+        donut_data : list of dict
+            List of donut data dictionaries containing Zernike coefficients.
+        """
         # Find noll indices and gather per-donut zk
         noll_indices = None
         zk_lists = []
@@ -256,7 +325,11 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
                     noll_indices = row.meta["nollIndices"]
                 except (KeyError, AttributeError, TypeError):
                     pass
-            zk = d.get("row")["zk_CCS"] if (d.get("row") is not None) else None
+            row = d.get("row")  # type: ignore[assignment]
+            if row is not None:
+                zk = row["zk_CCS"]
+            else:
+                zk = None
             if zk is not None:
                 zk_lists.append(zk)
             if avg_zk is None and d.get("avg_zk_CCS") is not None:
@@ -288,7 +361,15 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
 
         # Emphasize manual average and corrected average
         if manual_zk is not None:
-            ax.scatter(noll_indices, manual_zk, s=18, color="black", alpha=0.9, label="Manual Avg", zorder=3)
+            ax.scatter(
+                noll_indices,
+                manual_zk,
+                s=18,
+                color="black",
+                alpha=0.9,
+                label="Manual Avg",
+                zorder=3,
+            )
         if avg_zk is not None:
             ax.scatter(
                 noll_indices,
@@ -341,7 +422,14 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         ax.set_ylabel("Coeff (μm)", fontsize=8)
         ax.legend(fontsize=7, loc="upper right")
 
-    def _render_histogram(self, ax, donut_table_rows, rows, donut_data, det_name):
+    def _render_histogram(
+        self,
+        ax: Axes,
+        donut_table_rows: np.ndarray,
+        rows: np.ndarray,
+        donut_data: list[dict],
+        det_name: str,
+    ) -> None:
         ood_scores = None
         if len(donut_table_rows) > 0 and "ood_score" in donut_table_rows.colnames:
             ood_scores = donut_table_rows["ood_score"]
@@ -353,11 +441,23 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         if ood_scores is not None:
             ood_scores_valid = ood_scores[~np.isnan(ood_scores)]
             if len(ood_scores_valid) > 0:
-                ax.hist(ood_scores_valid, bins=10, color="skyblue", edgecolor="black", alpha=0.7)
+                ax.hist(
+                    ood_scores_valid,
+                    bins=10,
+                    color="skyblue",
+                    edgecolor="black",
+                    alpha=0.7,
+                )
                 mean_val = np.mean(ood_scores_valid)
                 median_val = np.median(ood_scores_valid)
                 std_val = np.std(ood_scores_valid)
-                ax.axvline(mean_val, color="red", linestyle="--", linewidth=2, label=f"Mean: {mean_val:.3f}")
+                ax.axvline(
+                    mean_val,
+                    color="red",
+                    linestyle="--",
+                    linewidth=2,
+                    label=f"Mean: {mean_val:.3f}",
+                )
                 ax.axvline(
                     median_val,
                     color="green",
@@ -398,13 +498,26 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
                     )
                     added = True
                 return
-            ax.text(0.5, 0.5, "No valid OOD scores", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No valid OOD scores",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.set_xticks([])
             ax.set_yticks([])
             return
         # No ood scores available
         ax.text(
-            0.5, 0.5, "OOD score not available", ha="center", va="center", transform=ax.transAxes, fontsize=8
+            0.5,
+            0.5,
+            "OOD score not available",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=8,
         )
         ax.set_xticks([])
         ax.set_yticks([])
@@ -412,28 +525,36 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
     def _focal_color(self, det_name: str) -> str:
         return "blue" if det_name.endswith("SW1") else "red"
 
-    def _empty_cell(self, ax, text: str, fontsize: int | None = None):
-        ax.text(0.5, 0.5, text, ha="center", va="center", transform=ax.transAxes, fontsize=(fontsize or 8))
+    def _empty_cell(self, ax: Axes, text: str, fontsize: int | None = None) -> None:
+        ax.text(
+            0.5,
+            0.5,
+            text,
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=(fontsize or 8),
+        )
         ax.set_xticks([])
         ax.set_yticks([])
 
     def _render_corrected_and_manual_panels(
         self,
-        axs,
+        axs: np.ndarray,
         col_idx: int,
-        telescope,
-        intra_telescope,
-        extra_telescope,
-        wavelength,
+        telescope: batoid.Optic,
+        intra_telescope: batoid.Optic,
+        extra_telescope: batoid.Optic,
+        wavelength: float,
         det_name: str,
         data: dict,
-        img,
-        img_norm,
-        model_norm,
-        vmax,
-        vmax_residual,
+        img: np.ndarray,
+        img_norm: np.ndarray,
+        model_norm: np.ndarray,
+        vmax: float,
+        vmax_residual: float | None,
         col_title: str,
-    ):
+    ) -> None:
         # Hold normalized models for cross-difference (Corr - Man)
         avg_model_norm_val = None
         manual_model_norm_val = None
@@ -513,7 +634,9 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
                 axs[6][col_idx].set_yticks([])
             except Exception as e:
                 self.log.exception(
-                    "Failed to generate manual avg model for donut %d: %s", col_idx + 1, str(e)
+                    "Failed to generate manual avg model for donut %d: %s",
+                    col_idx + 1,
+                    str(e),
                 )
                 error_msg = str(e)[:50]
                 for r in [4, 5, 6]:
@@ -588,7 +711,17 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
                 filename=plotFile,
             )
 
-    def getModelBase(self, telescope, defocused_telescope, row, img, wavelength, inex, thx=None, thy=None):
+    def getModelBase(
+        self,
+        telescope: batoid.Optic,
+        defocused_telescope: batoid.Optic,
+        row: Row,
+        img: np.ndarray,
+        wavelength: float,
+        inex: str,
+        thx: float | None = None,
+        thy: float | None = None,
+    ) -> tuple[np.ndarray, float]:
         """Generate theoretical donut model for single defocal position.
 
         Note: This method diverges from the parent class's `getModel`
@@ -684,16 +817,16 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         model = fitter.model(*result.x, [])
         return model, fwhm
 
-    def getModel(
+    def getModelUnpaired(
         self,
-        telescope,
-        intra_telescope,
-        extra_telescope,
-        row,
-        img,
-        wavelength,
-        detector_name,
-    ):
+        telescope: batoid.Optic,
+        intra_telescope: batoid.Optic,
+        extra_telescope: batoid.Optic,
+        row: Row,
+        img: np.ndarray,
+        wavelength: float,
+        detector_name: str,
+    ) -> tuple[np.ndarray, float]:
         """Generate theoretical donut model for single defocal position.
 
         Parameters
@@ -742,22 +875,29 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         thy = row["thy_CCS"]
 
         return self.getModelBase(
-            telescope, defocused_telescope, row, img, wavelength, focal_type, thx=thx, thy=thy
+            telescope,
+            defocused_telescope,
+            row,
+            img,
+            wavelength,
+            focal_type,
+            thx=thx,
+            thy=thy,
         )
 
     def _generateAvgModel(
         self,
-        telescope,
-        intra_telescope,
-        extra_telescope,
-        avg_zk_CCS,
-        avg_row,
-        img,
-        wavelength,
-        thx_individual,
-        thy_individual,
-        detector_name,
-    ):
+        telescope: batoid.Optic,
+        intra_telescope: batoid.Optic,
+        extra_telescope: batoid.Optic,
+        avg_zk_CCS: np.ndarray,
+        avg_row: Row,
+        img: np.ndarray,
+        wavelength: float,
+        thx_individual: float,
+        thy_individual: float,
+        detector_name: str,
+    ) -> tuple[np.ndarray, float]:
         """Generate theoretical donut model using average Zernike coefficients.
 
         Parameters
@@ -808,11 +948,11 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         # Create a temporary row-like object with average Zernikes
         # but individual field position
         class TempRow:
-            def __init__(self, zk, meta):
+            def __init__(self, zk: np.ndarray, meta: dict) -> None:
                 self.data = {"zk_CCS": zk}
                 self.meta = meta
 
-            def __getitem__(self, key):
+            def __getitem__(self, key: str) -> np.ndarray:
                 return self.data[key]
 
         try:
@@ -834,12 +974,21 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
             thy=thy_individual,
         )
 
-    def plotResults(self, axs, img, model, row, blur, match_dist=None, focal_type=None):
+    def plotResults(
+        self,
+        axs: list[Axes],
+        img: np.ndarray,
+        model: np.ndarray,
+        row: Row,
+        blur: float,
+        match_dist: float | None = None,
+        focal_type: str | None = None,
+    ) -> None:
         """Create 4-row visualization for unpaired donuts.
 
         Parameters
         ----------
-        axs : list of matplotlib.axes.Axes
+        axs : list of Axes
             List of 4 axes for the visualization
         img : np.ndarray
             Observed donut image
@@ -889,7 +1038,11 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
 
         # Row 4: Zernike coefficients
         self._plot_zernike_bars(
-            axs[3], row, title="Zernike Coefficients", xlabel="Noll Index", ylabel="Coefficient (μm)"
+            axs[3],
+            row,
+            title="Zernike Coefficients",
+            xlabel="Noll Index",
+            ylabel="Coefficient (μm)",
         )
 
         # Color-code the right spine based on usage
@@ -903,13 +1056,20 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
             ax.set_yticks([])
 
     def plotResultsMultiDonut(
-        self, axs, donut_data, telescope, intra_telescope, extra_telescope, wavelength, det_name
-    ):
+        self,
+        axs: list[list[Axes]],
+        donut_data: list[dict],
+        telescope: batoid.Optic,
+        intra_telescope: batoid.Optic,
+        extra_telescope: batoid.Optic,
+        wavelength: float,
+        det_name: str,
+    ) -> None:
         """Create per-detector 10x4 panels plus a histogram row.
 
         Parameters
         ----------
-        axs : list[list[matplotlib.axes.Axes]]
+        axs : list[list[Axes]]
             11-row grid: rows 0–9 have 4 cols, row 10 spans full width
         donut_data : list of dict
             List of donut data dictionaries, each containing:
@@ -1098,14 +1258,14 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
 
     def run(
         self,
-        aos_raw,
-        zk_avg,
-        aggregate_donut_table,
-        donutStampsUnpaired,
-        camera,
-        day_obs,
-        seq_num,
-        record,
+        aos_raw: Table,
+        zk_avg: Table,
+        aggregate_donut_table: QTable,
+        donutStampsIntra: DonutStamps,
+        camera: Camera,
+        day_obs: int,
+        seq_num: int,
+        record: DimensionRecord | None,
     ) -> Figure:
         """Run the PlotDonutFitsUnpaired AOS task.
 
@@ -1119,9 +1279,9 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
             The AOS average catalog (one row per detector).
         aggregate_donut_table: Astropy QTable
             The aggregated donut table with additional fields like ood_score.
-        donutStampsUnpaired: DonutStamps
+        donutStampsIntra: DonutStamps
             The unpaired donut stamps.
-        camera: Camera
+        camera: `lsst.afw.cameraGeom.Camera`
             The camera object to get detector information.
         day_obs: int
             The day of observation.
@@ -1134,16 +1294,23 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
         -------
         fig: matplotlib.pyplot.figure
             The figure.
+
+        Raises
+        ------
+        RuntimeError
+            If EFD query is enabled but no Butler record is provided.
         """
         # Get bandpass and wavelength
-        bandpass = donutStampsUnpaired.getBandpasses()[0]
-        assert all([bandpass == bp for bp in donutStampsUnpaired.getBandpasses()])
+        bandpass = donutStampsIntra.getBandpasses()[0]
+        assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
         wavelength = self.instrument.wavelength[bandpass]
 
         # Create telescope models with configured defocus for unpaired donuts
         telescope, intra_telescope, extra_telescope = self._buildTelescopeModels(bandpass)
 
         # Get telescope control data from EFD
+        if record is None:
+            raise RuntimeError("Butler record is required for EFD query but was not provided.")
         startTime = record.timespan.begin
         efd_topic = self.config.efdTopic
         states_val = np.empty(50)
@@ -1332,8 +1499,8 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
                 continue
 
             # Get donut stamps for this detector
-            idx_to_donuts = np.array(donutStampsUnpaired.metadata.getArray("DET_NAME")) == det_name
-            donut_stamps_sel = np.array(donutStampsUnpaired)[idx_to_donuts]
+            idx_to_donuts = np.array(donutStampsIntra.metadata.getArray("DET_NAME")) == det_name
+            donut_stamps_sel = np.array(donutStampsIntra)[idx_to_donuts]
 
             if len(donut_stamps_sel) == 0:
                 # No donut stamps for this detector
@@ -1355,7 +1522,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
 
             # Donut-stamp-driven: try to collect up to 4 valid donuts
             # Skip stamps on modeling failure
-            donut_data = []
+            donut_data: list = []
             used_aos_indices: set[int] = set()  # ensure one-to-one stamp↔AOS mapping
             match_threshold_px = float(self.config.matchThresholdPx)
             dup_threshold_px = float(self.config.duplicateThresholdPx)  # avoid plotting near-duplicate stamps
@@ -1409,7 +1576,7 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
                 # Generate model using the matched AOS catalog parameters;
                 # skip on failure
                 try:
-                    model, fwhm = self.getModel(
+                    model, fwhm = self.getModelUnpaired(
                         telescope,
                         intra_telescope,
                         extra_telescope,
@@ -1477,7 +1644,13 @@ class PlotDonutFitsUnpairedTask(PlotDonutFitsTask):
 
             # Create visualization for all donuts
             self.plotResultsMultiDonut(
-                axs, donut_data, telescope, intra_telescope, extra_telescope, wavelength, det_name
+                axs,
+                donut_data,
+                telescope,
+                intra_telescope,
+                extra_telescope,
+                wavelength,
+                det_name,
             )
 
             # Plot combined ZK in row 10

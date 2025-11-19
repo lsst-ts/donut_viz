@@ -11,10 +11,41 @@ from matplotlib.patches import FancyArrowPatch
 from matplotlib.transforms import Affine2D
 from mpl_toolkits.axisartist.grid_finder import FixedLocator
 from tqdm import trange
+from lsst.daf.butler import Butler
+from matplotlib.figure import Figure
 
 
 @lru_cache()
-def get_cat(butler, extra_exposure_id, intra_exposure_id=None, instrument="LSSTCam"):
+def get_cat(
+    butler: Butler, extra_exposure_id: int, intra_exposure_id: int | None = None, instrument: str = "LSSTCam"
+) -> tuple:
+    """Get the donut catalog for a given visit.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        The butler to use to retrieve the data.
+    extra_exposure_id : `int`
+        The exposure ID of the extra-focal image.
+    intra_exposure_id : `int` or `None`, optional
+        The exposure ID of the intra-focal image. If None, it is assumed to be
+        extra_exposure_id + 1. Default is None.
+    instrument : `str`, optional
+        The instrument name. Default is "LSSTCam".
+
+    Returns
+    -------
+    cat : `astropy.table.Table`
+        The donut catalog for the given visit.
+    q : `float`
+        The boresight parallactic angle in radians.
+    rot : `float`
+        The boresight rotation angle in radians.
+    rtp : `float`
+        The angle between the optical and camera coordinate systems in radians.
+    band : `str`
+        The filter band.
+    """
     if intra_exposure_id is None:
         intra_exposure_id = extra_exposure_id + 1
     camera = butler.get("camera", instrument=instrument)
@@ -52,7 +83,7 @@ def get_cat(butler, extra_exposure_id, intra_exposure_id=None, instrument="LSSTC
     return cat, q, rot, rtp, band
 
 
-def rose(fig, vecs, p0=(0.105, 0.105), length=0.05):
+def rose(fig: Figure, vecs: dict, p0: tuple = (0.105, 0.105), length: float = 0.05) -> None:
     size = fig.get_size_inches()
     ratio = size[0] / size[1]
 
@@ -83,7 +114,7 @@ def rose(fig, vecs, p0=(0.105, 0.105), length=0.05):
         fig.text(p1[0], p1[1], k, color=color, ha="center", va="center")
 
 
-def add_rotated_axis(fig, xy, wh, th):
+def add_rotated_axis(fig: Figure, xy: tuple, wh: tuple, th: float) -> tuple:
     """
     Parameters
     ----------
@@ -127,7 +158,7 @@ def add_rotated_axis(fig, xy, wh, th):
     return ax, aux_ax
 
 
-def get_instrument_channel_name(instrument):
+def get_instrument_channel_name(instrument: str) -> str:
     """Get the instrument channel name for the current instrument.
 
     This is the RubinTV channel required to upload.
@@ -155,7 +186,7 @@ def get_instrument_channel_name(instrument):
             raise ValueError(f"Unknown instrument {instrument}")
 
 
-def get_day_obs_seq_num_from_visitid(visit):
+def get_day_obs_seq_num_from_visitid(visit: int) -> tuple:
     """Get the dayObs and seqNum from a visit ID.
 
     Parameters
@@ -177,7 +208,9 @@ def get_day_obs_seq_num_from_visitid(visit):
     return day_obs, seq_num
 
 
-def add_coordinate_roses(fig, rtp, q, p0=None):
+def add_coordinate_roses(
+    fig: Figure | None, rtp: float | None, q: float | None, p0: list | None = None
+) -> None:
     """Add coordinate system roses to the figure.
 
     Parameters

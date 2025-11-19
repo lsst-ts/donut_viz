@@ -3,7 +3,6 @@ from pathlib import Path
 
 import danish
 import galsim
-import lsst.afw
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
@@ -19,7 +18,7 @@ from lsst.summit.utils.efdUtils import (
 )
 from lsst.summit.utils.plotting import stretchDataMidTone
 from lsst.ts.wep.estimation import DanishAlgorithm
-from lsst.ts.wep.task import DonutStamps
+from lsst.ts.wep.task import DonutStamps, DonutStamp
 from lsst.ts.wep.utils import convertZernikesToPsfWidth, getTaskInstrument
 from lsst.utils.plotting.figures import make_figure
 from lsst.utils.timer import timeMethod
@@ -27,6 +26,9 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import ConnectionPatch
+from lsst.afw.cameraGeom import Camera
+from lsst.daf.butler.dimensions import DimensionRecord
+from typing import Any, cast
 
 from .psf_from_zern import psfPanel
 from .utilities import (
@@ -71,7 +73,7 @@ __all__ = [
 
 class PlotAOSTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "instrument"),
+    dimensions=("visit", "instrument"),  # type: ignore
 ):
     aggregateAOSRaw = ct.Input(
         doc="AOS raw catalog",
@@ -107,14 +109,14 @@ class PlotAOSTaskConnections(
 
 class PlotAOSTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=PlotAOSTaskConnections,
+    pipelineConnections=PlotAOSTaskConnections,  # type: ignore
 ):
-    doRubinTVUpload = pexConfig.Field(
+    doRubinTVUpload: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         doc="Upload to RubinTV",
         default=False,
     )
-    shiftFactor = pexConfig.Field(
+    shiftFactor: pexConfig.Field = pexConfig.Field(
         dtype=float,
         doc="A shift to be applied to the x,y position of \
         the Zernike data plotted for the Zernike pyramid,\
@@ -128,8 +130,9 @@ class PlotAOSTask(pipeBase.PipelineTask):
     ConfigClass = PlotAOSTaskConfig
     _DefaultName = "plotAOSTask"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.config: PlotAOSTaskConfig = cast(PlotAOSTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -179,7 +182,9 @@ class PlotAOSTask(pipeBase.PipelineTask):
                 filename=plotFile,
             )
 
-    def doPyramid(self, x, y, zk, rtp, q, nollIndices):
+    def doPyramid(
+        self, x: float, y: float, zk: np.ndarray, rtp: float, q: float, nollIndices: np.ndarray
+    ) -> Figure:
         fig = zernikePyramid(x, y, zk, nollIndices, cmap="seismic", s=10)
         vecs_xy = {
             r"$x_\mathrm{Opt}$": (1, 0),
@@ -201,7 +206,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
 
     def plotZernikePyramids(
         self,
-        aos_raw,
+        aos_raw: Table,
     ) -> Figure:
         # Cut out R30 for coordinate system check
         # wbad = np.isin(aos_raw['detector'], range(117, 126))
@@ -325,7 +330,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
 
 class PlotDonutTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "instrument"),
+    dimensions=("visit", "instrument"),  # type: ignore
 ):
     donutStampsIntraVisit = ct.Input(
         doc="Intrafocal Donut Stamps",
@@ -355,22 +360,23 @@ class PlotDonutTaskConnections(
 
 class PlotDonutTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=PlotDonutTaskConnections,
+    pipelineConnections=PlotDonutTaskConnections,  # type: ignore
 ):
-    doRubinTVUpload = pexConfig.Field(
+    doRubinTVUpload: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         doc="Upload to RubinTV",
         default=False,
     )
-    doS11only = pexConfig.Field(dtype=bool, doc="Use only S11 in FAM mode", default=False)
+    doS11only: pexConfig.Field = pexConfig.Field(dtype=bool, doc="Use only S11 in FAM mode", default=False)
 
 
 class PlotDonutTask(pipeBase.PipelineTask):
     ConfigClass = PlotDonutTaskConfig
     _DefaultName = "plotDonutTask"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.config: PlotDonutTaskConfig = cast(PlotDonutTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -392,10 +398,10 @@ class PlotDonutTask(pipeBase.PipelineTask):
         # donutStamps metadata as the
         # visitId above under which donutStamps were saved
         # is only the extra-focal visitId
-        fig_dict = self.run(donutStampsIntra, donutStampsExtra, inst)
+        fig_struct = self.run(donutStampsIntra, donutStampsExtra, inst)
 
-        butlerQC.put(fig_dict["extra"], outputRefs.donutPlotExtra)
-        butlerQC.put(fig_dict["intra"], outputRefs.donutPlotIntra)
+        butlerQC.put(fig_struct.extra, outputRefs.donutPlotExtra)
+        butlerQC.put(fig_struct.intra, outputRefs.donutPlotIntra)
 
         visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
         visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
@@ -409,7 +415,10 @@ class PlotDonutTask(pipeBase.PipelineTask):
 
                 plotName = "fp_donut_gallery"
                 plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
-                fig_dict[defocal_type].savefig(plotFile)
+                if defocal_type == "extra":
+                    fig_struct.extra.savefig(plotFile)
+                else:
+                    fig_struct.intra.savefig(plotFile)
                 self.uploader.uploadPerSeqNumPlot(
                     instrument=get_instrument_channel_name(inst),
                     plotName=plotName,
@@ -419,7 +428,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 )
 
     @timeMethod
-    def run(self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str):
+    def run(self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str) -> pipeBase.Struct:
         visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
         visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
 
@@ -502,12 +511,12 @@ class PlotDonutTask(pipeBase.PipelineTask):
             fig.text(0.47, 0.93, f"{donut.defocal_type}: {visit}")
             fig_dict[donut.defocal_type] = fig
 
-        return fig_dict
+        return pipeBase.Struct(extra=fig_dict["extra"], intra=fig_dict["intra"])
 
 
 class PlotDonutCwfsTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "instrument"),
+    dimensions=("visit", "instrument"),  # type: ignore
 ):
     donutStampsIntraVisit = ct.Input(
         doc="Intrafocal Donut Stamps",
@@ -531,9 +540,9 @@ class PlotDonutCwfsTaskConnections(
 
 class PlotDonutCwfsTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=PlotDonutCwfsTaskConnections,
+    pipelineConnections=PlotDonutCwfsTaskConnections,  # type: ignore
 ):
-    doRubinTVUpload = pexConfig.Field(
+    doRubinTVUpload: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         doc="Upload to RubinTV",
         default=False,
@@ -544,8 +553,9 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
     ConfigClass = PlotDonutCwfsTaskConfig
     _DefaultName = "plotDonutCwfsTask"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.config: PlotDonutCwfsTaskConfig = cast(PlotDonutCwfsTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -587,7 +597,7 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
             )
 
     @timeMethod
-    def run(self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str):
+    def run(self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str) -> Figure:
         visit = donutStampsIntra.metadata.getArray("VISIT")[0]
         # LSST detector layout
         q = donutStampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
@@ -616,6 +626,9 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
 
         aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
 
+        i: float
+        j: float
+        nrot90: int
         for donut in donutStampsList:
             det_name = donut.detector_name
             if det_name == "R00_SW0":
@@ -694,7 +707,7 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
 
 class PlotDonutUnpairedCwfsTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "instrument"),
+    dimensions=("visit", "instrument"),  # type: ignore
 ):
     donutStampsUnpairedVisit = ct.Input(
         doc="Unpaired Donut Stamps",
@@ -712,7 +725,7 @@ class PlotDonutUnpairedCwfsTaskConnections(
 
 class PlotDonutUnpairedCwfsTaskConfig(
     PlotDonutCwfsTaskConfig,
-    pipelineConnections=PlotDonutUnpairedCwfsTaskConnections,
+    pipelineConnections=PlotDonutUnpairedCwfsTaskConnections,  # type: ignore
 ):
     pass
 
@@ -721,8 +734,9 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
     ConfigClass = PlotDonutUnpairedCwfsTaskConfig
     _DefaultName = "plotDonutUnpairedCwfsTask"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.config: PlotDonutUnpairedCwfsTaskConfig = cast(PlotDonutUnpairedCwfsTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -763,7 +777,7 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
             )
 
     @timeMethod
-    def run(self, donutStampsUnpaired: DonutStamps, inst: str):
+    def run(self, donutStampsUnpaired: DonutStamps, inst: str) -> Figure:
         visit = donutStampsUnpaired.metadata.getArray("VISIT")[0]
         # LSST detector layout
         q = donutStampsUnpaired.metadata["BORESIGHT_PAR_ANGLE_RAD"]
@@ -788,6 +802,9 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
 
         aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
 
+        i: float
+        j: float
+        nrot90: int
         for donut in donutStampsList:
             det_name = donut.detector_name
             if det_name == "R00_SW0":
@@ -866,7 +883,7 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
 
 class PlotCwfsPairingTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("exposure", "visit", "instrument"),
+    dimensions=("exposure", "visit", "instrument"),  # type: ignore
 ):
     exposures = ct.Input(
         doc="Input exposures to plot",
@@ -898,9 +915,9 @@ class PlotCwfsPairingTaskConnections(
 
 class PlotCwfsPairingTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=PlotCwfsPairingTaskConnections,
+    pipelineConnections=PlotCwfsPairingTaskConnections,  # type: ignore
 ):
-    doRubinTVUpload = pexConfig.Field(
+    doRubinTVUpload: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         doc="Upload to RubinTV",
         default=False,
@@ -911,8 +928,9 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
     ConfigClass = PlotCwfsPairingTaskConfig
     _DefaultName = "plotCwfsPairingTask"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.config: PlotCwfsPairingTaskConfig = cast(PlotCwfsPairingTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -961,11 +979,11 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        images: dict[np.ndarray],
+        images: dict,
         aggregateAOSRaw: Table,
-        camera: lsst.afw.cameraGeom.Camera,
+        camera: Camera,
         visit: int,
-    ):
+    ) -> Figure:
         table = aggregateAOSRaw
 
         # Store image components as a dict
@@ -1042,7 +1060,7 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
 
 class PlotPsfZernTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "instrument"),
+    dimensions=("visit", "instrument"),  # type: ignore
 ):
     zernikes = ct.Input(
         doc="Zernikes catalog",
@@ -1061,9 +1079,9 @@ class PlotPsfZernTaskConnections(
 
 class PlotPsfZernTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=PlotPsfZernTaskConnections,
+    pipelineConnections=PlotPsfZernTaskConnections,  # type: ignore
 ):
-    doRubinTVUpload = pexConfig.Field(
+    doRubinTVUpload: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         doc="Upload to RubinTV",
         default=False,
@@ -1074,8 +1092,9 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
     ConfigClass = PlotPsfZernTaskConfig
     _DefaultName = "plotPsfZernTask"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.config: PlotPsfZernTaskConfig = cast(PlotPsfZernTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -1112,7 +1131,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
                 filename=plotFile,
             )
 
-    def run(self, zernikes, **kwargs) -> Figure:
+    def run(self, zernikes: list[Table], **kwargs: Any) -> Figure:
         """Run the PlotPsfZern AOS task.
 
         This task create a 3x3 grid of subplots,
@@ -1135,15 +1154,15 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             The figure.
         """
 
-        xs = []
-        ys = []
-        zs = []
-        dname = []
+        xs: list[np.ndarray] = []
+        ys: list[np.ndarray] = []
+        zs: list[np.ndarray] = []
+        dname: list[str] = []
         angles_set = False
         for i, qt in enumerate(zernikes):
             if len(qt) == 0:
                 zs.append(np.array([]))
-                dname.append([])
+                dname.append("")
                 xs.append([])
                 ys.append([])
                 continue
@@ -1181,7 +1200,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
 
 class PlotDonutFitsTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "instrument"),
+    dimensions=("visit", "instrument"),  # type: ignore
 ):
     aggregateAOSRaw = ct.Input(
         doc="AOS raw catalog",
@@ -1218,29 +1237,34 @@ class PlotDonutFitsTaskConnections(
 
 class PlotDonutFitsTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=PlotDonutFitsTaskConnections,
+    pipelineConnections=PlotDonutFitsTaskConnections,  # type: ignore
 ):
-    doRubinTVUpload = pexConfig.Field(
+    doRubinTVUpload: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         doc="Upload to RubinTV",
         default=False,
     )
-    nDonutsPerCorner = pexConfig.Field(
+    nDonutsPerCorner: pexConfig.Field = pexConfig.Field(
         dtype=int,
         doc="Number of donuts per corner (integer, default: 8).\
 This sets the number of rows per corner in the figure layout.",
         default=8,
     )
-    zkYmin = pexConfig.Field(dtype=float, doc="Lower limit on Zernike plot (default: -1 micron).", default=-1)
-    zkYmax = pexConfig.Field(dtype=float, doc="Upper limit on Zernike plot (default: +1 micron).", default=1)
+    zkYmin: pexConfig.Field = pexConfig.Field(
+        dtype=float, doc="Lower limit on Zernike plot (default: -1 micron).", default=-1
+    )
+    zkYmax: pexConfig.Field = pexConfig.Field(
+        dtype=float, doc="Upper limit on Zernike plot (default: +1 micron).", default=1
+    )
 
 
 class PlotDonutFitsTask(pipeBase.PipelineTask):
     ConfigClass = PlotDonutFitsTaskConfig
     _DefaultName = "plotDonutFitsTask"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.config: PlotDonutFitsTaskConfig = cast(PlotDonutFitsTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -1317,7 +1341,14 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 filename=plotFile,
             )
 
-    def getModel(self, zk_ccs_micron, noll_indices, danish_meta, stamp_extra, stamp_intra):
+    def getModel(
+        self,
+        zk_ccs_micron: np.ndarray,
+        noll_indices: list[int],
+        danish_meta: dict,
+        stamp_extra: DonutStamp,
+        stamp_intra: DonutStamp,
+    ) -> tuple[list[np.ndarray], list[np.ndarray]]:
         """Generate the danish donut model images
         for a pair of extra- and intra-focal donuts.
 
@@ -1409,7 +1440,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         return input_images, model_images
 
-    def computeResidualStats(self, img, model):
+    def computeResidualStats(self, img: np.ndarray, model: np.ndarray) -> tuple[float, float, float]:
         """
         Compute summary statistics of the residuals between an
         image and the model.
@@ -1446,7 +1477,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         tot_res = np.sum(np.abs(res))
         return pos_res, neg_res, tot_res
 
-    def plotResults(self, axs, imgs, models, row, blur):
+    def plotResults(
+        self, axs: list, imgs: list[np.ndarray], models: list[np.ndarray], row: Table, blur: float
+    ) -> None:
         colors = [
             (0.0, 0.0, 1.0),  # Blue
             (1.0, 1.0, 1.0),  # White
@@ -1509,13 +1542,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
     def run(
         self,
-        aos_raw,
-        donutStampsIntra,
-        donutStampsExtra,
-        camera,
-        day_obs,
-        seq_num,
-        record,
+        aos_raw: Table,
+        donutStampsIntra: DonutStamps,
+        donutStampsExtra: DonutStamps,
+        camera: Camera,
+        day_obs: int,
+        seq_num: int,
+        record: DimensionRecord | None,
     ) -> Figure:
         """Run the PlotDonutFits AOS task.
 
@@ -1542,6 +1575,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         -------
         fig: matplotlib.pyplot.figure
             The figure.
+
+        Raises
+        ------
+        RuntimeError
+            If `record` is None.
         """
         ndonuts = self.config.nDonutsPerCorner
 
@@ -1551,6 +1589,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         noll_indices = aos_raw.meta["nollIndices"]
 
         # Get the trim from EFD: applied corrections
+        if record is None:
+            raise RuntimeError("record is required to get timespan for EFD query")
         startTime = record.timespan.begin
         endTime = record.timespan.end
         efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
@@ -1595,7 +1635,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         fig_width = 2 * raft_width
 
         fig = make_figure(figsize=(fig_width, fig_height))
-        axdict = {}
+        axdict: dict = {}
         gs0 = GridSpec(
             nrows=4,
             ncols=2,
@@ -1783,14 +1823,14 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         table.set_fontsize(9)
 
         # Set monospace font for all cells FIRST
-        for (row, col), cell in table.get_celld().items():
+        for (row, col_idx), cell in table.get_celld().items():
             cell.get_text().set_fontfamily("monospace")
             # Center align all data cells
-            if row > 0 and col >= 0:  # data cells only
+            if row > 0 and col_idx >= 0:  # data cells only
                 cell.get_text().set_horizontalalignment("center")
 
         # Loop through all cells
-        for (row, col), cell in table.get_celld().items():
+        for (row, col_idx), cell in table.get_celld().items():
             # Hide all lines first
             cell.visible_edges = ""
 
@@ -1799,7 +1839,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 cell.visible_edges += "B"  # bottom border
 
             # Keep vertical line after row labels (col == -1 means row label)
-            if col == -1:
+            if col_idx == -1:
                 cell.visible_edges += "R"  # right border
 
         # Move all data rows slightly down
@@ -1821,7 +1861,15 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         middle_ax.axis("off")
         middle_ax.set_title("Average Zernike Coefficients per Detector", fontsize=12, pad=10)
 
-        def format_group(vals, label, wrap_width=2, rigid=False, label_width=20, prec=3, max_int=None):
+        def format_group(
+            vals: list[float],
+            label: str,
+            wrap_width: int = 2,
+            rigid: bool = False,
+            label_width: int = 20,
+            prec: int = 3,
+            max_int: int | None = None,
+        ) -> list[str]:
             """
             Format DOF group for rigid-body or bending modes.
             """
@@ -1829,8 +1877,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
             if rigid:
                 # Single-value rigid-body row (decimal-aligned)
-                formatted = f"{vals[0]:.{prec}f}"
-                ip, fp = formatted.split(".")
+                formatted_str = f"{vals[0]:.{prec}f}"
+                ip, fp = formatted_str.split(".")
                 if max_int is None:
                     max_int = len(ip)
                 row = f"{label:<{label_width}} {ip:>{max_int}}.{fp}"
@@ -1897,7 +1945,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         max_int_rigid = max(len(ip) for ip in int_parts)
 
         # Track y position per column separately
-        ypos = {0: y_start, 1: y_start, 2: y_start, 3: y_start}
+        ypos: dict[int, float] = {0: y_start, 1: y_start, 2: y_start, 3: y_start}
 
         # --- Render rigid-body groups in column 0 ---
         bottom_ax.text(
@@ -1953,7 +2001,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 ypos[col] -= y_step
 
         # Plot the exposure record data
-        records = {
+        records: dict = {
             "filter": record.physical_filter,
             "observation reason": record.observation_reason,
             "science program": record.science_program,
@@ -1968,9 +2016,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         float_keys = {"elevation", "azimuth", "rotator"}
 
         # Format values so floats are aligned
-        formatted_records = {}
+        formatted_records: dict = {}
         for k, v in records.items():
-            if k in float_keys:
+            if str(k) in float_keys:
                 # Format floats with consistent width + alignment to decimal
                 formatted_records[k] = f"{v:7.3f}"
             else:

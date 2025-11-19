@@ -15,6 +15,7 @@ from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.pairTask import ExposurePairer
 from lsst.ts.wep.utils import convertDictToVisitInfo
 from lsst.utils.timer import timeMethod
+from typing import Any, cast
 
 __all__ = [
     "AggregateZernikeTablesTaskConnections",
@@ -44,7 +45,7 @@ __all__ = [
 
 class AggregateZernikeTablesTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument", "visit"),
+    dimensions=("instrument", "visit"),  # type: ignore
 ):
     zernikeTable = ct.Input(
         doc="Zernike Coefficients from all donuts",
@@ -70,7 +71,7 @@ class AggregateZernikeTablesTaskConnections(
 
 class AggregateZernikeTablesTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=AggregateZernikeTablesTaskConnections,
+    pipelineConnections=AggregateZernikeTablesTaskConnections,  # type: ignore
 ):
     pass
 
@@ -85,20 +86,32 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         butlerQC: pipeBase.QuantumContext,
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
-    ):
+    ) -> None:
         zernike_tables = butlerQC.get(inputRefs.zernikeTable)
-        out_raw, out_avg = self.run(zernike_tables)
+        aggregate_tables = self.run(zernike_tables)
 
         # Find the right output references
-        butlerQC.put(out_raw, outputRefs.aggregateZernikesRaw)
-        butlerQC.put(out_avg, outputRefs.aggregateZernikesAvg)
+        butlerQC.put(aggregate_tables.raw, outputRefs.aggregateZernikesRaw)
+        butlerQC.put(aggregate_tables.avg, outputRefs.aggregateZernikesAvg)
 
     @timeMethod
-    def run(self, zernike_tables: typing.List[QTable]) -> tuple[Table, Table]:
+    def run(self, zernike_tables: typing.List[QTable]) -> pipeBase.Struct:
+        """Aggregate Zernike tables for a visit.
+
+        Parameters
+        ----------
+        zernike_tables : list of astropy.table.QTable
+            List of Zernike tables for all detectors in a visit.
+
+        Returns
+        -------
+        struct
+            Struct of aggregated zernike tables with 'raw' and 'avg' entries.
+        """
         raw_tables = []
         avg_tables = []
-        table_meta = None
-        estimator_meta = dict()
+        table_meta: dict | None = None
+        estimator_meta: dict = dict()
 
         for zernike_table in zernike_tables:
             if len(zernike_table) == 0:
@@ -158,6 +171,8 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         meta["alt"] = det_meta["boresight_alt_rad"]
         meta["band"] = det_meta["band"]
         # Average mjds
+        if table_meta is None:
+            raise RuntimeError("No metadata found in input zernike tables.")
         if unpaired_det_type is False:
             meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
         else:
@@ -187,13 +202,13 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             out_avg.meta["estimatorInfo"] = dict()
             out_avg.meta["estimatorInfo"]["fwhm"] = np.nanmedian(out_raw.meta["estimatorInfo"]["fwhm"])
 
-        return out_raw, out_avg
+        return pipeBase.Struct(raw=out_raw, avg=out_avg)
 
 
 # Note: cannot make visit a dimension because we have not yet paired visits.
 class AggregateDonutTablesTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument",),
+    dimensions=("instrument",),  # type: ignore
 ):
     donut_visit_pair_table = ct.Input(
         doc="Visit pair table",
@@ -243,8 +258,10 @@ class AggregateDonutTablesTaskConnections(
         multiple=True,
     )
 
-    def __init__(self, *, config=None):
+    def __init__(self, *, config: "AggregateDonutTablesTaskConfig | None" = None) -> None:
         super().__init__(config=config)
+        if config is None:
+            return
         if not config.pairer.target._needsPairTable:
             del self.donut_visit_pair_table
         if config.pairer.target._needsGroupDimension:
@@ -253,9 +270,9 @@ class AggregateDonutTablesTaskConnections(
 
 class AggregateDonutTablesTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=AggregateDonutTablesTaskConnections,
+    pipelineConnections=AggregateDonutTablesTaskConnections,  # type: ignore
 ):
-    pairer = pexConfig.ConfigurableField(
+    pairer: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=ExposurePairer,
         doc="Task to pair up intra- and extra-focal exposures",
     )
@@ -265,8 +282,10 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
     ConfigClass = AggregateDonutTablesTaskConfig
     _DefaultName = "AggregateDonutTables"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self.config: AggregateDonutTablesTaskConfig = cast(AggregateDonutTablesTaskConfig, self.config)
+        self.pairer = self.config.pairer
         self.makeSubtask("pairer")
 
     @timeMethod
@@ -275,7 +294,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         butlerQC: pipeBase.QuantumContext,
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
-    ):
+    ) -> None:
         camera = butlerQC.get(inputRefs.camera)
 
         # Only need one visitInfo per exposure.
@@ -307,8 +326,8 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         # Put pairTables in butler
         for pairTableRef in outputRefs.aggregateDonutTable:
             refVisit = pairTableRef.dataId["visit"]
-            if refVisit in pairTables.keys():
-                butlerQC.put(pairTables[refVisit], pairTableRef)
+            if refVisit in pairTables.pairTables.keys():
+                butlerQC.put(pairTables.pairTables[refVisit], pairTableRef)
 
     @timeMethod
     def run(
@@ -318,7 +337,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         pairs: list,
         donutTables: dict,
         qualityTables: dict,
-    ) -> typing.List[QTable]:
+    ) -> pipeBase.Struct:
         """Aggregate donut tables for a set of visits.
 
         Parameters
@@ -336,8 +355,8 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
         Returns
         -------
-        dict of astropy.table.QTable
-            Dict of aggregated donut tables, keyed on extra-focal visit.
+        struct
+            Struct of aggregated donut tables, keyed on extra-focal visit.
         """
         # Find common (visit, detector) extra-focal pairs
         # DonutQualityTables only saved under extra-focal ids
@@ -464,12 +483,12 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
             pairTables[pair.extra] = out
 
-        return pairTables
+        return pipeBase.Struct(pairTables=pairTables)
 
 
 class AggregateDonutTablesCwfsTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument", "visit"),
+    dimensions=("instrument", "visit"),  # type: ignore
 ):
     donutTables = ct.Input(
         doc="Donut tables",
@@ -504,7 +523,7 @@ class AggregateDonutTablesCwfsTaskConnections(
 
 class AggregateDonutTablesCwfsTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=AggregateDonutTablesCwfsTaskConnections,
+    pipelineConnections=AggregateDonutTablesCwfsTaskConnections,  # type: ignore
 ):
     pass
 
@@ -519,7 +538,7 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         butlerQC: pipeBase.QuantumContext,
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
-    ):
+    ) -> None:
         camera = butlerQC.get(inputRefs.camera)
 
         # Make dictionaries to match detectors
@@ -527,7 +546,7 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         qualityTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.qualityTables}
 
         aggTable = self.run(camera, donutTables, qualityTables)
-        butlerQC.put(aggTable, outputRefs.aggregateDonutTable)
+        butlerQC.put(aggTable.aggregateDonutTable, outputRefs.aggregateDonutTable)
 
     @timeMethod
     def run(
@@ -535,7 +554,7 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         camera: Camera,
         donutTables: dict,
         qualityTables: dict,
-    ) -> typing.List[QTable]:
+    ) -> pipeBase.Struct:
         """Aggregate donut tables for a set of visits.
 
         Parameters
@@ -549,8 +568,8 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
 
         Returns
         -------
-        dict of astropy.table.QTable
-            Dict of aggregated donut tables, keyed on extra-focal visit.
+        struct
+            Struct of aggregated donut tables, keyed on extra-focal visit.
         """
         tables = []
         extraDetectorIds = [191, 195, 199, 203]
@@ -636,18 +655,18 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
         out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
 
-        return out
+        return pipeBase.Struct(aggregateDonutTable=out)
 
 
 class AggregateDonutTablesUnpairedCwfsTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=AggregateDonutTablesCwfsTaskConnections,
+    pipelineConnections=AggregateDonutTablesCwfsTaskConnections,  # type: ignore
 ):
     pass
 
 
 class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
-    ConfigClass = AggregateDonutTablesUnpairedCwfsTaskConfig
+    ConfigClass = AggregateDonutTablesUnpairedCwfsTaskConfig  # type: ignore[assignment]
     _DefaultName = "AggregateDonutTablesUnpairedCwfs"
 
     @timeMethod
@@ -656,7 +675,7 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
         camera: Camera,
         donutTables: dict,
         qualityTables: dict,
-    ) -> typing.List[QTable]:
+    ) -> pipeBase.Struct:
         """Aggregate donut tables for a set of visits.
 
         Parameters
@@ -670,8 +689,8 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
 
         Returns
         -------
-        dict of astropy.table.QTable
-            Dict of aggregated donut tables, keyed on extra-focal visit.
+        struct
+            Struct of aggregated donut tables, keyed on extra-focal visit.
         """
         tables = []
         extraDetectorIds = [191, 195, 199, 203]
@@ -743,7 +762,7 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
         out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
         out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
 
-        return out
+        return pipeBase.Struct(aggregateDonutTable=out)
 
 
 class AggregateAOSVisitTableTaskConnections(
@@ -751,7 +770,7 @@ class AggregateAOSVisitTableTaskConnections(
     dimensions=(
         "visit",
         "instrument",
-    ),
+    ),  # type: ignore
 ):
     aggregateDonutTable = ct.Input(
         doc="Visit-level table of donuts",
@@ -790,7 +809,7 @@ class AggregateAOSVisitTableTaskConnections(
 
 class AggregateAOSVisitTableTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=AggregateAOSVisitTableTaskConnections,
+    pipelineConnections=AggregateAOSVisitTableTaskConnections,  # type: ignore
 ):
     pass
 
@@ -810,13 +829,13 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         azr = butlerQC.get(inputRefs.aggregateZernikesRaw)
         aza = butlerQC.get(inputRefs.aggregateZernikesAvg)
 
-        avg_table, raw_table = self.run(adt, azr, aza)
+        tables = self.run(adt, azr, aza)
 
-        butlerQC.put(avg_table, outputRefs.aggregateAOSAvg)
-        butlerQC.put(raw_table, outputRefs.aggregateAOSRaw)
+        butlerQC.put(tables.avg, outputRefs.aggregateAOSAvg)
+        butlerQC.put(tables.raw, outputRefs.aggregateAOSRaw)
 
     @timeMethod
-    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
+    def run(self, adt: Table, azr: Table, aza: Table) -> pipeBase.Struct:
         """
         Create overall summary tables for the visit.
 
@@ -831,11 +850,13 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
 
         Returns
         -------
-        avg_table : `astropy.table.Table`
-            Table with average donut and Zernike values by detector.
-        raw_table : `astropy.table.Table`
-            Table with donut and Zernike values from every
-            source that went into the averages.
+        struct : `pipeBase.Struct`
+            Struct with `avg` and `raw` tables:
+            avg_table : `astropy.table.Table`
+                Table with average donut and Zernike values by detector.
+            raw_table : `astropy.table.Table`
+                Table with donut and Zernike values from every
+                source that went into the averages.
         """
         dets = np.unique(adt["detector"])
         avg_table = aza.copy()
@@ -896,7 +917,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                     raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
                     raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
 
-        return avg_table, raw_table
+        return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
 
 class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
@@ -904,7 +925,7 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
     _DefaultName = "AggregateAOSVisitTableCwfs"
 
     @timeMethod
-    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
+    def run(self, adt: Table, azr: Table, aza: Table) -> pipeBase.Struct:
         """
         Create overall summary tables for the visit.
 
@@ -919,11 +940,13 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
 
         Returns
         -------
-        avg_table : `astropy.table.Table`
-            Table with average donut and Zernike values by detector.
-        raw_table : `astropy.table.Table`
-            Table with donut and Zernike values from every
-            source that went into the averages.
+        struct : `pipeBase.Struct`
+            Struct with `avg` and `raw` tables:
+            avg_table : `astropy.table.Table`
+                Table with average donut and Zernike values by detector.
+            raw_table : `astropy.table.Table`
+                Table with donut and Zernike values from every
+                source that went into the averages.
         """
         extraDetectorNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         intraDetectorNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
@@ -983,7 +1006,7 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
                 raw_table[k + "_intra"][w] = adt[k][wintra]
                 raw_table[k + "_extra"][w] = adt[k][wextra]
 
-        return avg_table, raw_table
+        return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
 
 class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
@@ -991,7 +1014,7 @@ class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
     _DefaultName = "AggregateAOSVisitTableUnpairedCwfs"
 
     @timeMethod
-    def run(self, adt: Table, azr: Table, aza: Table) -> tuple[Table, Table]:
+    def run(self, adt: Table, azr: Table, aza: Table) -> pipeBase.Struct:
         """
         Create overall summary table for the visit.
 
@@ -1006,11 +1029,13 @@ class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
 
         Returns
         -------
-        avg_table : `astropy.table.Table`
-            Table with average donut and Zernike values by detector.
-        raw_table : `astropy.table.Table`
-            Table with donut and Zernike values from every
-            source that went into the averages.
+        struct : `pipeBase.Struct`
+            Struct with `avg` and `raw` tables:
+            avg_table : `astropy.table.Table`
+                Table with average donut and Zernike values by detector.
+            raw_table : `astropy.table.Table`
+                Table with donut and Zernike values from every
+                source that went into the averages.
         """
         dets = np.unique(adt["detector"])
         # Only take extra focal detector names
@@ -1053,12 +1078,12 @@ class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
                 # ought to be the same length now
                 raw_table[k][w] = adt[k][wadt]
 
-        return avg_table, raw_table
+        return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
 
 class AggregateDonutStampsTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument", "visit"),
+    dimensions=("instrument", "visit"),  # type: ignore
 ):
     donutStampsIntra = ct.Input(
         doc="Intrafocal Donut Stamps",
@@ -1100,21 +1125,28 @@ class AggregateDonutStampsTaskConnections(
 
 class AggregateDonutStampsTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=AggregateDonutStampsTaskConnections,
+    pipelineConnections=AggregateDonutStampsTaskConnections,  # type: ignore
 ):
-    maxDonutsPerDetector = pexConfig.Field[int](
+    maxDonutsPerDetector: pexConfig.Field = pexConfig.Field(
         doc="Maximum number of donuts to use per detector",
         default=1,
+        dtype=int,
     )
 
-    def validate(self):
+    def validate(self) -> None:
         if self.maxDonutsPerDetector < 1:
-            raise pexConfig.FieldValidationError("maxDonutsPerDetector must be at least 1")
+            raise pexConfig.FieldValidationError(
+                self, "maxDonutsPerDetector", "maxDonutsPerDetector must be at least 1"
+            )
 
 
 class AggregateDonutStampsTask(pipeBase.PipelineTask):
     ConfigClass = AggregateDonutStampsTaskConfig
     _DefaultName = "AggregateDonutStamps"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.config: AggregateDonutStampsTaskConfig = cast(AggregateDonutStampsTaskConfig, self.config)
 
     @timeMethod
     def runQuantum(
@@ -1123,19 +1155,19 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        intraStampsOut, extraStampsOut = self.run(
+        stampsOut = self.run(
             butlerQC.get(inputRefs.donutStampsIntra),
             butlerQC.get(inputRefs.donutStampsExtra),
             butlerQC.get(inputRefs.qualityTables),
         )
 
         butlerQC.put(
-            intraStampsOut,
+            stampsOut.intra,
             outputRefs.donutStampsIntraVisit,
         )
 
         butlerQC.put(
-            extraStampsOut,
+            stampsOut.extra,
             outputRefs.donutStampsExtraVisit,
         )
 
@@ -1145,7 +1177,23 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         intraStamps: typing.List,
         extraStamps: typing.List,
         qualityTables: typing.List,
-    ) -> tuple[typing.List, typing.List]:
+    ) -> pipeBase.Struct:
+        """Aggregate donut stamps for a set of visits.
+
+        Parameters
+        ----------
+        intraStamps : list of DonutStamps
+            List of intrafocal donut stamps.
+        extraStamps : list of DonutStamps
+            List of extrafocal donut stamps.
+        qualityTables : list of `astropy.table.Table`
+            List of donut quality tables.
+
+        Returns
+        -------
+        struct
+            Struct with `intra` and `extra` donut stamps.
+        """
         intraStampsList = []
         extraStampsList = []
         intraStampsMetadata = None
@@ -1195,12 +1243,12 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         intraStampsRavel = DonutStamps(intraStampsListRavel, metadata=intraStampsMetadata)
         extraStampsRavel = DonutStamps(extraStampsListRavel, metadata=extraStampsMetadata)
 
-        return intraStampsRavel, extraStampsRavel
+        return pipeBase.Struct(intra=intraStampsRavel, extra=extraStampsRavel)
 
 
 class AggregateDonutStampsUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument", "visit"),
+    dimensions=("instrument", "visit"),  # type: ignore
 ):
     donutStampsIn = ct.Input(
         doc="Extrafocal Donut Stamps",
@@ -1228,7 +1276,7 @@ class AggregateDonutStampsUnpairedTaskConnections(
 
 class AggregateDonutStampsUnpairedTaskConfig(
     AggregateDonutStampsTaskConfig,
-    pipelineConnections=AggregateDonutStampsUnpairedTaskConnections,
+    pipelineConnections=AggregateDonutStampsUnpairedTaskConnections,  # type: ignore
 ):
     pass
 
@@ -1236,6 +1284,13 @@ class AggregateDonutStampsUnpairedTaskConfig(
 class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
     ConfigClass = AggregateDonutStampsUnpairedTaskConfig
     _DefaultName = "AggregateDonutStampsUnpaired"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.config: AggregateDonutStampsUnpairedTaskConfig = cast(
+            AggregateDonutStampsUnpairedTaskConfig,
+            self.config,
+        )
 
     @timeMethod
     def runQuantum(
@@ -1250,7 +1305,7 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         )
 
         butlerQC.put(
-            stampsOut,
+            stampsOut.stamps,
             outputRefs.donutStampsUnpairedVisit,
         )
 
@@ -1259,7 +1314,21 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         self,
         stampsIn: typing.List,
         qualityTables: typing.List,
-    ) -> tuple[typing.List, typing.List]:
+    ) -> pipeBase.Struct:
+        """Aggregate donut stamps for a set of visits.
+
+        Parameters
+        ----------
+        stampsIn : list of DonutStamps
+            List of donut stamps.
+        qualityTables : list of `astropy.table.Table`
+            List of donut quality tables.
+
+        Returns
+        -------
+        struct
+            Struct with `stamps` donut stamps.
+        """
         stampsList = []
         stampsMetadata = None
         for stamps, quality in zip(stampsIn, qualityTables):
@@ -1300,4 +1369,4 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
 
         stampsRavel = DonutStamps(stampsListRavel, metadata=stampsMetadata)
 
-        return stampsRavel
+        return pipeBase.Struct(stamps=stampsRavel)
