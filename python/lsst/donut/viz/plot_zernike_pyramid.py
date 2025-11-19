@@ -5,9 +5,12 @@ import numpy as np
 import yaml
 from utilities import get_cat, rose
 from zernike_pyramid import zernikePyramid
+from lsst.daf.butler import Butler
 
 
-def plotZernikePyramid(butler, extra_exposure_id, intra_exposure_id=None, instrument="LSSTCam"):
+def plotZernikePyramid(
+    butler: Butler, extra_exposure_id: int, intra_exposure_id: int | None = None, instrument: str = "LSSTCam"
+) -> None:
     cat, q, rot, rtp, band = get_cat(
         butler,
         extra_exposure_id,
@@ -88,8 +91,6 @@ def plotZernikePyramid(butler, extra_exposure_id, intra_exposure_id=None, instru
 if __name__ == "__main__":
     from argparse import ArgumentParser
 
-    from lsst.daf.butler import Butler
-
     parser = ArgumentParser()
     parser.add_argument("butler", type=str)
     parser.add_argument("collection", type=str)
@@ -98,7 +99,7 @@ if __name__ == "__main__":
     parser.add_argument("--instrument", type=str, default="LSSTCam")
     args = parser.parse_args()
 
-    butler = Butler(args.butler, collections=args.collection)
+    butler = Butler.from_config(args.butler, collections=args.collection)
     plotZernikePyramid(
         butler,
         args.extra_exposure_id,

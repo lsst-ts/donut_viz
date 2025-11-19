@@ -32,14 +32,17 @@ from lsst.utils import getPackageDir
 class TestPipeline(unittest.TestCase):
     """Test the pipeline."""
 
+    butler: Butler
+    repoDir: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         moduleDir = getPackageDir("ts_wep")
         testDataDir = os.path.join(moduleDir, "tests", "testData")
         cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
-        cls.butler = Butler(cls.repoDir)
+        cls.butler = Butler.from_config(cls.repoDir)
 
-    def testRapidAnalysisPipelines(self):
+    def testRapidAnalysisPipelines(self) -> None:
         packageDir = getPackageDir("donut_viz")
         # only test production pipelines
         pipelinePattern = Path(packageDir) / "pipelines" / "production"
@@ -48,10 +51,10 @@ class TestPipeline(unittest.TestCase):
             print(f"Testing pipeline from file: {filename}")
             pipeline = Pipeline.fromFile(filename)
             self.assertIsInstance(pipeline, Pipeline)
-            pipeline = pipeline.to_graph(registry=self.butler.registry)
-            self.assertIsInstance(pipeline, PipelineGraph)
+            pipeline_graph = pipeline.to_graph(registry=self.butler.registry)
+            self.assertIsInstance(pipeline_graph, PipelineGraph)
 
-    def testUSDFPipelines(self):
+    def testUSDFPipelines(self) -> None:
         packageDir = getPackageDir("donut_viz")
         # only test production pipelines
         pipelinePattern = Path(packageDir) / "pipelines" / "production" / "lsstcam_usdf"
@@ -62,8 +65,8 @@ class TestPipeline(unittest.TestCase):
             print(f"Testing pipeline from file: {filename}")
             pipeline = Pipeline.fromFile(filename)
             self.assertIsInstance(pipeline, Pipeline)
-            pipeline = pipeline.to_graph(registry=self.butler.registry)
-            self.assertIsInstance(pipeline, PipelineGraph)
+            pipeline_graph = pipeline.to_graph(registry=self.butler.registry)
+            self.assertIsInstance(pipeline_graph, PipelineGraph)
 
 
 if __name__ == "__main__":
