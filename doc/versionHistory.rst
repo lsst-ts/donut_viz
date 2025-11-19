@@ -4,6 +4,23 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-3.0.0
+
+-------------
+3.0.0
+-------------
+
+Breaking Changes
+* Updated method signatures for run() implementations to correctly match the superclass API in PlotDonutFitsTask.
+  This change enforces proper interface consistency and MyPy type-safety, but breaks external code that previously passed additional arguments (e.g., zk_avg, aggregate_donut_table, or unpaired stamp sets).
+  Downstream users must update their calls to these tasks accordingly.
+
+Improvements
+* Comprehensive modernization for static type checking (MyPy) across lsst.ts.donut.viz.
+* Added missing type annotations and corrected ambiguous signatures, leading to improved safety and maintainability.
+* Removed implicit dictionary-based data passing in favor of explicit typed structures (Astropy Row, QTable, etc.).
+* Resolved multiple MyPy-inferred errors related to method overriding, attribute access, and indexability.
+
 .._lsst.ts.donut.viz-2.6.3
 
 -------------
