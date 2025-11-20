@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-3.0.1
+
+-------------
+3.0.1
+-------------
+
+* Updated pipelines now that EstimateZernikesDanishTask is the default for CalcZernikesTask in ts_wep.
+
 .._lsst.ts.donut.viz-3.0.0
 
 -------------

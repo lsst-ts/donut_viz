@@ -7,9 +7,6 @@ tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      python: |
-        from lsst.ts.wep.task import EstimateZernikesDanishTask
-        config.estimateZernikes.retarget(EstimateZernikesDanishTask)
       estimateZernikes.binning: 2
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
