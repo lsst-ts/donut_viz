@@ -32,6 +32,9 @@ tasks:
     class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
     config:
       connections.donutStamps: donutStampsCwfs
+      python: |
+        from lsst.ts.wep.task import EstimateZernikesTieTask
+        config.estimateZernikes.retarget(EstimateZernikesTieTask)
       estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 20, 21, 22, 27, 28]
       estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: {'doMaskBlends': False}
