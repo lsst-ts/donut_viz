@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-3.0.2
+
+-------------
+3.0.2
+-------------
+
+* Aggregate donut_id.
+
 .._lsst.ts.donut.viz-3.0.1
 
 -------------
