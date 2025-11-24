@@ -175,6 +175,12 @@ class TestDonutVizPipeline(TestCase):
         )
         self.assertEqual(len(raw_zern_table), len(raw_visit_table))
         np.testing.assert_array_equal(raw_zern_table["zk_CCS"], raw_visit_table["zk_CCS"])
+        np.testing.assert_array_equal(
+            raw_zern_table["zk_intrinsic_CCS"], raw_visit_table["zk_intrinsic_CCS"]
+        )
+        np.testing.assert_array_equal(
+            raw_zern_table["zk_deviation_CCS"], raw_visit_table["zk_deviation_CCS"]
+        )
         donut_table = self.butler.get(
             "aggregateDonutTable",
             dataId=raw_visit_table_list[0].dataId,
@@ -201,6 +207,12 @@ class TestDonutVizPipeline(TestCase):
         )
         self.assertEqual(len(avg_zern_table), len(avg_visit_table))
         np.testing.assert_array_equal(avg_zern_table["zk_CCS"], avg_visit_table["zk_CCS"])
+        np.testing.assert_array_equal(
+            avg_zern_table["zk_intrinsic_CCS"], avg_visit_table["zk_intrinsic_CCS"]
+        )
+        np.testing.assert_array_equal(
+            avg_zern_table["zk_deviation_CCS"], avg_visit_table["zk_deviation_CCS"]
+        )
         donut_table = self.butler.get(
             "aggregateDonutTable",
             dataId=avg_visit_table_list[0].dataId,
