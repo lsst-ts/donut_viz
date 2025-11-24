@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-3.1.0
+
+-------------
+3.1.0
+-------------
+
+* Added intrinsic and wavefront deviation coefficients to the aggregated Zernike tables.
+
 .._lsst.ts.donut.viz-3.0.1
 
 -------------
