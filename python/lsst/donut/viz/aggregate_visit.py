@@ -132,11 +132,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
 
             # Create tables for raw and average zernikes
             raw_table = Table()
-            raw_table["detector"] = det_meta["det_name"]
-            raw_table["used"] = zernike_table["used"][1:]
-
             avg_table = Table()
-            avg_table["detector"] = det_meta["det_name"]
 
             # Save OPD coefficients
             zernikes_merged = []
@@ -161,6 +157,11 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             deviations_merged = np.array(deviations_merged).T
             raw_table["zk_deviation_CCS"] = np.atleast_2d(deviations_merged[1:])
             avg_table["zk_deviation_CCS"] = np.atleast_2d(deviations_merged[0])
+
+            # Add some more metadata
+            raw_table["used"] = zernike_table["used"][1:]
+            raw_table["detector"] = det_meta["det_name"]
+            avg_table["detector"] = det_meta["det_name"]
 
             raw_tables.append(raw_table)
             avg_tables.append(avg_table)
