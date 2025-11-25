@@ -130,21 +130,44 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             det_meta = extra_meta or intra_meta
             unpaired_det_type = not (intra_meta and extra_meta)
 
+            # Create tables for raw and average zernikes
             raw_table = Table()
+            avg_table = Table()
+
+            # Save OPD coefficients
             zernikes_merged = []
             for col_name in zernike_table.meta["opd_columns"]:
                 zernikes_merged.append(zernike_table[col_name].to(u.um).value)
             zernikes_merged = np.array(zernikes_merged).T
-            noll_indices = np.array(zernike_table.meta["noll_indices"])
             raw_table["zk_CCS"] = np.atleast_2d(zernikes_merged[1:])
-            raw_table["detector"] = det_meta["det_name"]
-            raw_table["used"] = zernike_table["used"][1:]
-            raw_tables.append(raw_table)
-            avg_table = Table()
             avg_table["zk_CCS"] = np.atleast_2d(zernikes_merged[0])
+
+            # Save intrinsic coefficients
+            intrinsics_merged = []
+            for col_name in zernike_table.meta["intrinsic_columns"]:
+                intrinsics_merged.append(zernike_table[col_name].to(u.um).value)
+            intrinsics_merged = np.array(intrinsics_merged).T
+            raw_table["zk_intrinsic_CCS"] = np.atleast_2d(intrinsics_merged[1:])
+            avg_table["zk_intrinsic_CCS"] = np.atleast_2d(intrinsics_merged[0])
+
+            # Save wavefront deviation coefficients
+            deviations_merged = []
+            for col_name in zernike_table.meta["deviation_columns"]:
+                deviations_merged.append(zernike_table[col_name].to(u.um).value)
+            deviations_merged = np.array(deviations_merged).T
+            raw_table["zk_deviation_CCS"] = np.atleast_2d(deviations_merged[1:])
+            avg_table["zk_deviation_CCS"] = np.atleast_2d(deviations_merged[0])
+
+            # Add some more metadata
+            raw_table["used"] = zernike_table["used"][1:]
+            raw_table["detector"] = det_meta["det_name"]
             avg_table["detector"] = det_meta["det_name"]
+
+            raw_tables.append(raw_table)
             avg_tables.append(avg_table)
-            # just get any one, they're all the same
+
+            # Save estimator metadata
+            # (just get any one, they're all the same)
             if table_meta is None:
                 table_meta = zernike_table.meta
             if "estimatorInfo" in zernike_table.meta.keys():
@@ -152,9 +175,12 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                     if key not in estimator_meta:
                         estimator_meta[key] = []
                     estimator_meta[key] += val
+
+        # Aggregate all tables
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
 
+        # Metadata about pointing, rotation, etc.
         # TODO: Swap parallactic angle for pseudo parallactic angle.
         #       See SMTN-019 for details.
         meta = {}
@@ -170,6 +196,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         meta["az"] = det_meta["boresight_az_rad"]
         meta["alt"] = det_meta["boresight_alt_rad"]
         meta["band"] = det_meta["band"]
+
         # Average mjds
         if table_meta is None:
             raise RuntimeError("No metadata found in input zernike tables.")
@@ -177,8 +204,12 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             meta["mjd"] = 0.5 * (table_meta["extra"]["mjd"] + table_meta["intra"]["mjd"])
         else:
             meta["mjd"] = det_meta["mjd"]
+
+        # Noll indices corresponding to the Zernike coefficients
+        noll_indices = np.array(zernike_table.meta["noll_indices"])
         meta["nollIndices"] = noll_indices
 
+        # Transform Zernike coefficients to OCS and NW frames
         q = meta["parallacticAngle"]
         rtp = meta["rotTelPos"]
 
@@ -188,12 +219,31 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         rot_NW = galsim.zernike.zernikeRotMatrix(jmax, -q)[4:, 4:]
         for cat in (out_raw, out_avg):
             cat.meta = copy(meta)
+
+            # OPD coefficients
             full_zk_ccs = np.zeros((len(cat), jmax - jmin + 1))
             full_zk_ccs[:, noll_indices - 4] = cat["zk_CCS"]
             cat["zk_OCS"] = full_zk_ccs @ rot_OCS
             cat["zk_NW"] = full_zk_ccs @ rot_NW
             cat["zk_OCS"] = cat["zk_OCS"][:, noll_indices - 4]
             cat["zk_NW"] = cat["zk_NW"][:, noll_indices - 4]
+
+            # Intrinsic coefficients
+            full_zk_intrinsic_ccs = np.zeros((len(cat), jmax - jmin + 1))
+            full_zk_intrinsic_ccs[:, noll_indices - 4] = cat["zk_intrinsic_CCS"]
+            cat["zk_intrinsic_OCS"] = full_zk_intrinsic_ccs @ rot_OCS
+            cat["zk_intrinsic_NW"] = full_zk_intrinsic_ccs @ rot_NW
+            cat["zk_intrinsic_OCS"] = cat["zk_intrinsic_OCS"][:, noll_indices - 4]
+            cat["zk_intrinsic_NW"] = cat["zk_intrinsic_NW"][:, noll_indices - 4]
+
+            # Deviation coefficients
+            full_zk_deviation_ccs = np.zeros((len(cat), jmax - jmin + 1))
+            full_zk_deviation_ccs[:, noll_indices - 4] = cat["zk_deviation_CCS"]
+            cat["zk_deviation_OCS"] = full_zk_deviation_ccs @ rot_OCS
+            cat["zk_deviation_NW"] = full_zk_deviation_ccs @ rot_NW
+            cat["zk_deviation_OCS"] = cat["zk_deviation_OCS"][:, noll_indices - 4]
+            cat["zk_deviation_NW"] = cat["zk_deviation_NW"][:, noll_indices - 4]
+
         # Add wavefront estimation metadata for individual donuts
         # to the raw table.
         out_raw.meta["estimatorInfo"] = estimator_meta
