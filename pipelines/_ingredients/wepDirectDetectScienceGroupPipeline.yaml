@@ -23,7 +23,7 @@ tasks:
       connections.exposure: post_isr_image
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 20
-      donutSelector.maxFieldDist: 1.78
+      donutSelector.maxFieldDist: 1.725
       measurementTask.nSigmaDetection: 5.0
   cutOutDonutsScienceSensorGroupTask:
     class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask

@@ -16,7 +16,7 @@ tasks:
       connections.fitDonutCatalog: "donutTable"
       connections.donutCatalog: "refitWcsDonutTable"
       donutSelector.useCustomMagLimit: True
-      donutSelector.maxFieldDist: 1.78
+      donutSelector.maxFieldDist: 1.725
       donutSelector.sourceLimit: 40
       astromRefFilter: "monster_ComCam_r"
       photoRefFilterPrefix: "monster_ComCam"
