@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-3.1.1
+
+-------------
+3.1.1
+-------------
+
+* Fix metadata indexing for model donuts in plotDonutFitsTask plots.
+
 .._lsst.ts.donut.viz-3.1.0
 
 -------------

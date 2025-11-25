@@ -1712,6 +1712,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             extra_x = [stamp.centroid_position.x for stamp in donutStampsExtraSel]
             extra_y = [stamp.centroid_position.y for stamp in donutStampsExtraSel]
 
+            # Grab the metadata for the selected rows
+            raft_meta = {
+                key: np.array(value)[selected_rows] for key, value in aos_raw.meta["estimatorInfo"].items()
+            }
+
             # catching the case when we may wish to plot 8 donuts,
             # but the aggregated table has less than that
             nrows_plot = min(ndonuts, len(rows))
@@ -1737,7 +1742,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     )
                     continue
 
-                danish_meta = {key: value[irow] for key, value in row.meta["estimatorInfo"].items()}
+                danish_meta = {key: value[irow] for key, value in raft_meta.items()}
                 imgs, model_imgs = self.getModel(
                     row["zk_CCS"],
                     noll_indices,
