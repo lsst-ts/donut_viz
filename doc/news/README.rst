@@ -37,3 +37,10 @@ In order to update the release notes file for real, the person responsible for t
 
 Note also that ``towncrier`` can be installed from PyPI or conda-forge.
 
+Updating Version History
+========================
+
+Developers add news fragments in the PRs to develop.
+After the PR with changes and news fragment are merged to develop the developer updates the main branch with the develop branch.
+Then the developer updates the version history with towncrier when tagging a new release on main.
+Finally those changes to main are then merged back into develop.
