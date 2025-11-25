@@ -4,6 +4,14 @@
 Version History
 ##################
 
+.._lsst.ts.donut.viz-3.1.2
+
+-------------
+3.1.2
+-------------
+
+* Change maxFieldDist to 1.725 deg in catalog creation to further avoid vignetted donuts.
+
 .._lsst.ts.donut.viz-3.1.1
 
 -------------
