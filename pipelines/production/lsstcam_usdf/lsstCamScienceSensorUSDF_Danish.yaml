@@ -1,0 +1,58 @@
+description: rapid analysis pipeline for LSSTCam
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamScienceSensorRapidAnalysisPipeline_Danish.yaml
+    exclude:
+      - plotAOSTask
+      - plotDonutTask
+      - plotPsfZernTask
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.sourceLimit: 40
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      donutStampSelector.maxSelect: 20
+      estimateZernikes.lstsqKwargs:
+        ftol: 1.0e-3
+        xtol: 1.0e-3
+        gtol: 1.0e-3
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+    config:
+      maxDonutsPerDetector: 20
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsScienceSensorGroupTask
+  step1b-visits:
+    subset:
+      - calcZernikesTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
+  step2-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesGroupTask
+      - aggregateAOSVisitTableTask
+      - aggregateDonutStampsTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [detector]
+  - label: step1b-visits
+    dimensions: []
+  - label: step2-visits
+    dimensions: []

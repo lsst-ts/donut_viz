@@ -162,3 +162,5 @@ cython_debug/
 .flake8
 .isort.cfg
 .ruff.toml
+towncrier.toml
+.mypy.ini

@@ -7,7 +7,30 @@ from tqdm import tqdm
 from zernike_pyramid import zernikePyramid
 
 
-def spotSize(optic, wavelength, nrad=5, naz=30, outer_field=1.75):
+def spotSize(
+    optic: batoid.Optic, wavelength: float, nrad: int = 5, naz: int = 30, outer_field: float = 1.75
+) -> float:
+    """Compute the spot size (RMS) in arcseconds over a hexapolar
+    grid of field points.
+
+    Parameters
+    ----------
+    optic : batoid.Optic
+        The optical system to evaluate.
+    wavelength : float
+        The wavelength in meters.
+    nrad : int, optional
+        The number of radial points in the hexapolar grid, by default 5.
+    naz : int, optional
+        The number of azimuthal points in the hexapolar grid, by default 30.
+    outer_field : float, optional
+        The outer field radius in degrees, by default 1.75.
+
+    Returns
+    -------
+    float
+        The RMS spot size in arcseconds.
+    """
     thx, thy = batoid.utils.hexapolar(
         outer=np.deg2rad(outer_field),
         nrad=nrad,
@@ -32,15 +55,24 @@ def spotSize(optic, wavelength, nrad=5, naz=30, outer_field=1.75):
         ys -= np.mean(ys)
         mss.append(np.mean(np.square(xs) + np.square(ys)))
 
-        return np.sqrt(np.quantile(mss, 0.8)) * 0.2 / 10e-6  # convert to arcsec
+    return np.sqrt(np.quantile(mss, 0.8)) * 0.2 / 10e-6  # convert to arcsec
 
 
-def spotSizeObjective(camera_z, optic, wavelength, nrad=5, naz=30, outer_field=1.75):
+def spotSizeObjective(
+    camera_z: float,
+    optic: batoid.Optic,
+    wavelength: float,
+    nrad: int = 5,
+    naz: int = 30,
+    outer_field: float = 1.75,
+) -> float:
     perturbed = optic.withGloballyShiftedOptic("LSSTCamera", [0, 0, camera_z])
     return spotSize(perturbed, wavelength, nrad, naz, outer_field)
 
 
-def focus(optic, wavelength, nrad=5, naz=30, outer_field=1.75):
+def focus(
+    optic: batoid.Optic, wavelength: float, nrad: int = 5, naz: int = 30, outer_field: float = 1.75
+) -> minimize_scalar:
     return minimize_scalar(
         spotSizeObjective,
         bounds=(-1e-4, 1e-4),
@@ -49,7 +81,7 @@ def focus(optic, wavelength, nrad=5, naz=30, outer_field=1.75):
     )
 
 
-def createIntrinsicZernikes():
+def createIntrinsicZernikes() -> None:
     for f in "ugrizy":
         print("Filter:", f)
         # Use the effective wavelenght of the GalSim filters
@@ -105,14 +137,11 @@ def createIntrinsicZernikes():
         )
         fig.savefig(f"zk_{f}.png")
 
-        fig2 = zernikePyramid(
-            thx, thy, resid.T[4:], cmap="seismic", s=2, vmin=-0.01, vmax=0.01
-        )
+        fig2 = zernikePyramid(thx, thy, resid.T[4:], cmap="seismic", s=2, vmin=-0.01, vmax=0.01)
         fig2.savefig(f"resid_{f}.png")
-        print()
 
-        with open(f"intrinsic_dz_{f}.yaml", "w") as f:
-            yaml.dump(coefs.tolist(), f)
+        with open(f"intrinsic_dz_{f}.yaml", "w") as fh:
+            yaml.dump(coefs.tolist(), fh)
 
 
 if __name__ == "__main__":

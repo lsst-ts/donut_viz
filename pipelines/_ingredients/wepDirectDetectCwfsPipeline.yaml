@@ -1,0 +1,35 @@
+description: wep direct detect pipeline for wavefront sensors
+imports:
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/aosBaseIsr.yaml
+
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      connections.exposure: post_isr_image
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 20
+      donutSelector.maxFieldDist: 1.725
+      measurementTask.nSigmaDetection: 5.0
+  cutOutDonutsCwfsPairTask:
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    config:
+      connections.exposure: post_isr_image
+      # And here we specify the configuration settings originally defined in
+      # CutOutDonutsCwfsTaskConfig.
+      # Test CWFS pipeline works when specifying instrument parameters.
+      donutStampSize: 160
+      initialCutoutPadding: 40
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      donutStampSelector.maxSelect: 8
+      donutStampSelector.maxFracBadPixels: 2.0e-4
+      donutStampSelector.useCustomSnLimit: True
+      donutStampSelector.minSignalToNoise: 100
+      donutStampSelector.selectWithMaxPowerGrad: False
+      estimateZernikes.nollIndices:
+        [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
+      estimateZernikes.saveHistory: False

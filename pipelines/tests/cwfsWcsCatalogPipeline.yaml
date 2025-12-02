@@ -1,0 +1,65 @@
+# This yaml file is used to define the tasks and configuration of
+# a Gen 3 pipeline used for testing in ts_wep.
+description: wep basic processing test pipeline
+# Here we specify the corresponding instrument for the data we
+# will be using.
+instrument: lsst.obs.lsst.LsstCam
+# Then we can specify each task in our pipeline by a name
+# and then specify the class name corresponding to that task
+tasks:
+  isr:
+    class: lsst.ip.isr.IsrTaskLSST
+    config:
+      connections.outputExposure: post_isr_image
+      python: |
+        from lsst.cp.pipe import configureIsrTaskLSSTForCalibrations
+
+        configureIsrTaskLSSTForCalibrations(config)
+        config.doBootstrap = True
+        config.doCrosstalk = False
+  generateDonutCatalogWcsTask:
+    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
+    config:
+      connections.exposure: post_isr_image
+      donutSelector.unblendedSeparation: 1
+  cutOutDonutsCwfsPairTask:
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    config:
+      connections.exposure: post_isr_image
+      donutStampSize: 160
+      initialCutoutPadding: 40
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 20, 21, 22, 27, 28]
+      estimateZernikes.saveHistory: False
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutTablesCwfsTask:
+    class: lsst.donut.viz.AggregateDonutTablesCwfsTask
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+  aggregateAOSVisitTableCwfsTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableCwfsTask
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: False
+  plotDonutCwfsTask:
+    class: lsst.donut.viz.PlotDonutCwfsTask
+    config:
+      doRubinTVUpload: False
+  plotCwfsPairingTask:
+    class: lsst.donut.viz.PlotCwfsPairingTask
+    config:
+      doRubinTVUpload: False
+  plotPsfZernTask:
+    class: lsst.donut.viz.PlotPsfZernTask
+    config:
+      doRubinTVUpload: False
+  plotDonutFitsTask:
+    class: lsst.donut.viz.PlotDonutFitsTask
+    config:
+      doRubinTVUpload: False

@@ -1,0 +1,38 @@
+description: wep refitWCS pipeline for wavefront sensors
+imports:
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      connections.exposure: post_isr_image
+  generateDonutFromRefitWcsTask:
+    class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
+    config:
+      connections.astromRefCat: "the_monster_20250219"
+      connections.photoRefCat: "the_monster_20250219"
+      connections.exposure: "post_isr_image"
+      connections.outputExposure: "post_fit_post_isr_image"
+      connections.fitDonutCatalog: "donutTable"
+      connections.donutCatalog: "refitWcsDonutTable"
+      donutSelector.useCustomMagLimit: True
+      donutSelector.maxFieldDist: 1.725
+      donutSelector.sourceLimit: 40
+      astromRefFilter: "monster_ComCam_r"
+      photoRefFilterPrefix: "monster_ComCam"
+      catalogFilterList: ["monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r", "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y"]
+      astromTask.referenceSelector.doMagLimit: True
+      astromTask.referenceSelector.magLimit.maximum: 24.0
+      astromTask.referenceSelector.magLimit.fluxField: "monster_ComCam_r_flux"
+      astromTask.maxIter: 3
+      astromTask.matcher.maxOffsetPix: 2000
+      astromTask.matcher.maxRotationDeg: 3.0
+      failTask: False
+      # Settings to use to add blended donuts
+      # donutSelector.unblendedSeparation: 160
+      # donutSelector.minBlendedSeparation: 80
+  cutOutDonutsCwfsPairTask:
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    config:
+      connections.exposure: post_fit_post_isr_image
+      connections.donutCatalog: refitWcsDonutTable

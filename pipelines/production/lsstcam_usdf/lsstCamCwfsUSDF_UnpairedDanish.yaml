@@ -1,0 +1,60 @@
+description: rapid analysis pipeline for LSSTCam
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_UnpairedDanish.yaml
+    exclude:
+      - plotAOSTask
+      - plotDonutUnpairedCwfsTask
+      - plotDonutFitsUnpairedTask
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.sourceLimit: 40
+  calcZernikesUnpairedTask:
+    class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
+    config:
+      donutStampSelector.maxSelect: 20
+  aggregateDonutStampsUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
+    config:
+      connections.donutStampsIn: "donutStampsCwfs"
+      maxDonutsPerDetector: 20
+  aggregateDonutTablesUnpairedCwfsTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
+  aggregateAOSVisitTableUnpairedCwfsTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedCwfsTask
+
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsCwfsPairTask
+  step1b-detectors:
+    subset:
+      - calcZernikesUnpairedTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
+  step2-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesUnpairedCwfsTask
+      - aggregateAOSVisitTableUnpairedCwfsTask
+      - aggregateDonutStampsUnpairedTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-detectors
+    dimensions: [visit, detector]
+  - label: step2-visits
+    dimensions: [visit]

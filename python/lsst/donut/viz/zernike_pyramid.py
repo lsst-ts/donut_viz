@@ -1,11 +1,28 @@
 import galsim
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+from matplotlib.axes import Axes
+from matplotlib.colorbar import Colorbar
+from typing import Callable, Any
 
 
 # From https://joseph-long.com/writing/colorbars/
-def colorbar(mappable):
-    import matplotlib.pyplot as plt
+def colorbar(mappable: plt.cm.ScalarMappable) -> Colorbar:
+    """Add a colorbar to a mappable plot element.
+
+    Parameters
+    ----------
+    mappable : matplotlib mappable
+        The mappable plot element (e.g., scatter, imshow, etc).
+
+    Returns
+    -------
+    cbar : matplotlib Colorbar
+        The colorbar.
+    """
     from mpl_toolkits.axes_grid1 import make_axes_locatable
 
     last_axes = plt.gca()
@@ -19,22 +36,22 @@ def colorbar(mappable):
 
 
 def zernikePyramid(
-    xs,
-    ys,
-    zs,
-    noll_indices,
-    figsize=(13, 8),
-    vmin=-1,
-    vmax=1,
-    vdim=True,
-    s=5,
-    title=None,
-    callback=None,
-    filename=None,
-    fig=None,
-    cmap="seismic",
-    **kwargs
-):
+    xs: np.ndarray,
+    ys: np.ndarray,
+    zs: np.ndarray,
+    noll_indices: np.ndarray,
+    figsize: tuple = (13, 8),
+    vmin: float = -1,
+    vmax: float = 1,
+    vdim: bool = True,
+    s: float = 5,
+    title: str | None = None,
+    callback: Callable | None = None,
+    filename: str | None = None,
+    fig: Figure | None = None,
+    cmap: str = "seismic",
+    **kwargs: Any,
+) -> Figure:
     """Make a multi-zernike plot in a pyramid shape.
 
     Subplots show individual Zernikes over a range of x and y (presumably a
@@ -88,10 +105,10 @@ def zernikePyramid(
     ncol = nmax + 1
     gridspec = GridSpec(nrow, ncol)
 
-    def shift(pos, amt):
+    def shift(pos: Rectangle, amt: float) -> list[float]:
         return [pos.x0 + amt, pos.y0, pos.width, pos.height]
 
-    def shiftAxes(axes, amt):
+    def shiftAxes(axes: list[Axes], amt: float) -> None:
         for ax in axes:
             ax.set_position(shift(ax.get_position(), amt))
 
