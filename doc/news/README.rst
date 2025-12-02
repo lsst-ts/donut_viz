@@ -41,6 +41,7 @@ Updating Version History
 ========================
 
 The steps to update the version history are as follows:
+
 1. Developers add news fragments in the PRs to the ``develop`` branch.
 2. After the PR with changes and accompanying news fragment is merged to ``develop``, the developer then updates the ``main`` branch with the ``develop`` branch.
 3. Next, use the build command above to update ``version_history.rst`` with towncrier and add this change as a new commit on ``main``.
