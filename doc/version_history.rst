@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+3.2.0 (2025-12-02)
+==================
+
+Documentation
+-------------
+
+- Changed version history to use towncrier. (`DM-53241 <https://rubinobs.atlassian.net//browse/DM-53241>`_)
+
+
 .._lsst.ts.donut.viz-3.1.2
 
 -------------
