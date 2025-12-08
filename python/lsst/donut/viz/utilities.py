@@ -4,15 +4,16 @@ import galsim
 import mpl_toolkits.axisartist.floating_axes as floating_axes
 import numpy as np
 from astropy.table import vstack
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
-from lsst.geom import Point2D
-from lsst.ts.wep.utils import convertDictToVisitInfo
+from matplotlib.figure import Figure
 from matplotlib.patches import FancyArrowPatch
 from matplotlib.transforms import Affine2D
 from mpl_toolkits.axisartist.grid_finder import FixedLocator
 from tqdm import trange
+
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.daf.butler import Butler
-from matplotlib.figure import Figure
+from lsst.geom import Point2D
+from lsst.ts.wep.utils import convertDictToVisitInfo
 
 
 @lru_cache()

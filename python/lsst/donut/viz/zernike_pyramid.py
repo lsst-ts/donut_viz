@@ -1,12 +1,13 @@
+from typing import Any, Callable
+
 import galsim
-from matplotlib.figure import Figure
-from matplotlib.gridspec import GridSpec
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.colorbar import Colorbar
-from typing import Callable, Any
+from matplotlib.figure import Figure
+from matplotlib.gridspec import GridSpec
+from matplotlib.patches import Rectangle
 
 
 # From https://joseph-long.com/writing/colorbars/

@@ -1,7 +1,8 @@
+from typing import Any
+
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
-from typing import Any
 
 
 def psfPanel(

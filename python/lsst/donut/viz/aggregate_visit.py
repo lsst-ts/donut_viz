@@ -1,13 +1,15 @@
 import typing
 from copy import copy
+from typing import Any, cast
 
 import galsim
-import lsst.daf.base as dafBase
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy import units as u
 from astropy.table import QTable, Table, vstack
+
+import lsst.daf.base as dafBase
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
 from lsst.geom import Point2D, radians
 from lsst.pipe.base import connectionTypes as ct
@@ -15,7 +17,6 @@ from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.pairTask import ExposurePairer
 from lsst.ts.wep.utils import convertDictToVisitInfo
 from lsst.utils.timer import timeMethod
-from typing import Any, cast
 
 __all__ = [
     "AggregateZernikeTablesTaskConnections",
