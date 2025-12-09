@@ -9,14 +9,6 @@ import yaml
 from astropy import units as u
 from astropy.table import Table
 from astropy.time import Time
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.figure import Figure
-from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-from matplotlib.patches import ConnectionPatch
-
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
-import lsst.pipe.base.connectionTypes as ct
 from lsst.afw.cameraGeom import Camera
 from lsst.daf.butler.dimensions import DimensionRecord
 from lsst.summit.utils.efdUtils import (
@@ -30,6 +22,15 @@ from lsst.ts.wep.task import DonutStamp, DonutStamps
 from lsst.ts.wep.utils import convertZernikesToPsfWidth, getTaskInstrument
 from lsst.utils.plotting.figures import make_figure
 from lsst.utils.timer import timeMethod
+
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.figure import Figure
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+from matplotlib.patches import ConnectionPatch
+
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+import lsst.pipe.base.connectionTypes as ct
 
 from .psf_from_zern import psfPanel
 from .utilities import (
@@ -162,7 +163,9 @@ class PlotAOSTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "zk_measurement_pyramid"
-            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
             zkPyramid.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(instrument),
@@ -173,7 +176,9 @@ class PlotAOSTask(pipeBase.PipelineTask):
             )
 
             plotName = "zk_residual_pyramid"
-            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
             residPyramid.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(instrument),
@@ -184,7 +189,13 @@ class PlotAOSTask(pipeBase.PipelineTask):
             )
 
     def doPyramid(
-        self, x: float, y: float, zk: np.ndarray, rtp: float, q: float, nollIndices: np.ndarray
+        self,
+        x: float,
+        y: float,
+        zk: np.ndarray,
+        rtp: float,
+        q: float,
+        nollIndices: np.ndarray,
     ) -> Figure:
         fig = zernikePyramid(x, y, zk, nollIndices, cmap="seismic", s=10)
         vecs_xy = {
@@ -221,7 +232,12 @@ class PlotAOSTask(pipeBase.PipelineTask):
         nollIndices = aos_raw.meta["nollIndices"]
 
         # check if there is data for any corner sensor
-        if np.sum(["SW" in detName for detName in np.unique(aos_raw["detector"].value)]) > 0:
+        if (
+            np.sum(
+                ["SW" in detName for detName in np.unique(aos_raw["detector"].value)]
+            )
+            > 0
+        ):
             # in that case, shift x,y positions
             # towards the center, along the diagonal
             # rotate the original CCS into OCS,
@@ -251,7 +267,9 @@ class PlotAOSTask(pipeBase.PipelineTask):
             xy_outer=4.18,
             xy_inner=4.18 * 0.612,
         )
-        intrinsic = np.array([z.coef for z in dzs(aos_raw["thx_OCS"], aos_raw["thy_OCS"])]).T[4:29]
+        intrinsic = np.array(
+            [z.coef for z in dzs(aos_raw["thx_OCS"], aos_raw["thy_OCS"])]
+        ).T[4:29]
         intrinsic = intrinsic[: len(zk)]
         intrinsicPyramid = self.doPyramid(x, y, intrinsic, rtp, q, nollIndices)
 
@@ -368,7 +386,9 @@ class PlotDonutTaskConfig(
         doc="Upload to RubinTV",
         default=False,
     )
-    doS11only: pexConfig.Field = pexConfig.Field(dtype=bool, doc="Use only S11 in FAM mode", default=False)
+    doS11only: pexConfig.Field = pexConfig.Field(
+        dtype=bool, doc="Use only S11 in FAM mode", default=False
+    )
 
 
 class PlotDonutTask(pipeBase.PipelineTask):
@@ -411,11 +431,15 @@ class PlotDonutTask(pipeBase.PipelineTask):
             locationConfig = getAutomaticLocationConfig()
             # seq_num is sometimes different for
             # intra vs extra-focal if pistoning
-            for defocal_type, visit_id in zip(["extra", "intra"], [visitExtra, visitIntra]):
+            for defocal_type, visit_id in zip(
+                ["extra", "intra"], [visitExtra, visitIntra]
+            ):
                 day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit_id)
 
                 plotName = "fp_donut_gallery"
-                plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
+                plotFile = makePlotFile(
+                    locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+                )
                 if defocal_type == "extra":
                     fig_struct.extra.savefig(plotFile)
                 else:
@@ -429,7 +453,9 @@ class PlotDonutTask(pipeBase.PipelineTask):
                 )
 
     @timeMethod
-    def run(self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str) -> pipeBase.Struct:
+    def run(
+        self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
+    ) -> pipeBase.Struct:
         visitIntra = donutStampsIntra.metadata.getArray("VISIT")[0]
         visitExtra = donutStampsExtra.metadata.getArray("VISIT")[0]
 
@@ -460,7 +486,9 @@ class PlotDonutTask(pipeBase.PipelineTask):
 
         fig_dict = dict()
 
-        for donutStampSet, visit in zip([donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]):
+        for donutStampSet, visit in zip(
+            [donutStampsIntra, donutStampsExtra], [visitIntra, visitExtra]
+        ):
             fig = make_figure(figsize=(11, 8.5))
             aspect = fig.get_size_inches()[0] / fig.get_size_inches()[1]
             for donut in donutStampSet:
@@ -556,7 +584,9 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.config: PlotDonutCwfsTaskConfig = cast(PlotDonutCwfsTaskConfig, self.config)
+        self.config: PlotDonutCwfsTaskConfig = cast(
+            PlotDonutCwfsTaskConfig, self.config
+        )
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -587,7 +617,9 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "fp_donut_gallery"
-            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(inst),
@@ -598,7 +630,9 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
             )
 
     @timeMethod
-    def run(self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str) -> Figure:
+    def run(
+        self, donutStampsIntra: DonutStamps, donutStampsExtra: DonutStamps, inst: str
+    ) -> Figure:
         visit = donutStampsIntra.metadata.getArray("VISIT")[0]
         # LSST detector layout
         q = donutStampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
@@ -737,7 +771,9 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.config: PlotDonutUnpairedCwfsTaskConfig = cast(PlotDonutUnpairedCwfsTaskConfig, self.config)
+        self.config: PlotDonutUnpairedCwfsTaskConfig = cast(
+            PlotDonutUnpairedCwfsTaskConfig, self.config
+        )
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -767,7 +803,9 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "fp_donut_gallery"
-            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(inst),
@@ -931,7 +969,9 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.config: PlotCwfsPairingTaskConfig = cast(PlotCwfsPairingTaskConfig, self.config)
+        self.config: PlotCwfsPairingTaskConfig = cast(
+            PlotCwfsPairingTaskConfig, self.config
+        )
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -967,7 +1007,9 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "fp_pairing_plot"
-            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(inst),
@@ -1004,7 +1046,9 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
                 # handle negative regions in the image for plotting
                 arr = np.copy(images[k])
                 arr[np.where(arr < 0)] = 0
-                ax.imshow(np.rot90(stretchDataMidTone(arr), -nquarter).T, cmap="Greys_r")
+                ax.imshow(
+                    np.rot90(stretchDataMidTone(arr), -nquarter).T, cmap="Greys_r"
+                )
                 if is_extra:
                     dettable = table[table["detector"] == camera[extra_det].getName()]
                     dx1 = dettable["centroid_x_extra"]
@@ -1054,7 +1098,9 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
                 ax.text(x, y, str(k), transform=ax.transAxes, color="red", fontsize=13)
             else:
                 ax.axis("off")
-        fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.1)
+        fig.subplots_adjust(
+            left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.1
+        )
         fig.suptitle(f"{visit}", fontsize=15)
         return fig
 
@@ -1122,7 +1168,9 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
             day_obs, seq_num = get_day_obs_seq_num_from_visitid(visit)
 
             plotName = "psf_zk_panel"
-            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
             zkPanel.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(instrument),
@@ -1182,7 +1230,11 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
                 angles_set = True
 
         psf = [
-            [np.sqrt(np.sum(convertZernikesToPsfWidth(pair_zset) ** 2)) for pair_zset in det] for det in zs
+            [
+                np.sqrt(np.sum(convertZernikesToPsfWidth(pair_zset) ** 2))
+                for pair_zset in det
+            ]
+            for det in zs
         ]
 
         fig = make_figure(**kwargs)
@@ -1265,7 +1317,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.config: PlotDonutFitsTaskConfig = cast(PlotDonutFitsTaskConfig, self.config)
+        self.config: PlotDonutFitsTaskConfig = cast(
+            PlotDonutFitsTaskConfig, self.config
+        )
 
         if self.config.doRubinTVUpload:
             if not MultiUploader:
@@ -1332,7 +1386,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             locationConfig = getAutomaticLocationConfig()
             instrument = inputRefs.aggregateAOSRaw.dataId["instrument"]
             plotName = "donut_fits"
-            plotFile = makePlotFile(locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png")
+            plotFile = makePlotFile(
+                locationConfig, "LSSTCam", day_obs, seq_num, plotName, "png"
+            )
             fig.savefig(plotFile)
             self.uploader.uploadPerSeqNumPlot(
                 instrument=get_instrument_channel_name(instrument),
@@ -1408,17 +1464,21 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             nollIndices=noll_indices,
         )
 
-        img_extra, angle_extra, zkRef_extra, backgroundStd_extra = self.danish_algo._prepDanish(
-            image=wep_im_extra,
-            zkStart=zk_extra_intrinsic,
-            nollIndices=noll_indices,
-            instrument=self.instrument,
+        img_extra, angle_extra, zkRef_extra, backgroundStd_extra = (
+            self.danish_algo._prepDanish(
+                image=wep_im_extra,
+                zkStart=zk_extra_intrinsic,
+                nollIndices=noll_indices,
+                instrument=self.instrument,
+            )
         )
-        img_intra, angle_intra, zkRef_intra, backgroundStd_intra = self.danish_algo._prepDanish(
-            image=wep_im_intra,
-            zkStart=zk_intra_intrinsic,
-            nollIndices=noll_indices,
-            instrument=self.instrument,
+        img_intra, angle_intra, zkRef_intra, backgroundStd_intra = (
+            self.danish_algo._prepDanish(
+                image=wep_im_intra,
+                zkStart=zk_intra_intrinsic,
+                nollIndices=noll_indices,
+                instrument=self.instrument,
+            )
         )
         input_images = [img_extra, img_intra]
 
@@ -1445,7 +1505,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         return input_images, model_images
 
-    def computeResidualStats(self, img: np.ndarray, model: np.ndarray) -> tuple[float, float, float]:
+    def computeResidualStats(
+        self, img: np.ndarray, model: np.ndarray
+    ) -> tuple[float, float, float]:
         """
         Compute summary statistics of the residuals between an
         image and the model.
@@ -1483,7 +1545,12 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         return pos_res, neg_res, tot_res
 
     def plotResults(
-        self, axs: list, imgs: list[np.ndarray], models: list[np.ndarray], row: Table, blur: float
+        self,
+        axs: list,
+        imgs: list[np.ndarray],
+        models: list[np.ndarray],
+        row: Table,
+        blur: float,
     ) -> None:
         colors = [
             (0.0, 0.0, 1.0),  # Blue
@@ -1491,7 +1558,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             (1.0, 0.0, 0.0),  # Red
         ]
         positions = [0.0, 1 / 11, 1.0]
-        cmap = LinearSegmentedColormap.from_list("cyan_white_magenta", list(zip(positions, colors)))
+        cmap = LinearSegmentedColormap.from_list(
+            "cyan_white_magenta", list(zip(positions, colors))
+        )
 
         vmax = np.nanquantile(imgs[0], 0.99)
         axs[0].imshow(imgs[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
@@ -1509,7 +1578,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         axs[6].axhline(0, color="k", lw=0.5)
         axs[6].set_ylim(self.config.zkYmin, self.config.zkYmax)
         axs[6].set_xlim(3.5, 28.5)
-        axs[6].scatter([4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=10, lw=0.5)
+        axs[6].scatter(
+            [4, 11, 22], [2.2] * 3, marker="o", ec="k", c="none", s=10, lw=0.5
+        )
         axs[6].scatter([7, 17], [2.2] * 2, marker="$\u2191$", c="k", s=10, lw=0.5)
         axs[6].scatter([8, 16], [2.2] * 2, marker="$\u2192$", c="k", s=10, lw=0.5)
         axs[6].scatter([5, 13, 23], [2.2] * 3, marker=(2, 2, 45), c="k", s=10, lw=0.5)
@@ -1703,23 +1774,32 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             for defocal, sw, col in zip(["intra", "extra"], ["SW1", "SW0"], [0, 3]):
                 raftName = f"{raft}_{sw}"
                 detId = camera.get(raftName).getId()
-                axdict[raft][0][col].set_title(f"{defocal} {raftName} ({detId})", x=0.95)
+                axdict[raft][0][col].set_title(
+                    f"{defocal} {raftName} ({detId})", x=0.95
+                )
 
             # get donuts corresponding to a given corner from
             # aggregatedDonutStamps
-            idxToAggIntra = np.array(donutStampsIntra.metadata.getArray("DET_NAME")) == f"{raft}_SW1"
+            idxToAggIntra = (
+                np.array(donutStampsIntra.metadata.getArray("DET_NAME"))
+                == f"{raft}_SW1"
+            )
             donutStampsIntraSel = np.array(donutStampsIntra)[idxToAggIntra]
             intra_x = [stamp.centroid_position.x for stamp in donutStampsIntraSel]
             intra_y = [stamp.centroid_position.y for stamp in donutStampsIntraSel]
 
-            idxToAggExtra = np.array(donutStampsExtra.metadata.getArray("DET_NAME")) == f"{raft}_SW0"
+            idxToAggExtra = (
+                np.array(donutStampsExtra.metadata.getArray("DET_NAME"))
+                == f"{raft}_SW0"
+            )
             donutStampsExtraSel = np.array(donutStampsExtra)[idxToAggExtra]
             extra_x = [stamp.centroid_position.x for stamp in donutStampsExtraSel]
             extra_y = [stamp.centroid_position.y for stamp in donutStampsExtraSel]
 
             # Grab the metadata for the selected rows
             raft_meta = {
-                key: np.array(value)[selected_rows] for key, value in aos_raw.meta["estimatorInfo"].items()
+                key: np.array(value)[selected_rows]
+                for key, value in aos_raw.meta["estimatorInfo"].items()
             }
 
             # catching the case when we may wish to plot 8 donuts,
@@ -1728,19 +1808,26 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
             for irow, row in enumerate(rows[:nrows_plot]):
                 # intra
-                dists = np.hypot(intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"])
+                dists = np.hypot(
+                    intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"]
+                )
                 idx = np.argmin(dists)
                 # select stamps from the subset of aggregated donuts
                 # corresponding to current corner
                 intra_stamp = donutStampsIntraSel[idx]
 
                 # extra
-                dists = np.hypot(extra_x - row["centroid_x_extra"], extra_y - row["centroid_y_extra"])
+                dists = np.hypot(
+                    extra_x - row["centroid_x_extra"], extra_y - row["centroid_y_extra"]
+                )
                 idx = np.argmin(dists)
                 extra_stamp = donutStampsExtraSel[idx]
 
                 necessary_keys = set(self.danish_model_keys)
-                if set(row.meta["estimatorInfo"].keys()) & necessary_keys != necessary_keys:
+                if (
+                    set(row.meta["estimatorInfo"].keys()) & necessary_keys
+                    != necessary_keys
+                ):
                     self.log.warning(
                         f"No model plot produced for {raft}, donut index: {irow}. "
                         + "Required metadata for danish model not found in aggregateAOSVisitTableRaw."
@@ -1787,18 +1874,31 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         # is not present in the aggregate, print average of all Zernikes
         # That way we do not need another required input
         # (such as `aggregateAOSVisitTableAvg`)
-        mask = aos_raw["used"] if "used" in aos_raw.columns else np.ones(len(aos_raw), dtype="bool")
+        mask = (
+            aos_raw["used"]
+            if "used" in aos_raw.columns
+            else np.ones(len(aos_raw), dtype="bool")
+        )
         aos_used = aos_raw[mask]
 
         detectors = np.unique(aos_used["detector"])
 
+        if "zk_deviation_CCS" in aos_raw.colnames:
+            zkColname = "zk_deviation_CCS"
+            zkTableTitle = "(deviation from intrinsic wavefront in CCS)"
+        else:
+            zkColname = "zk_CCS"
+            zkTableTitle = "(as-measured in CCS, including intrinsics)"
+
+        # Set name of created average column
+        zkMeanColname = "zk_CCS_mean"
         rows = []
         for det in detectors:
             sel = aos_used["detector"] == det
-            mean_zk = np.mean(aos_used["zk_CCS"][sel], axis=0)
+            mean_zk = np.mean(aos_used[zkColname][sel], axis=0)
             rows.append((det, mean_zk))
 
-        tab_avg = Table(rows=rows, names=("detector", "zk_CCS_mean"))
+        tab_avg = Table(rows=rows, names=("detector", zkMeanColname))
 
         # --- Get the Zernike indices (column labels) ---
         nollIndices = aos_raw.meta["nollIndices"]
@@ -1812,7 +1912,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         # --- Prepare data for table display ---
         table_data = []
         for det in detectors:
-            mean_zk = tab_avg["zk_CCS_mean"][tab_avg["detector"] == det][0]
+            mean_zk = tab_avg[zkMeanColname][tab_avg["detector"] == det][0]
             mean_zk = mean_zk[:max_cols]
             row = [f"{v:7.3f}" for v in mean_zk]  # format to 3 decimals
             table_data.append(row)
@@ -1858,7 +1958,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 cell = table[(row, col)]
                 text = cell.get_text()
                 text.set_verticalalignment("top")  # align to top of cell
-                cell.set_height(cell.get_height() * 0.8)  # shrink cell to enhance offset
+                cell.set_height(
+                    cell.get_height() * 0.8
+                )  # shrink cell to enhance offset
 
         # Adjust row label alignment and padding
         for row in range(1, len(row_labels) + 1):
@@ -1869,7 +1971,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Hide the axis frame
         middle_ax.axis("off")
-        middle_ax.set_title("Average Zernike Coefficients per Detector", fontsize=12, pad=10)
+        middle_ax.set_title(
+            f"Average Zernike Coefficients per Detector {zkTableTitle}",
+            fontsize=12,
+            pad=10,
+        )
 
         def format_group(
             vals: list[float],
@@ -2015,9 +2121,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "filter": record.physical_filter,
             "observation reason": record.observation_reason,
             "science program": record.science_program,
-            "elevation": (90 if record.zenith_angle is None else 90 - record.zenith_angle),
+            "elevation": (
+                90 if record.zenith_angle is None else 90 - record.zenith_angle
+            ),
             "azimuth": 0 if record.azimuth is None else record.azimuth,
-            "rotator": (0 if len(rotData) == 0 else rotData["actualPosition"].values.mean()),
+            "rotator": (
+                0 if len(rotData) == 0 else rotData["actualPosition"].values.mean()
+            ),
             "Zernike plot range": f"{self.config.zkYmin:.1f} to {self.config.zkYmax:.1f} microns",
         }
         col = 3
