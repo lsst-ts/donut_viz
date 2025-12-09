@@ -184,7 +184,13 @@ class PlotAOSTask(pipeBase.PipelineTask):
             )
 
     def doPyramid(
-        self, x: float, y: float, zk: np.ndarray, rtp: float, q: float, nollIndices: np.ndarray
+        self,
+        x: float,
+        y: float,
+        zk: np.ndarray,
+        rtp: float,
+        q: float,
+        nollIndices: np.ndarray,
     ) -> Figure:
         fig = zernikePyramid(x, y, zk, nollIndices, cmap="seismic", s=10)
         vecs_xy = {
@@ -1483,7 +1489,12 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         return pos_res, neg_res, tot_res
 
     def plotResults(
-        self, axs: list, imgs: list[np.ndarray], models: list[np.ndarray], row: Table, blur: float
+        self,
+        axs: list,
+        imgs: list[np.ndarray],
+        models: list[np.ndarray],
+        row: Table,
+        blur: float,
     ) -> None:
         colors = [
             (0.0, 0.0, 1.0),  # Blue
@@ -1792,13 +1803,22 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         detectors = np.unique(aos_used["detector"])
 
+        if "zk_deviation_CCS" in aos_raw.colnames:
+            zkColname = "zk_deviation_CCS"
+            zkTableTitle = "(deviation from intrinsic wavefront in CCS)"
+        else:
+            zkColname = "zk_CCS"
+            zkTableTitle = "(as-measured in CCS, including intrinsics)"
+
+        # Set name of created average column
+        zkMeanColname = "zk_CCS_mean"
         rows = []
         for det in detectors:
             sel = aos_used["detector"] == det
-            mean_zk = np.mean(aos_used["zk_CCS"][sel], axis=0)
+            mean_zk = np.mean(aos_used[zkColname][sel], axis=0)
             rows.append((det, mean_zk))
 
-        tab_avg = Table(rows=rows, names=("detector", "zk_CCS_mean"))
+        tab_avg = Table(rows=rows, names=("detector", zkMeanColname))
 
         # --- Get the Zernike indices (column labels) ---
         nollIndices = aos_raw.meta["nollIndices"]
@@ -1812,7 +1832,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         # --- Prepare data for table display ---
         table_data = []
         for det in detectors:
-            mean_zk = tab_avg["zk_CCS_mean"][tab_avg["detector"] == det][0]
+            mean_zk = tab_avg[zkMeanColname][tab_avg["detector"] == det][0]
             mean_zk = mean_zk[:max_cols]
             row = [f"{v:7.3f}" for v in mean_zk]  # format to 3 decimals
             table_data.append(row)
@@ -1869,7 +1889,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Hide the axis frame
         middle_ax.axis("off")
-        middle_ax.set_title("Average Zernike Coefficients per Detector", fontsize=12, pad=10)
+        middle_ax.set_title(
+            f"Average Zernike Coefficients per Detector {zkTableTitle}",
+            fontsize=12,
+            pad=10,
+        )
 
         def format_group(
             vals: list[float],
