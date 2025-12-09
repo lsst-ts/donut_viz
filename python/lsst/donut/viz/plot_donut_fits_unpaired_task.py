@@ -1,30 +1,31 @@
 """Task for plotting unpaired donut fits visualization."""
 
-import batoid
 from pathlib import Path
-import yaml
+from typing import Any, cast
+
+import batoid
 import danish
-import lsst.pipe.base as pipeBase
-import lsst.pipe.base.connectionTypes as ct
-import lsst.pex.config as pexConfig
 import numpy as np
+import yaml
+from astropy.table import QTable, Row, Table
 from astropy.time import Time
-from lsst.summit.utils.efdUtils import getMostRecentRowWithDataBefore
-from lsst.utils.plotting.figures import make_figure
-from lsst.utils.timer import timeMethod
+from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from scipy.optimize import least_squares
+
 import lsst.afw.cameraGeom as Camera
-from lsst.ts.wep.task.donutStamps import DonutStamps
-from matplotlib.axes import Axes
-from astropy.table import Table, QTable, Row
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+import lsst.pipe.base.connectionTypes as ct
 from lsst.daf.butler.dimensions import DimensionRecord
-from typing import Any, cast
-from lsst.summit.utils.efdUtils import makeEfdClient
-from lsst.ts.wep.utils import getTaskInstrument
+from lsst.summit.utils.efdUtils import getMostRecentRowWithDataBefore, makeEfdClient
 from lsst.ts.wep.estimation import DanishAlgorithm
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.utils import getTaskInstrument
+from lsst.utils.plotting.figures import make_figure
+from lsst.utils.timer import timeMethod
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
@@ -1304,6 +1305,7 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
         bandpass = donutStampsIntra.getBandpasses()[0]
         assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
         wavelength = self.instrument.wavelength[bandpass]
+        assert isinstance(wavelength, float)
 
         # Create telescope models with configured defocus for unpaired donuts
         telescope, intra_telescope, extra_telescope = self._buildTelescopeModels(bandpass)

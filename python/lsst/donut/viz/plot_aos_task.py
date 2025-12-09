@@ -1,34 +1,35 @@
 from copy import copy
 from pathlib import Path
+from typing import Any, cast
 
 import danish
 import galsim
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
-import lsst.pipe.base.connectionTypes as ct
 import numpy as np
 import yaml
 from astropy import units as u
 from astropy.table import Table
 from astropy.time import Time
-from lsst.summit.utils.efdUtils import (
-    getMostRecentRowWithDataBefore,
-    getEfdData,
-    makeEfdClient,
-)
-from lsst.summit.utils.plotting import stretchDataMidTone
-from lsst.ts.wep.estimation import DanishAlgorithm
-from lsst.ts.wep.task import DonutStamps, DonutStamp
-from lsst.ts.wep.utils import convertZernikesToPsfWidth, getTaskInstrument
-from lsst.utils.plotting.figures import make_figure
-from lsst.utils.timer import timeMethod
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import ConnectionPatch
+
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+import lsst.pipe.base.connectionTypes as ct
 from lsst.afw.cameraGeom import Camera
 from lsst.daf.butler.dimensions import DimensionRecord
-from typing import Any, cast
+from lsst.summit.utils.efdUtils import (
+    getEfdData,
+    getMostRecentRowWithDataBefore,
+    makeEfdClient,
+)
+from lsst.summit.utils.plotting import stretchDataMidTone
+from lsst.ts.wep.estimation import DanishAlgorithm
+from lsst.ts.wep.task import DonutStamp, DonutStamps
+from lsst.ts.wep.utils import convertZernikesToPsfWidth, getTaskInstrument
+from lsst.utils.plotting.figures import make_figure
+from lsst.utils.timer import timeMethod
 
 from .psf_from_zern import psfPanel
 from .utilities import (
@@ -1391,14 +1392,18 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         dz_terms = [(1, j) for j in noll_indices]
         wep_im_extra = stamp_extra.wep_im
         wep_im_intra = stamp_intra.wep_im
+        extra_field_x, extra_field_y = wep_im_extra.fieldAngle
+        intra_field_x, intra_field_y = wep_im_intra.fieldAngle
 
         zk_extra_intrinsic = self.instrument.getIntrinsicZernikes(
-            *wep_im_extra.fieldAngle,
+            extra_field_x,
+            extra_field_y,
             wep_im_extra.bandLabel,
             nollIndices=noll_indices,
         )
         zk_intra_intrinsic = self.instrument.getIntrinsicZernikes(
-            *wep_im_intra.fieldAngle,
+            intra_field_x,
+            intra_field_y,
             wep_im_intra.bandLabel,
             nollIndices=noll_indices,
         )

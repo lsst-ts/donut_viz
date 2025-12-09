@@ -3,6 +3,7 @@ from copy import copy
 
 import matplotlib
 import numpy as np
+
 from lsst.daf.butler import Butler
 from lsst.donut.viz import (
     AggregateDonutStampsUnpairedTask,

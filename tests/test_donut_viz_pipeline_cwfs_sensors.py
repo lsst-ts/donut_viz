@@ -3,6 +3,7 @@ from copy import copy
 
 import matplotlib
 import numpy as np
+
 from lsst.daf.butler import Butler
 from lsst.donut.viz import (
     AggregateDonutStampsTask,
@@ -15,9 +16,9 @@ from lsst.donut.viz import (
     PlotCwfsPairingTaskConfig,
     PlotDonutCwfsTask,
     PlotDonutCwfsTaskConfig,
+    PlotDonutFitsTask,
     PlotPsfZernTask,
     PlotPsfZernTaskConfig,
-    PlotDonutFitsTask,
 )
 from lsst.donut.viz.utilities import get_day_obs_seq_num_from_visitid
 from lsst.obs.lsst import LsstCam
