@@ -15,6 +15,24 @@ Version History
 
 .. towncrier release notes start
 
+3.2.2 (2025-12-09)
+==================
+
+Other Changes and Additions
+---------------------------
+
+- Change printed average Zernikes from the mean of zk_CCS per detector to zk_deviation_CCS by default. (`DM-53576 <https://rubinobs.atlassian.net//browse/DM-53576>`_)
+
+
+3.2.1 (2025-12-09)
+==================
+
+Other Changes and Additions
+---------------------------
+
+- Run with new ruff settings from ts_pre_commit_conf. (`DM-53557 <https://rubinobs.atlassian.net//browse/DM-53557>`_)
+
+
 3.2.0 (2025-12-02)
 ==================
 
