@@ -4,6 +4,10 @@ imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
 tasks:
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+    config:
+      customQG: True
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
@@ -45,6 +49,8 @@ subsets:
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
       tables for the AOS visit.
+  detector-pair-merge-task:
+    - reassignCwfsCutoutsPairTask
 
 steps:
   - label: step1a-detectors
