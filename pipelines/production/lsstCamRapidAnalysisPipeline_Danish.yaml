@@ -50,6 +50,8 @@ subsets:
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
       tables for the AOS visit.
+  detector-pair-merge-task:
+    - reassignCwfsCutoutsPairTask
 
 steps:
   - label: step1a-detectors
