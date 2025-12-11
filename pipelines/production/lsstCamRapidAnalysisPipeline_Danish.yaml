@@ -4,6 +4,10 @@ imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
 tasks:
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+    config:
+      customQG: True
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
