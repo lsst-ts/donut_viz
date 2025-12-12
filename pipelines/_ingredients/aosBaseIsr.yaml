@@ -23,9 +23,9 @@ tasks:
       doBias: False
       doFlat: True
       doDark: False
-      doLinearize: False
+      doLinearize: True
       doSuspect: False
       doSetBadRegions: False
       doBootstrap: False
-      doCrosstalk: False
+      doCrosstalk: True
       doITLEdgeBleedMask: False
