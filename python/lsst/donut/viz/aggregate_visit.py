@@ -14,9 +14,9 @@ from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
 from lsst.geom import Point2D, radians
 from lsst.pipe.base import connectionTypes as ct
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.task.pairTask import ExposurePairer
 from lsst.ts.wep.utils import convertDictToVisitInfo
 from lsst.utils.timer import timeMethod
+from lsst.afw.image import VisitInfo
 
 __all__ = [
     "AggregateZernikeTablesTaskConnections",
@@ -262,19 +262,20 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
 # Note: cannot make visit a dimension because we have not yet paired visits.
 class AggregateDonutTablesTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument",),  # type: ignore
+    dimensions=("instrument", "visit"),  # type: ignore
 ):
-    donut_visit_pair_table = ct.Input(
-        doc="Visit pair table",
-        dimensions=("instrument",),
-        storageClass="AstropyTable",
-        name="donut_visit_pair_table",
-    )
-    donutTables = ct.Input(
-        doc="Donut tables",
+    donutTablesIntra = ct.Input(
+        doc="Donut tables intra",
         dimensions=("visit", "detector", "instrument"),
         storageClass="AstropyQTable",
-        name="donutTable",
+        name="donutTableIntra",
+        multiple=True,
+    )
+    donutTablesExtra = ct.Input(
+        doc="Donut tables extra",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutTableExtra",
         multiple=True,
     )
     qualityTables = ct.Input(
@@ -297,50 +298,19 @@ class AggregateDonutTablesTaskConnections(
         dimensions=("visit", "instrument"),
         storageClass="AstropyQTable",
         name="aggregateDonutTable",
-        multiple=True,
     )
-    dummyExposureJoiner = ct.Input(
-        name="raw",
-        doc=(
-            "A dummy connection (datasets are never actually loaded) "
-            "that adds the 'exposure' dimension to the QG generation query "
-            "in order to relate 'visit' and 'group'."
-        ),
-        dimensions=("exposure", "detector"),
-        storageClass="Exposure",
-        deferLoad=True,
-        multiple=True,
-    )
-
-    def __init__(self, *, config: "AggregateDonutTablesTaskConfig | None" = None) -> None:
-        super().__init__(config=config)
-        if config is None:
-            return
-        if not config.pairer.target._needsPairTable:
-            del self.donut_visit_pair_table
-        if config.pairer.target._needsGroupDimension:
-            self.dimensions.add("group")
 
 
 class AggregateDonutTablesTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=AggregateDonutTablesTaskConnections,  # type: ignore
 ):
-    pairer: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=ExposurePairer,
-        doc="Task to pair up intra- and extra-focal exposures",
-    )
+    pass
 
 
 class AggregateDonutTablesTask(pipeBase.PipelineTask):
     ConfigClass = AggregateDonutTablesTaskConfig
     _DefaultName = "AggregateDonutTables"
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.config: AggregateDonutTablesTaskConfig = cast(AggregateDonutTablesTaskConfig, self.config)
-        self.pairer = self.config.pairer
-        self.makeSubtask("pairer")
 
     @timeMethod
     def runQuantum(
@@ -351,45 +321,29 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
     ) -> None:
         camera = butlerQC.get(inputRefs.camera)
 
-        # Only need one visitInfo per exposure.
-        # And the pairer only works with uniquified visitInfos.
-        visitInfoDict = dict()
-        for donutTableRef in inputRefs.donutTables:
-            table = butlerQC.get(donutTableRef)
-            visit_id = table.meta["visit_info"]["visit_id"]
-            if visit_id in visitInfoDict:
-                continue
-            visitInfoDict[visit_id] = convertDictToVisitInfo(table.meta["visit_info"])
-
-        if hasattr(inputRefs, "donut_visit_pair_table"):
-            pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donut_visit_pair_table))
-        else:
-            pairs = self.pairer.run(visitInfoDict)
-
         # Make dictionaries to match visits and detectors
-        donutTables = {
-            (ref.dataId["visit"], ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables
-        }
-        qualityTables = {
-            (ref.dataId["visit"], ref.dataId["detector"]): butlerQC.get(ref)
-            for ref in inputRefs.qualityTables
-        }
+        donutTablesIntra = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.donutTablesIntra}
+        donutTablesExtra = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.donutTablesExtra}
+        qualityTables = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.qualityTables}
 
-        pairTables = self.run(camera, visitInfoDict, pairs, donutTables, qualityTables)
+        donutTableIntra = next(iter(donutTablesIntra.values()))
+        donutTableExtra = next(iter(donutTablesExtra.values()))
+        extraVisitInfo = convertDictToVisitInfo(donutTableExtra.meta["visit_info"])
+        intraVisitInfo = convertDictToVisitInfo(donutTableIntra.meta["visit_info"])
 
-        # Put pairTables in butler
-        for pairTableRef in outputRefs.aggregateDonutTable:
-            refVisit = pairTableRef.dataId["visit"]
-            if refVisit in pairTables.pairTables.keys():
-                butlerQC.put(pairTables.pairTables[refVisit], pairTableRef)
+        result = self.run(
+            camera, intraVisitInfo, extraVisitInfo, donutTablesIntra, donutTablesExtra, qualityTables
+        )
+        butlerQC.put(result.out, outputRefs.aggregateDonutTable)
 
     @timeMethod
     def run(
         self,
         camera: Camera,
-        visitInfoDict: dict,
-        pairs: list,
-        donutTables: dict,
+        intraVisitInfo: VisitInfo,
+        extraVisitInfo: VisitInfo,
+        donutTablesIntra: dict,
+        donutTablesExtra: dict,
         qualityTables: dict,
     ) -> pipeBase.Struct:
         """Aggregate donut tables for a set of visits.
@@ -398,64 +352,56 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
         ----------
         camera : lsst.afw.cameraGeom.Camera
             The camera object.
-        visitInfoDict : dict
-            Dictionary of visit info objects keyed by visit ID.
-        pairs : list
-            List of visit pairs.
-        donutTables : dict
-            Dictionary of donut tables keyed by (visit, detector).
+        intraVisitInfo : VisitInfo
+            Visit info object for intra-focal exposure.
+        extraVisitInfo : VisitInfo
+            Visit info object for extra-focal exposure.
+        donutTablesIntra : dict
+            Dictionary of intra-focal donut tables keyed by detector.
+        donutTablesExtra : dict
+            Dictionary of extra-focal donut tables keyed by detector.
         qualityTables : dict
-            Dictionary of quality tables keyed by (visit, detector).
+            Dictionary of quality tables keyed by detector.
 
         Returns
         -------
         struct
             Struct of aggregated donut tables, keyed on extra-focal visit.
         """
-        # Find common (visit, detector) extra-focal pairs
+        # Find common detectors between donut and quality tables
         # DonutQualityTables only saved under extra-focal ids
-        extra_keys = set(donutTables) & set(qualityTables)
+        detectors = donutTablesExtra.keys() & donutTablesIntra.keys() & qualityTables.keys()
 
         # Raise error if there's no matches
-        if len(extra_keys) == 0:
-            raise RuntimeError("No (visit, detector) matches found between the donut and quality tables")
+        if len(detectors) == 0:
+            raise RuntimeError("No detector matches found between the donut and quality tables")
 
-        pairTables = {}
-        for pair in pairs:
-            intraVisitInfo = visitInfoDict[pair.intra]
-            extraVisitInfo = visitInfoDict[pair.extra]
+        tables = []
 
-            tables = []
+        # Iterate over the common (visit, detector) pairs
+        for detector in detectors:
+            # Get pixels -> field angle transform for this detector
+            det = camera[detector]
+            tform = det.getTransform(PIXELS, FIELD_ANGLE)
 
-            # Iterate over the common (visit, detector) pairs
-            for visit, detector in extra_keys:
-                # Check if this extra-focal visit is in this pair.
-                if visit != pair.extra:
-                    # This visit isn't in this pair so we will skip for now
-                    continue
+            # Load the donut catalog table, and the donut quality table
+            intraDonutTable = donutTablesIntra[detector]
+            extraDonutTable = donutTablesExtra[detector]
+            qualityTable = qualityTables[detector]
 
-                # Get pixels -> field angle transform for this detector
-                det = camera[detector]
-                tform = det.getTransform(PIXELS, FIELD_ANGLE)
+            # Get rows of quality table for this exposure
+            intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
+            extraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
 
-                # Load the donut catalog table, and the donut quality table
-                intraDonutTable = donutTables[(pair.intra, detector)]
-                extraDonutTable = donutTables[(pair.extra, detector)]
-                qualityTable = qualityTables[(pair.extra, detector)]
+            if (len(extraQualityTable) == 0) or (len(intraQualityTable) == 0):
+                continue
 
-                # Get rows of quality table for this exposure
-                intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
-                extraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
-
-                if (len(extraQualityTable) == 0) or (len(intraQualityTable) == 0):
-                    continue
-
-                for donutTable, qualityTable in zip(
-                    [intraDonutTable, extraDonutTable],
-                    [intraQualityTable, extraQualityTable],
-                ):
-                    # Select donuts used in Zernike estimation
-                    table = donutTable[qualityTable["FINAL_SELECT"]]
+            for donutTable, qualityTable in zip(
+                [intraDonutTable, extraDonutTable],
+                [intraQualityTable, extraQualityTable],
+            ):
+                # Select donuts used in Zernike estimation
+                table = donutTable[qualityTable["FINAL_SELECT"]]
 
                     # Add focusZ to donut table
                     table["focusZ"] = table.meta["visit_info"]["focus_z"]
@@ -463,84 +409,82 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                     # Add SN from quality table to the donut table
                     table["snr"] = qualityTable["SN"][qualityTable["FINAL_SELECT"]]
 
-                    # Add field angle in CCS to the table
-                    pts = tform.applyForward(
-                        [Point2D(x, y) for x, y in zip(table["centroid_x"], table["centroid_y"])]
-                    )
-                    table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
-                    table["thy_CCS"] = [pt.x for pt in pts]
-                    table["detector"] = det.getName()
+                # Add field angle in CCS to the table
+                pts = tform.applyForward(
+                    [Point2D(x, y) for x, y in zip(table["centroid_x"], table["centroid_y"])]
+                )
+                table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
+                table["thy_CCS"] = [pt.x for pt in pts]
+                table["detector"] = det.getName()
 
-                    tables.append(table)
+                tables.append(table)
 
-            # Don't attempt to stack metadata
-            for table in tables:
-                table.meta = {}
+        # Don't attempt to stack metadata
+        for table in tables:
+            table.meta = {}
 
-            out = vstack(tables)
+        out = vstack(tables)
 
-            # Add metadata for extra and intra focal exposures
-            # TODO: Swap parallactic angle for pseudo parallactic angle.
-            #       See SMTN-019 for details.
-            out.meta["extra"] = {
-                "visit": pair.extra,
-                "focusZ": extraVisitInfo.focusZ,
-                "parallacticAngle": extraVisitInfo.boresightParAngle.asRadians(),
-                "rotAngle": extraVisitInfo.boresightRotAngle.asRadians(),
-                "rotTelPos": extraVisitInfo.boresightParAngle.asRadians()
-                - extraVisitInfo.boresightRotAngle.asRadians()
-                - np.pi / 2,
-                "ra": extraVisitInfo.boresightRaDec.getRa().asRadians(),
-                "dec": extraVisitInfo.boresightRaDec.getDec().asRadians(),
-                "az": extraVisitInfo.boresightAzAlt.getLongitude().asRadians(),
-                "alt": extraVisitInfo.boresightAzAlt.getLatitude().asRadians(),
-                "mjd": extraVisitInfo.date.toAstropy().mjd,
-            }
-            out.meta["intra"] = {
-                "visit": pair.intra,
-                "focusZ": intraVisitInfo.focusZ,
-                "parallacticAngle": intraVisitInfo.boresightParAngle.asRadians(),
-                "rotAngle": intraVisitInfo.boresightRotAngle.asRadians(),
-                "rotTelPos": intraVisitInfo.boresightParAngle.asRadians()
-                - intraVisitInfo.boresightRotAngle.asRadians()
-                - np.pi / 2,
-                "ra": intraVisitInfo.boresightRaDec.getRa().asRadians(),
-                "dec": intraVisitInfo.boresightRaDec.getDec().asRadians(),
-                "az": intraVisitInfo.boresightAzAlt.getLongitude().asRadians(),
-                "alt": intraVisitInfo.boresightAzAlt.getLatitude().asRadians(),
-                "mjd": intraVisitInfo.date.toAstropy().mjd,
-            }
+        # Add metadata for extra and intra focal exposures
+        # TODO: Swap parallactic angle for pseudo parallactic angle.
+        #       See SMTN-019 for details.
+        out.meta["extra"] = {
+            "visit": extraVisitInfo.id,
+            "focusZ": extraVisitInfo.focusZ,
+            "parallacticAngle": extraVisitInfo.boresightParAngle.asRadians(),
+            "rotAngle": extraVisitInfo.boresightRotAngle.asRadians(),
+            "rotTelPos": extraVisitInfo.boresightParAngle.asRadians()
+            - extraVisitInfo.boresightRotAngle.asRadians()
+            - np.pi / 2,
+            "ra": extraVisitInfo.boresightRaDec.getRa().asRadians(),
+            "dec": extraVisitInfo.boresightRaDec.getDec().asRadians(),
+            "az": extraVisitInfo.boresightAzAlt.getLongitude().asRadians(),
+            "alt": extraVisitInfo.boresightAzAlt.getLatitude().asRadians(),
+            "mjd": extraVisitInfo.date.toAstropy().mjd,
+        }
+        out.meta["intra"] = {
+            "visit": intraVisitInfo.id,
+            "focusZ": intraVisitInfo.focusZ,
+            "parallacticAngle": intraVisitInfo.boresightParAngle.asRadians(),
+            "rotAngle": intraVisitInfo.boresightRotAngle.asRadians(),
+            "rotTelPos": intraVisitInfo.boresightParAngle.asRadians()
+            - intraVisitInfo.boresightRotAngle.asRadians()
+            - np.pi / 2,
+            "ra": intraVisitInfo.boresightRaDec.getRa().asRadians(),
+            "dec": intraVisitInfo.boresightRaDec.getDec().asRadians(),
+            "az": intraVisitInfo.boresightAzAlt.getLongitude().asRadians(),
+            "alt": intraVisitInfo.boresightAzAlt.getLatitude().asRadians(),
+            "mjd": intraVisitInfo.date.toAstropy().mjd,
+        }
 
-            # Carefully average angles in meta
-            out.meta["average"] = {}
-            for k in (
-                "parallacticAngle",
-                "rotAngle",
-                "rotTelPos",
-                "ra",
-                "dec",
-                "az",
-                "alt",
-            ):
-                a1 = out.meta["extra"][k] * radians
-                a2 = out.meta["intra"][k] * radians
-                a2 = a2.wrapNear(a1)
-                out.meta["average"][k] = ((a1 + a2) / 2).wrapCtr().asRadians()
+        # Carefully average angles in meta
+        out.meta["average"] = {}
+        for k in (
+            "parallacticAngle",
+            "rotAngle",
+            "rotTelPos",
+            "ra",
+            "dec",
+            "az",
+            "alt",
+        ):
+            a1 = out.meta["extra"][k] * radians
+            a2 = out.meta["intra"][k] * radians
+            a2 = a2.wrapNear(a1)
+            out.meta["average"][k] = ((a1 + a2) / 2).wrapCtr().asRadians()
 
-            # Easier to average the MJDs
-            out.meta["average"]["mjd"] = 0.5 * (out.meta["extra"]["mjd"] + out.meta["intra"]["mjd"])
+        # Easier to average the MJDs
+        out.meta["average"]["mjd"] = 0.5 * (out.meta["extra"]["mjd"] + out.meta["intra"]["mjd"])
 
-            # Calculate coordinates in different reference frames
-            q = out.meta["average"]["parallacticAngle"]
-            rtp = out.meta["average"]["rotTelPos"]
-            out["thx_OCS"] = np.cos(rtp) * out["thx_CCS"] - np.sin(rtp) * out["thy_CCS"]
-            out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
-            out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
-            out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+        # Calculate coordinates in different reference frames
+        q = out.meta["average"]["parallacticAngle"]
+        rtp = out.meta["average"]["rotTelPos"]
+        out["thx_OCS"] = np.cos(rtp) * out["thx_CCS"] - np.sin(rtp) * out["thy_CCS"]
+        out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
+        out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
+        out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
 
-            pairTables[pair.extra] = out
-
-        return pipeBase.Struct(pairTables=pairTables)
+        return pipeBase.Struct(out=out)
 
 
 class AggregateDonutTablesCwfsTaskConnections(
