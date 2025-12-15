@@ -27,7 +27,7 @@ subsets:
   step1b-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesGroupTask
+      - aggregateDonutTablesVisitTask
       - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask
