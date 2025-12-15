@@ -43,6 +43,9 @@ __all__ = [
     "AggregateDonutStampsUnpairedTask",
 ]
 
+intra_focal_ids = set([192, 196, 200, 204])
+extra_focal_ids = set([191, 195, 199, 203])
+
 
 class AggregateZernikeTablesTaskConnections(
     pipeBase.PipelineTaskConnections,
@@ -1172,6 +1175,19 @@ class AggregateDonutStampsTaskConnections(
         storageClass="StampsBase",
         name="donutStampsExtraVisit",
     )
+
+    def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
+        """This will raise if any inputs have an intra-focal data id."""
+        for data_id in adjuster.iter_data_ids():
+            inputs = adjuster.get_inputs(data_id)
+            for connection_name, input_data_ids in inputs.items():
+                for input_data_id in input_data_ids:
+                    detector = input_data_id.get("detector")
+                    if detector is not None and detector in intra_focal_ids:
+                        raise RuntimeError(
+                            f"Input data id {input_data_id} has intra-focal detector; "
+                            "this is not allowed for AggregateDonutStampsTask."
+                        )
 
 
 class AggregateDonutStampsTaskConfig(
