@@ -20,8 +20,6 @@ tasks:
       # Test CWFS pipeline works when specifying instrument parameters.
       donutStampSize: 160
       initialCutoutPadding: 40
-  reassignCwfsCutoutsPairTask:
-    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
@@ -39,3 +37,7 @@ tasks:
       estimateZernikes.nollIndices:
         [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
       estimateZernikes.saveHistory: False
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+    config:
+      customQG: True
