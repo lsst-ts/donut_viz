@@ -483,7 +483,7 @@ def match_patches(img, ref, xs, ys, patch_size, search_radius):
 def align_offsets(x, y, dx, dy):
     # Solve dx = dx_global - y dtheta_global
     #       dy = dy_global + x dtheta_global
-    # for dx, dy, dtheta_global.
+    # for dx_global, dy_global, dtheta_global.
     design = np.zeros((2 * len(x), 3))
     design[: len(x), 0] = 1.0
     design[len(x) :, 1] = 1.0
@@ -850,6 +850,9 @@ class HartmannSensitivityAnalysis(
         return donut_radius
 
     def prepare_exposures(self, exposures, ref_index, run_isr=False, **isr_kwargs):
+        """ Prepare exposures by running ISR (optional) and background subtraction.
+        Sort exposures by visit ID and select reference exposure.
+        """
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
         if run_isr:
             self.log.info("Running ISR on %d exposures", len(exposures))
@@ -859,7 +862,7 @@ class HartmannSensitivityAnalysis(
             self.subtractBackground.run(exposure=exposure)
 
         # Sort exposures and pick reference
-        if ref_index < 0:
+        if ref_index < 0:  # Map -1 to N-1...
             ref_index = len(exposures) + ref_index
         reference_exposure = exposures[ref_index]
         ref_id = reference_exposure.info.getVisitInfo().id
@@ -872,6 +875,9 @@ class HartmannSensitivityAnalysis(
         return reference_exposure, test_exposures
 
     def detect(self, exposure):
+        """Detect donuts in the given exposure.
+        Return a QTable
+        """
         rtp = get_rtp(exposure)
         donut_radius = self.get_donut_radius(exposure)
         bin_size = self.config.bin_size
@@ -1000,6 +1006,7 @@ class HartmannSensitivityAnalysis(
         test_states = [get_state(exp, efd_client) for exp in test_exposures]
         self.log.info("  States fetched")
         exposure_table = QTable()
+        # ID within the group.  -1 is the reference and 0..N-1 are the test cases.
         group_id = np.arange(-1, len(test_exposures), dtype=np.int32)
         exp_id = [reference_exposure.info.getVisitInfo().id]
         exp_id.extend([
