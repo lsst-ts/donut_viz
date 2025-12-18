@@ -27,7 +27,7 @@ tasks:
       estimateZernikes.nollIndices:
         [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22]
       estimateZernikes.saveHistory: False
-      estimateZernikes.modelPath: /project/rubintv/temp/transfer_learning_unfrozen_2025-09-08_14:45:03.pt
+      estimateZernikes.modelPath: $AI_DONUT_DATA_DIR/transfer_learning_unfrozen_2025-09-08_14:45:03.pt
 
 # Define pipeline steps
 subsets:
