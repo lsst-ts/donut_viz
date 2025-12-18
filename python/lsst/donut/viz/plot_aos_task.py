@@ -1402,6 +1402,23 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         dz_terms = [(1, j) for j in noll_indices]
         wep_im_extra = stamp_extra.wep_im
         wep_im_intra = stamp_intra.wep_im
+        extra_field_x, extra_field_y = wep_im_extra.fieldAngle
+        intra_field_x, intra_field_y = wep_im_intra.fieldAngle
+
+        zk_extra_intrinsic = self.instrument.getIntrinsicZernikes(
+            extra_field_x,
+            extra_field_y,
+            DefocalType.Extra,
+            band=wep_im_extra.bandLabel,
+            nollIndices=noll_indices,
+        )
+        zk_intra_intrinsic = self.instrument.getIntrinsicZernikes(
+            intra_field_x,
+            intra_field_y,
+            DefocalType.Intra,
+            band=wep_im_intra.bandLabel,
+            nollIndices=noll_indices,
+        )
 
         img_extra, angle_extra, zkRef_extra, backgroundStd_extra = self.danish_algo._prepDanish(
             image=wep_im_extra,
