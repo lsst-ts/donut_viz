@@ -1404,13 +1404,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         zk_extra_intrinsic = self.instrument.getIntrinsicZernikes(
             extra_field_x,
             extra_field_y,
-            wep_im_extra.bandLabel,
+            band=wep_im_extra.bandLabel,
             nollIndices=noll_indices,
         )
         zk_intra_intrinsic = self.instrument.getIntrinsicZernikes(
             intra_field_x,
             intra_field_y,
-            wep_im_intra.bandLabel,
+            band=wep_im_intra.bandLabel,
             nollIndices=noll_indices,
         )
 
