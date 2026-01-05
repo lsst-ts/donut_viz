@@ -59,8 +59,6 @@ class EFD:
         self.url = "https://usdf-rsp.slac.stanford.edu/influxdb-enterprise-data/query"
 
     def get_most_recent_row_before(self, topic, time, n_retries=10, where=None):
-        import pandas as pd
-
         # Stealing from summit_utils and rubin_nights
         earliest = Time("2019-01-01")
         if time < earliest:
@@ -85,13 +83,12 @@ class EFD:
                 continue
             # Success
             series = statement["series"][0]
-            result = pd.DataFrame(series.get("values", []), columns=series["columns"])
-            if where is not None and not result.empty:
+            result = QTable(rows=series.get("values", []), names=series["columns"])
+            if where is not None and len(result) > 0:
                 result = result[where(result)]
-            if "time" in result:
-                result = result.set_index(pd.to_datetime(result["time"]))
-                result = result.drop("time", axis=1)
-            return result.iloc[-1]
+            if "time" in result.colnames:
+                result["time"] = Time(result["time"], format='isot', scale='utc')
+            return result[-1]
         raise ValueError(f"No data found for topic {topic} at time {time} after {n_retries} retries.")
 
     def get_efd_data(
@@ -101,8 +98,6 @@ class EFD:
         end,
         n_retries=10,
     ):
-        import pandas as pd
-
         query = f'select * from "{topic}" '
         query += f"where time > '{begin.utc.isot}Z' and time <= '{end.utc.isot}Z'"
         params = {"db": "efd", "q": query}
@@ -122,10 +117,10 @@ class EFD:
                 continue
             # Success
             series = statement["series"][0]
-            result = pd.DataFrame(series.get("values", []), columns=series["columns"])
-            if "time" in result:
-                result = result.set_index(pd.to_datetime(result["time"]))
-                result = result.drop("time", axis=1)
+
+            result = QTable(rows=series.get("values", []), names=series["columns"])
+            if "time" in result.colnames:
+                result["time"] = Time(result["time"], format='isot', scale='utc')
             return result
         raise ValueError(f"No data found for topic {topic} between {begin} and {end} after {n_retries} retries.")
 
@@ -330,28 +325,27 @@ def get_state(exposure, efd_client):
 
     out = np.zeros(50, dtype=np.float64)
 
-    m2_df = efd_client.get_most_recent_row_before(
+    m2_table = efd_client.get_most_recent_row_before(
         "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
         time=end,
-        where=lambda df: df["salIndex"] == 2,
+        where=lambda table: table["salIndex"] == 2,
     )
-    out[0] = m2_df["z"]
-    out[1] = m2_df["x"]
-    out[2] = m2_df["y"]
-    out[3] = m2_df["u"]
-    out[4] = m2_df["v"]
+    out[0] = m2_table["z"]
+    out[1] = m2_table["x"]
+    out[2] = m2_table["y"]
+    out[3] = m2_table["u"]
+    out[4] = m2_table["v"]
 
-    cam_df = efd_client.get_most_recent_row_before(
+    cam_table = efd_client.get_most_recent_row_before(
         "lsst.sal.MTHexapod.logevent_uncompensatedPosition",
         time=end,
-        where=lambda df: df["salIndex"] == 1,
+        where=lambda table: table["salIndex"] == 1,
     )
-    out[5] = cam_df["z"]
-    out[6] = cam_df["x"]
-    out[7] = cam_df["y"]
-    out[8] = cam_df["u"]
-    out[9] = cam_df["v"]
-
+    out[5] = cam_table["z"]
+    out[6] = cam_table["x"]
+    out[7] = cam_table["y"]
+    out[8] = cam_table["u"]
+    out[9] = cam_table["v"]
     m1m3_event = efd_client.get_most_recent_row_before(
         "lsst.sal.MTM1M3.logevent_appliedActiveOpticForces",
         time=end,
@@ -361,12 +355,10 @@ def get_state(exposure, efd_client):
         m1m3_forces[i] = m1m3_event[f"zForces{i}"]
     out[10:30] = get_m1m3_bmf().bending_mode(m1m3_forces)
 
-    m2_telemetry = QTable.from_pandas(
-        efd_client.get_efd_data(
-            "lsst.sal.MTM2.axialForce",
-            begin=begin,
-            end=end,
-        )
+    m2_telemetry = efd_client.get_efd_data(
+        "lsst.sal.MTM2.axialForce",
+        begin=begin,
+        end=end,
     )
     nrow = len(m2_telemetry)
     m2_forces = np.empty((nrow, 72), dtype=np.float64)
@@ -506,14 +498,26 @@ def stamp_sets_to_stamps(stamp_sets):
         metadata["EXP_ID"].extend([stamp_set["ref_id"]] + stamp_set["test_ids"])
         metadata["DONUT_ID"].extend([stamp_set["donut_id"]] * nstamp)
         metadata["REF_ID"].extend([stamp_set["ref_id"]] * nstamp)
-        metadata["X_REF"].extend([stamp_set["x_ref_ccd_dvcs"]] * nstamp)
-        metadata["Y_REF"].extend([stamp_set["y_ref_ccd_dvcs"]] * nstamp)
-        metadata["X_REF_CCS"].extend([float(stamp_set["x_ref_field_ccs"])] * nstamp)
-        metadata["Y_REF_CCS"].extend([float(stamp_set["y_ref_field_ccs"])] * nstamp)
-        metadata["X_REF_OCS"].extend([float(stamp_set["x_ref_field_ocs"])] * nstamp)
-        metadata["Y_REF_OCS"].extend([float(stamp_set["y_ref_field_ocs"])] * nstamp)
-        metadata["OFFSET_X"].extend([0.0] + [off[1] for off in stamp_set["offsets"]])
-        metadata["OFFSET_Y"].extend([0.0] + [off[0] for off in stamp_set["offsets"]])
+
+        x_ref_ccd_dvcs = stamp_set["x_ref_ccd_dvcs"].to_value(units.pix)
+        y_ref_ccd_dvcs = stamp_set["y_ref_ccd_dvcs"].to_value(units.pix)
+        x_ref_field_ccs = stamp_set["x_ref_field_ccs"].to_value(units.rad)
+        y_ref_field_ccs = stamp_set["y_ref_field_ccs"].to_value(units.rad)
+        x_ref_field_ocs = stamp_set["x_ref_field_ocs"].to_value(units.rad)
+        y_ref_field_ocs = stamp_set["y_ref_field_ocs"].to_value(units.rad)
+
+        metadata["X_REF"].extend([x_ref_ccd_dvcs] * nstamp)
+        metadata["Y_REF"].extend([y_ref_ccd_dvcs] * nstamp)
+        metadata["X_REF_CCS"].extend([float(x_ref_field_ccs)] * nstamp)
+        metadata["Y_REF_CCS"].extend([float(y_ref_field_ccs)] * nstamp)
+        metadata["X_REF_OCS"].extend([float(x_ref_field_ocs)] * nstamp)
+        metadata["Y_REF_OCS"].extend([float(y_ref_field_ocs)] * nstamp)
+        metadata["OFFSET_X"].extend(
+            [0.0] + [off[1].to_value(units.pix) for off in stamp_set["offsets"]]
+        )
+        metadata["OFFSET_Y"].extend(
+            [0.0] + [off[0].to_value(units.pix) for off in stamp_set["offsets"]]
+        )
     out = Stamps(all_stamps)
     for key, val in metadata.items():
         out.metadata[key] = np.array(val)
@@ -542,12 +546,20 @@ def stamps_to_stamp_sets(stamps):
         stamp_set = {}
         stamp_set["donut_id"] = donut_id
         stamp_set["ref"] = ref
-        stamp_set["x_ref_ccd_dvcs"] = metadata.getArray("X_REF")[ref_donut_idx]
-        stamp_set["y_ref_ccd_dvcs"] = metadata.getArray("Y_REF")[ref_donut_idx]
-        stamp_set["x_ref_field_ccs"] = metadata.getArray("X_REF_CCS")[ref_donut_idx]
-        stamp_set["y_ref_field_ccs"] = metadata.getArray("Y_REF_CCS")[ref_donut_idx]
-        stamp_set["x_ref_field_ocs"] = metadata.getArray("X_REF_OCS")[ref_donut_idx]
-        stamp_set["y_ref_field_ocs"] = metadata.getArray("Y_REF_OCS")[ref_donut_idx]
+
+        x_ref_ccd_dvcs = metadata.getArray("X_REF")[ref_donut_idx] * units.pix
+        y_ref_ccd_dvcs = metadata.getArray("Y_REF")[ref_donut_idx] * units.pix
+        x_ref_field_ccs = metadata.getArray("X_REF_CCS")[ref_donut_idx] * units.rad
+        y_ref_field_ccs = metadata.getArray("Y_REF_CCS")[ref_donut_idx] * units.rad
+        x_ref_field_ocs = metadata.getArray("X_REF_OCS")[ref_donut_idx] * units.rad
+        y_ref_field_ocs = metadata.getArray("Y_REF_OCS")[ref_donut_idx] * units.rad
+
+        stamp_set["x_ref_ccd_dvcs"] = x_ref_ccd_dvcs
+        stamp_set["y_ref_ccd_dvcs"] = y_ref_ccd_dvcs
+        stamp_set["x_ref_field_ccs"] = x_ref_field_ccs
+        stamp_set["y_ref_field_ccs"] = y_ref_field_ccs
+        stamp_set["x_ref_field_ocs"] = x_ref_field_ocs
+        stamp_set["y_ref_field_ocs"] = y_ref_field_ocs
         stamp_set["tests"] = tests
         stamp_set["offsets"] = offsets
         stamp_set["ref_id"] = metadata.getArray("REF_ID")[ref_donut_idx]
@@ -921,8 +933,8 @@ class HartmannSensitivityAnalysis(
 
         table = QTable()
         table["donut_id"] = np.arange(len(peaks), dtype=np.int32)
-        table["x_ref_ccd_dvcs"] = (peaks[:, 1] * bin_size).astype(np.int32)
-        table["y_ref_ccd_dvcs"] = (peaks[:, 0] * bin_size).astype(np.int32)
+        table["x_ref_ccd_dvcs"] = (peaks[:, 1] * bin_size).astype(np.int32) * units.pix
+        table["y_ref_ccd_dvcs"] = (peaks[:, 0] * bin_size).astype(np.int32) * units.pix
         fluxes = []
         inner_fluxes = []
         outer_fluxes = []
@@ -971,10 +983,10 @@ class HartmannSensitivityAnalysis(
             fluxes.append(np.nansum(stamp * template))
             inner_fluxes.append(np.nansum(stamp * inner_hole))
             outer_fluxes.append(np.nansum(stamp * outer_annulus))
-        table["x_ref_field_ocs"] = np.array(x_field_ocs_list, dtype=np.float32)
-        table["y_ref_field_ocs"] = np.array(y_field_ocs_list, dtype=np.float32)
-        table["x_ref_field_ccs"] = np.array(x_field_ccs_list, dtype=np.float32)
-        table["y_ref_field_ccs"] = np.array(y_field_ccs_list, dtype=np.float32)
+        table["x_ref_field_ocs"] = np.array(x_field_ocs_list, dtype=np.float32) * units.rad
+        table["y_ref_field_ocs"] = np.array(y_field_ocs_list, dtype=np.float32) * units.rad
+        table["x_ref_field_ccs"] = np.array(x_field_ccs_list, dtype=np.float32) * units.rad
+        table["y_ref_field_ccs"] = np.array(y_field_ccs_list, dtype=np.float32) * units.rad
         table["flux"] = np.array(fluxes, dtype=np.float32)
         table["inner_flux"] = np.array(inner_fluxes, dtype=np.float32)
         table["outer_flux"] = np.array(outer_fluxes, dtype=np.float32)
@@ -1000,7 +1012,6 @@ class HartmannSensitivityAnalysis(
             return [], None, [], None
         self.log.info("Connecting to EFD")
         efd_client = EFD()
-        # efd_client = EfdClient("usdf_efd")
         self.log.info("  Connected; Fetching states")
         ref_state = get_state(reference_exposure, efd_client)
         test_states = [get_state(exp, efd_client) for exp in test_exposures]
@@ -1075,21 +1086,18 @@ class HartmannSensitivityAnalysis(
         for detection in detections:
             if not detection["use"]:
                 continue
+            donut_id = detection["donut_id"]
+            x_ref_ccd_dvcs = detection["x_ref_ccd_dvcs"].to_value(units.pix)
+            y_ref_ccd_dvcs = detection["y_ref_ccd_dvcs"].to_value(units.pix)
+            x_ref_field_ocs = detection["x_ref_field_ocs"].to_value(units.rad)
+            y_ref_field_ocs = detection["y_ref_field_ocs"].to_value(units.rad)
+            x_ref_field_ccs = detection["x_ref_field_ccs"].to_value(units.rad)
+            y_ref_field_ccs = detection["y_ref_field_ccs"].to_value(units.rad)
             self.log.info(
                 "  Aligning detection %d at (x,y)=(%d,%d)",
-                detection["donut_id"],
-                detection["x_ref_ccd_dvcs"],
-                detection["y_ref_ccd_dvcs"],
+                donut_id, x_ref_ccd_dvcs, y_ref_ccd_dvcs
             )
-            x_ref_ccd_dvcs, y_ref_ccd_dvcs = detection[
-                ["x_ref_ccd_dvcs", "y_ref_ccd_dvcs"]
-            ]
-            x_ref_field_ocs, y_ref_field_ocs = detection[
-                ["x_ref_field_ocs", "y_ref_field_ocs"]
-            ]
-            x_ref_field_ccs, y_ref_field_ccs = detection[
-                ["x_ref_field_ccs", "y_ref_field_ccs"]
-            ]
+
             cr = get_rays(
                 reference_telescope, 0.0, 0.0, x_ref_field_ocs, y_ref_field_ocs
             )
@@ -1114,7 +1122,7 @@ class HartmannSensitivityAnalysis(
                 detection["use"] = False
                 self.log.warn(
                     "  Could not extract reference stamp for detection %d; skipping",
-                    detection["donut_id"],
+                    donut_id,
                 )
                 continue
             ref_stamp_arr = ref_stamp.stamp_im.image.array
@@ -1148,7 +1156,7 @@ class HartmannSensitivityAnalysis(
                     detection["use"] = False
                     self.log.warn(
                         "  Aligned stamp for detection %d in exposure %d would be out of bounds; skipping",
-                        detection["donut_id"],
+                        donut_id,
                         test_exposure.info.getVisitInfo().id,
                     )
                     break
@@ -1165,7 +1173,7 @@ class HartmannSensitivityAnalysis(
                     detection["use"] = False
                     self.log.warn(
                         "  Could not align detection %d in exposure %d; skipping",
-                        detection["donut_id"],
+                        donut_id,
                         test_exposure.info.getVisitInfo().id,
                     )
                     break
@@ -1183,7 +1191,7 @@ class HartmannSensitivityAnalysis(
                     detection["use"] = False
                     self.log.warn(
                         "  Could not extract aligned stamp for detection %d in exposure %d; skipping",
-                        detection["donut_id"],
+                        donut_id,
                         test_exposure.info.getVisitInfo().id,
                     )
                     break
@@ -1193,16 +1201,16 @@ class HartmannSensitivityAnalysis(
             test_stamps = Stamps(test_stamps)
             stamp_sets.append(
                 dict(
-                    donut_id=detection["donut_id"],
+                    donut_id=donut_id,
                     ref=ref_stamp,
-                    x_ref_ccd_dvcs=x_ref_ccd_dvcs,
-                    y_ref_ccd_dvcs=y_ref_ccd_dvcs,
-                    x_ref_field_ocs=x_ref_field_ocs,
-                    y_ref_field_ocs=y_ref_field_ocs,
-                    x_ref_field_ccs=x_ref_field_ccs,
-                    y_ref_field_ccs=y_ref_field_ccs,
+                    x_ref_ccd_dvcs=x_ref_ccd_dvcs * units.pix,
+                    y_ref_ccd_dvcs=y_ref_ccd_dvcs * units.pix,
+                    x_ref_field_ocs=x_ref_field_ocs * units.rad,
+                    y_ref_field_ocs=y_ref_field_ocs * units.rad,
+                    x_ref_field_ccs=x_ref_field_ccs * units.rad,
+                    y_ref_field_ccs=y_ref_field_ccs * units.rad,
                     tests=test_stamps,
-                    offsets=offsets,
+                    offsets=np.array(offsets) * units.pix,
                     ref_id=reference_exposure.info.getVisitInfo().id,
                     test_ids=[exp.info.getVisitInfo().id for exp in test_exposures],
                 )
@@ -1243,8 +1251,8 @@ class HartmannSensitivityAnalysis(
     def choose_pupil_locations(self, stamp_set, telescope, rtp, nrad, nrot):
         dx, dy, model, zTA = fit_danish(
             telescope,
-            x_ccs=stamp_set["x_ref_field_ccs"],
-            y_ccs=stamp_set["y_ref_field_ccs"],
+            x_ccs=stamp_set["x_ref_field_ccs"].to_value(units.rad),
+            y_ccs=stamp_set["y_ref_field_ccs"].to_value(units.rad),
             stamp=stamp_set["ref"],
             nrot=nrot,
         )
@@ -1268,8 +1276,8 @@ class HartmannSensitivityAnalysis(
         self.log.info("Removing net shifts and rotations")
         idxs = [int(col[3:]) for col in patch_table.colnames if col.startswith("dx_")]
         for idx in idxs:
-            patch_table[f"dx_{idx}_aligned"] = np.nan
-            patch_table[f"dy_{idx}_aligned"] = np.nan
+            patch_table[f"dx_{idx}_aligned"] = np.nan * units.pix
+            patch_table[f"dy_{idx}_aligned"] = np.nan * units.pix
         for donut_id in np.unique(patch_table["donut_id"]):
             wdonut = np.where(patch_table["donut_id"] == donut_id)[0]
             x = patch_table["x"][wdonut]
@@ -1300,16 +1308,16 @@ class HartmannSensitivityAnalysis(
             if col.startswith("dx_") and col.endswith("_aligned")
         ]
         for idx in idxs:
-            patch_table[f"dx_{idx}_predict"] = np.nan
-            patch_table[f"dy_{idx}_predict"] = np.nan
+            patch_table[f"dx_{idx}_predict"] = np.nan * units.pix
+            patch_table[f"dy_{idx}_predict"] = np.nan * units.pix
 
         for donut_id in np.unique(patch_table["donut_id"]):
             select = patch_table["donut_id"] == donut_id
             u = patch_table["u"][select].to_value(units.m)
             v = patch_table["v"][select].to_value(units.m)
             detection = detection_table[detection_table["donut_id"] == donut_id]
-            x_field_ocs = detection["x_ref_field_ocs"][0]
-            y_field_ocs = detection["y_ref_field_ocs"][0]
+            x_field_ocs = detection["x_ref_field_ocs"][0].to_value(units.rad)
+            y_field_ocs = detection["y_ref_field_ocs"][0].to_value(units.rad)
             rays = get_rays(
                 reference_telescope,
                 u,
@@ -1356,7 +1364,7 @@ class HartmannSensitivityAnalysis(
         zk_table = QTable()
         # Make columns
         zk_table["donut_id"] = donut_ids
-        tmp = np.full(self.config.zk_max + 1, np.nan)
+        tmp = np.full(self.config.zk_max + 1, np.nan) * units.micron
         for iexp in range(nexp):
             zk_table[f"zk_{iexp}_ccs"] = [tmp]*ndonut
             zk_table[f"zk_{iexp}_ocs"] = [tmp]*ndonut
@@ -1366,7 +1374,7 @@ class HartmannSensitivityAnalysis(
         for donut_id in donut_ids:
             wpatch = patch_table["donut_id"] == donut_id
             wzk = np.where(zk_table["donut_id"] == donut_id)[0][0]
-            focal_length = 10.31
+            focal_length = 10.31 * units.m
             for iexp in range(nexp):
                 use = patch_table[f"use_fit_{iexp}"][wpatch]
                 dx = patch_table[f"dx_{iexp}_aligned"][wpatch][use]  # DVCS
@@ -1393,15 +1401,15 @@ class HartmannSensitivityAnalysis(
                 A = np.hstack(
                     zernikeGradBases(
                         self.config.zk_max,
-                        u, v,
+                        u.to_value(units.m), v.to_value(units.m),
                         R_outer=4.18,
-                        R_inner=4.18 * 0.612,
+                        R_inner=4.18 * 0.612,  # meters
                     )
-                ).T * focal_length
-                dx *= 10.0  # microns
-                dy *= 10.0  # microns
-                dxp *= 10.0  # microns
-                dyp *= 10.0  # microns
+                ).T * focal_length.to_value(units.m)
+                dx = dx * (10.0 * units.micron / units.pix)  # microns
+                dy = dy * (10.0 * units.micron / units.pix)  # microns
+                dxp = dxp * (10.0 * units.micron / units.pix)  # microns
+                dyp = dyp * (10.0 * units.micron / units.pix)  # microns
                 b = np.hstack([dx, dy])
                 bp = np.hstack([dxp, dyp])
                 zk_ocs, *_ =  np.linalg.lstsq(A, b, rcond=None)
@@ -1472,8 +1480,8 @@ class HartmannSensitivityAnalysis(
                     label = (
                         idonut,
                         (
-                            int(stamp_set["x_ref_ccd_dvcs"]),
-                            int(stamp_set["y_ref_ccd_dvcs"]),
+                            int(stamp_set["x_ref_ccd_dvcs"].to_value(units.pix)),
+                            int(stamp_set["y_ref_ccd_dvcs"].to_value(units.pix)),
                         ),
                     )
                     ax.set_ylabel(label)
@@ -1531,8 +1539,8 @@ class HartmannSensitivityAnalysis(
 
         # Make room in table
         for iexp in range(nexp):
-            patch_table[f"dx_{iexp}_fit"] = np.nan
-            patch_table[f"dy_{iexp}_fit"] = np.nan
+            patch_table[f"dx_{iexp}_fit"] = np.nan * units.pix
+            patch_table[f"dy_{iexp}_fit"] = np.nan * units.pix
             patch_table[f"use_fit_{iexp}"] = False
 
         for donut_id in donut_ids:
@@ -1583,8 +1591,8 @@ class HartmannSensitivityAnalysis(
                     label = (
                         idonut,
                         (
-                            int(stamp_set["x_ref_ccd_dvcs"]),
-                            int(stamp_set["y_ref_ccd_dvcs"]),
+                            int(stamp_set["x_ref_ccd_dvcs"].to_value(units.pix)),
+                            int(stamp_set["y_ref_ccd_dvcs"].to_value(units.pix)),
                         ),
                     )
                     ax.set_ylabel(label)
@@ -1674,8 +1682,8 @@ class HartmannSensitivityAnalysis(
                     label = (
                         idonut,
                         (
-                            int(stamp_set["x_ref_ccd_dvcs"]),
-                            int(stamp_set["y_ref_ccd_dvcs"]),
+                            int(stamp_set["x_ref_ccd_dvcs"].to_value(units.pix)),
+                            int(stamp_set["y_ref_ccd_dvcs"].to_value(units.pix)),
                         ),
                     )
                     ax.set_ylabel(label)
