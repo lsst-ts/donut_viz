@@ -27,7 +27,7 @@ from lsst.summit.utils.efdUtils import (
 from lsst.summit.utils.plotting import stretchDataMidTone
 from lsst.ts.wep.estimation import DanishAlgorithm
 from lsst.ts.wep.task import DonutStamp, DonutStamps
-from lsst.ts.wep.utils import convertZernikesToPsfWidth, getTaskInstrument
+from lsst.ts.wep.utils import DefocalType, convertZernikesToPsfWidth, getTaskInstrument
 from lsst.utils.plotting.figures import make_figure
 from lsst.utils.timer import timeMethod
 
@@ -1404,12 +1404,14 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         zk_extra_intrinsic = self.instrument.getIntrinsicZernikes(
             extra_field_x,
             extra_field_y,
+            DefocalType.Extra,
             wep_im_extra.bandLabel,
             nollIndices=noll_indices,
         )
         zk_intra_intrinsic = self.instrument.getIntrinsicZernikes(
             intra_field_x,
             intra_field_y,
+            DefocalType.Intra,
             wep_im_intra.bandLabel,
             nollIndices=noll_indices,
         )
