@@ -87,9 +87,11 @@ class EFD:
             if where is not None and len(result) > 0:
                 result = result[where(result)]
             if "time" in result.colnames:
-                result["time"] = Time(result["time"], format='isot', scale='utc')
+                result["time"] = Time(result["time"], format="isot", scale="utc")
             return result[-1]
-        raise ValueError(f"No data found for topic {topic} at time {time} after {n_retries} retries.")
+        raise ValueError(
+            f"No data found for topic {topic} at time {time} after {n_retries} retries."
+        )
 
     def get_efd_data(
         self,
@@ -120,9 +122,11 @@ class EFD:
 
             result = QTable(rows=series.get("values", []), names=series["columns"])
             if "time" in result.colnames:
-                result["time"] = Time(result["time"], format='isot', scale='utc')
+                result["time"] = Time(result["time"], format="isot", scale="utc")
             return result
-        raise ValueError(f"No data found for topic {topic} between {begin} and {end} after {n_retries} retries.")
+        raise ValueError(
+            f"No data found for topic {topic} between {begin} and {end} after {n_retries} retries."
+        )
 
 
 def get_rtp(exposure):
@@ -260,10 +264,7 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, nrot, verbose=None):
         pixel_scale=10e-6,
     )
 
-    arr = np.rot90(
-        stamp.stamp_im.image.array.T,
-        nrot
-    )  # DVCS -> CCS
+    arr = np.rot90(stamp.stamp_im.image.array.T, nrot)  # DVCS -> CCS
 
     fitter = danish.SingleDonutModel(
         factory, z_ref=zTA, thx=x_ccs, thy=y_ccs, z_terms=(), npix=arr.shape[0]
@@ -286,10 +287,7 @@ def fit_danish(telescope, x_ccs, y_ccs, stamp, nrot, verbose=None):
     dy_pix = dy / (3600 * np.rad2deg(1 / 10.31) * 10e-6)
 
     # CCS -> DVCS
-    model = np.rot90(
-        model,
-        -nrot
-    ).T
+    model = np.rot90(model, -nrot).T
     # CCS -> DVCS
     if nrot % 4 == 1:
         dx_pix, dy_pix = -dy_pix, dx_pix
@@ -802,9 +800,7 @@ class HartmannSensitivityAnalysis(
             self.update_display(reference_exposure, detections)
 
         stamp_sets, ref_telescope, test_telescopes, exposure_table = (
-            self.get_initial_stamp_sets(
-                detections, reference_exposure, test_exposures
-            )
+            self.get_initial_stamp_sets(detections, reference_exposure, test_exposures)
         )
         rtp = get_rtp(reference_exposure)
         detector = reference_exposure.getDetector()
@@ -842,7 +838,7 @@ class HartmannSensitivityAnalysis(
             hartmann_filtered_plot=filtered_fig,
             hartmann_residual_plot=resid_fig,
             hartmann_zernikes=zernikes,
-            hartmann_exposure_table=exposure_table
+            hartmann_exposure_table=exposure_table,
         )
 
     def get_det_dz(self, exposure):
@@ -854,15 +850,13 @@ class HartmannSensitivityAnalysis(
 
     def get_donut_radius(self, exposure):
         det_dz = self.get_det_dz(exposure)
-        defocus = abs(
-            self.config.m2_dz + self.config.cam_dz + det_dz
-        )  # mm
+        defocus = abs(self.config.m2_dz + self.config.cam_dz + det_dz)  # mm
         donut_diam = 85.0 * defocus  # Hardcoded to LSSTCam
         donut_radius = donut_diam / 2
         return donut_radius
 
     def prepare_exposures(self, exposures, ref_index, run_isr=False, **isr_kwargs):
-        """ Prepare exposures by running ISR (optional) and background subtraction.
+        """Prepare exposures by running ISR (optional) and background subtraction.
         Sort exposures by visit ID and select reference exposure.
         """
         exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
@@ -897,9 +891,7 @@ class HartmannSensitivityAnalysis(
         if binned_template_size % 2 == 0:
             binned_template_size += 1
 
-        template = np.zeros(
-            (binned_template_size, binned_template_size), dtype=float
-        )
+        template = np.zeros((binned_template_size, binned_template_size), dtype=float)
         y, x = np.ogrid[
             -binned_template_size // 2 : binned_template_size // 2,
             -binned_template_size // 2 : binned_template_size // 2,
@@ -983,10 +975,18 @@ class HartmannSensitivityAnalysis(
             fluxes.append(np.nansum(stamp * template))
             inner_fluxes.append(np.nansum(stamp * inner_hole))
             outer_fluxes.append(np.nansum(stamp * outer_annulus))
-        table["x_ref_field_ocs"] = np.array(x_field_ocs_list, dtype=np.float32) * units.rad
-        table["y_ref_field_ocs"] = np.array(y_field_ocs_list, dtype=np.float32) * units.rad
-        table["x_ref_field_ccs"] = np.array(x_field_ccs_list, dtype=np.float32) * units.rad
-        table["y_ref_field_ccs"] = np.array(y_field_ccs_list, dtype=np.float32) * units.rad
+        table["x_ref_field_ocs"] = (
+            np.array(x_field_ocs_list, dtype=np.float32) * units.rad
+        )
+        table["y_ref_field_ocs"] = (
+            np.array(y_field_ocs_list, dtype=np.float32) * units.rad
+        )
+        table["x_ref_field_ccs"] = (
+            np.array(x_field_ccs_list, dtype=np.float32) * units.rad
+        )
+        table["y_ref_field_ccs"] = (
+            np.array(y_field_ccs_list, dtype=np.float32) * units.rad
+        )
         table["flux"] = np.array(fluxes, dtype=np.float32)
         table["inner_flux"] = np.array(inner_fluxes, dtype=np.float32)
         table["outer_flux"] = np.array(outer_fluxes, dtype=np.float32)
@@ -1020,9 +1020,7 @@ class HartmannSensitivityAnalysis(
         # ID within the group.  -1 is the reference and 0..N-1 are the test cases.
         group_id = np.arange(-1, len(test_exposures), dtype=np.int32)
         exp_id = [reference_exposure.info.getVisitInfo().id]
-        exp_id.extend([
-            exp.info.getVisitInfo().id for exp in test_exposures
-        ])
+        exp_id.extend([exp.info.getVisitInfo().id for exp in test_exposures])
         states = [ref_state]
         states.extend(test_states)
         exposure_table["group_id"] = group_id
@@ -1095,7 +1093,9 @@ class HartmannSensitivityAnalysis(
             y_ref_field_ccs = detection["y_ref_field_ccs"].to_value(units.rad)
             self.log.info(
                 "  Aligning detection %d at (x,y)=(%d,%d)",
-                donut_id, x_ref_ccd_dvcs, y_ref_ccd_dvcs
+                donut_id,
+                x_ref_ccd_dvcs,
+                y_ref_ccd_dvcs,
             )
 
             cr = get_rays(
@@ -1366,10 +1366,10 @@ class HartmannSensitivityAnalysis(
         zk_table["donut_id"] = donut_ids
         tmp = np.full(self.config.zk_max + 1, np.nan) * units.micron
         for iexp in range(nexp):
-            zk_table[f"zk_{iexp}_ccs"] = [tmp]*ndonut
-            zk_table[f"zk_{iexp}_ocs"] = [tmp]*ndonut
-            zk_table[f"zk_{iexp}_ccs_predict"] = [tmp]*ndonut
-            zk_table[f"zk_{iexp}_ocs_predict"] = [tmp]*ndonut
+            zk_table[f"zk_{iexp}_ccs"] = [tmp] * ndonut
+            zk_table[f"zk_{iexp}_ocs"] = [tmp] * ndonut
+            zk_table[f"zk_{iexp}_ccs_predict"] = [tmp] * ndonut
+            zk_table[f"zk_{iexp}_ocs_predict"] = [tmp] * ndonut
 
         for donut_id in donut_ids:
             wpatch = patch_table["donut_id"] == donut_id
@@ -1401,7 +1401,8 @@ class HartmannSensitivityAnalysis(
                 A = np.hstack(
                     zernikeGradBases(
                         self.config.zk_max,
-                        u.to_value(units.m), v.to_value(units.m),
+                        u.to_value(units.m),
+                        v.to_value(units.m),
                         R_outer=4.18,
                         R_inner=4.18 * 0.612,  # meters
                     )
@@ -1412,7 +1413,7 @@ class HartmannSensitivityAnalysis(
                 dyp = dyp * (10.0 * units.micron / units.pix)  # microns
                 b = np.hstack([dx, dy])
                 bp = np.hstack([dxp, dyp])
-                zk_ocs, *_ =  np.linalg.lstsq(A, b, rcond=None)
+                zk_ocs, *_ = np.linalg.lstsq(A, b, rcond=None)
                 rot = zernikeRotMatrix(self.config.zk_max, rtp.to_value(units.rad))
                 zk_ccs = rot @ zk_ocs
                 zk_ocs_predict, *_ = np.linalg.lstsq(A, bp, rcond=None)
