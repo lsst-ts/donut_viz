@@ -15,6 +15,21 @@ Version History
 
 .. towncrier release notes start
 
+v3.2.3 (2026-01-06)
+===================
+
+Bug Fixes
+---------
+
+- Save enough donuts for donut fits plot to fully populate. (`DM-53606 <https://rubinobs.atlassian.net//browse/DM-53606>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Turn on linearize and crosstalk steps in default ISR configuration in pipelines. (`DM-53613 <https://rubinobs.atlassian.net//browse/DM-53613>`_)
+
+
 3.2.2 (2025-12-09)
 ==================
 
