@@ -1,0 +1,1 @@
+Turn on linearize and crosstalk steps in default ISR configuration in pipelines.
