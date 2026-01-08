@@ -12,6 +12,7 @@ tasks:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
+        verbose: 2
   plotDonutFitsTask: # donut viz task that applies only to Danish
     class: lsst.donut.viz.PlotDonutFitsTask
     config:
