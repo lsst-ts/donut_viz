@@ -7,6 +7,9 @@ imports:
       - plotAOSTask
       - plotDonutTask
       - plotPsfZernTask
+      - aggregateDonutStampsTask
+      - aggregateDonutTablesGroupTask
+      - aggregateAOSVisitTableTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
@@ -30,7 +33,15 @@ tasks:
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
     config:
-      maxDonutsPerDetector: 20
+      maxDonutsPerDetector: 1
+  aggregateDonutTablesUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
+  aggregateDonutStampsUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
+    config:
+      connections.donutStampsIn: donutStampsScienceSensor
+  aggregateAOSVisitTableUnpairedTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
 
 # Define pipeline steps
 subsets:
@@ -50,9 +61,9 @@ subsets:
   step2-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesGroupTask
-      - aggregateAOSVisitTableTask
-      - aggregateDonutStampsTask
+      - aggregateDonutTablesUnpairedTask
+      - aggregateAOSVisitTableUnpairedTask
+      - aggregateDonutStampsUnpairedTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
