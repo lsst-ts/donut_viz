@@ -3,6 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from random import random
 from time import sleep
+from typing import Any
 
 import astropy.units as units
 import batoid
@@ -608,7 +609,7 @@ def fit_displacements(x, y, dx, dy):
 
 
 class HartmannSensitivityAnalysisConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("group", "instrument", "detector")
+    pipeBase.PipelineTaskConnections, dimensions=("instrument", "detector")
 ):
     exposures = ct.Input(
         doc="Input exposure to make measurements on",
@@ -616,55 +617,77 @@ class HartmannSensitivityAnalysisConnections(
         storageClass="Exposure",
         name="post_isr_image",
         multiple=True,
+        deferLoad=True,
     )
-    hartmann_stamps = ct.Output(
+    user_groups = ct.Input(
+        doc="Hartmann exposure groups",
+        dimensions=("instrument",),
+        storageClass="StructuredDataDict",
+        name="hartmann_groups",
+    )
+    stamps = ct.Output(
         doc="Output Hartmann stamps",
-        dimensions=("group", "instrument", "detector"),
+        dimensions=("visit", "instrument", "detector"),
         storageClass="Stamps",
         name="hartmann_stamps",
+        multiple=True,
     )
-    hartmann_detection_table = ct.Output(
+    detection_table = ct.Output(
         doc="Output Hartmann detection table",
-        dimensions=("group", "instrument", "detector"),
+        dimensions=("visit", "instrument", "detector"),
         storageClass="AstropyQTable",
         name="hartmann_detection_table",
+        multiple=True,
     )
-    hartmann_analysis_table = ct.Output(
+    analysis_table = ct.Output(
         doc="Output Hartmann sensitivity analysis table",
-        dimensions=("group", "instrument", "detector"),
+        dimensions=("visit", "instrument", "detector"),
         storageClass="AstropyQTable",
         name="hartmann_analysis_table",
+        multiple=True,
     )
-    hartmann_unfiltered_plot = ct.Output(
+    unfiltered_plot = ct.Output(
         doc="Output Hartmann unfiltered plot",
-        dimensions=("group", "instrument", "detector"),
+        dimensions=("visit", "instrument", "detector"),
         storageClass="Plot",
         name="hartmann_unfiltered_plot",
+        multiple=True,
     )
-    hartmann_filtered_plot = ct.Output(
+    filtered_plot = ct.Output(
         doc="Output Hartmann filtered plot",
-        dimensions=("group", "instrument", "detector"),
+        dimensions=("visit", "instrument", "detector"),
         storageClass="Plot",
         name="hartmann_filtered_plot",
+        multiple=True,
     )
-    hartmann_residual_plot = ct.Output(
+    residual_plot = ct.Output(
         doc="Output Hartmann residual plot",
-        dimensions=("group", "instrument", "detector"),
+        dimensions=("visit", "instrument", "detector"),
         storageClass="Plot",
         name="hartmann_residual_plot",
+        multiple=True,
     )
-    hartmann_zernikes = ct.Output(
+    zernikes = ct.Output(
         doc="Output Hartmann Zernike coefficients",
-        dimensions=("group", "instrument", "detector"),
+        dimensions=("visit", "instrument", "detector"),
         storageClass="AstropyQTable",
         name="hartmann_zernikes",
+        multiple=True,
     )
-    hartmann_exposure_table = ct.Output(
+    exposure_table = ct.Output(
         doc="Output Hartmann exposure table",
-        dimensions=("group", "instrument", "detector"),
+        dimensions=("visit", "instrument", "detector"),
         storageClass="AstropyQTable",
         name="hartmann_exposure_table",
+        multiple=True,
     )
+
+    def __init__(self, *, config: Any | None = None) -> None:
+        super().__init__(config=config)
+        if config is not None:
+            if not config.use_user_groups:
+                del self.user_groups
+                self.dimensions.add("group")
 
 
 class HartmannSensitivityAnalysisConfig(
@@ -731,6 +754,10 @@ class HartmannSensitivityAnalysisConfig(
         doc="batoid_rubin bend_dir",
         default="/sdf/home/j/jmeyers3/.local/batoid_rubin_data",
     )
+    use_user_groups = pexConfig.Field[bool](
+        doc="Whether to explicitly use user groups or to group by dimension",
+        default=False,
+    )
     isr = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
         doc="Instrument signature removal task",
@@ -784,13 +811,48 @@ class HartmannSensitivityAnalysis(
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        inputs = butlerQC.get(inputRefs)
-        outputs = self.run(**inputs)
-        butlerQC.put(outputs, outputRefs)
+        # Group the input exposures
+        if self.config.use_user_groups:
+            exposure_handles = {v.dataId["exposure"]: v for v in inputRefs.exposures}
+            groups = butlerQC.get(inputRefs.user_groups)
+            exposure_groups = []
+            for group in groups["groups"]:
+                exposure_group = []
+                for exp_id in group:
+                    if exp_id in exposure_handles:
+                        exposure_group.append(butlerQC.get(exposure_handles[exp_id]))
+                    else:
+                        self.log.warn(
+                            "Exposure ID %s in group but not found in inputs", exp_id
+                        )
+                        break
+                else:
+                    exposure_groups.append(exposure_group)
+        else:
+            exposure_groups = [butlerQC.get(inputRefs.exposures)]
+
+        # Run the analysis for each group
+        # Write outputs using the visit ID of the reference exposure
+        for igroup, exposure_handles in enumerate(exposure_groups):
+            self.log.info(
+                "Processing exposure group %d out of %d", igroup, len(exposure_groups)
+            )
+            exposures = [handle.get() for handle in exposure_handles]
+            outputs = self.run(exposures)
+            for key in outputRefs.keys():
+                output = getattr(outputs, key)
+                if output is None:
+                    continue
+                refs = getattr(outputRefs, key)
+                for ref in refs:
+                    if ref.dataId["visit"] == outputs.reference_exposure_id:
+                        butlerQC.put(output, ref)
+                        break
 
     def run(self, exposures, run_isr=False, **isr_kwargs):
         config = self.config
 
+        self.log.info("Processing %d exposures in this group", len(exposures))
         reference_exposure, test_exposures = self.prepare_exposures(
             exposures, config.ref_index, run_isr=run_isr, **isr_kwargs
         )
@@ -830,15 +892,16 @@ class HartmannSensitivityAnalysis(
             resid_fig = None
 
         return pipeBase.Struct(
-            hartmann_detection_table=detections,
-            hartmann_stamps=stamp_sets_to_stamps(stamp_sets),
+            detection_table=detections,
+            stamps=stamp_sets_to_stamps(stamp_sets),
             stamp_sets=stamp_sets,
-            hartmann_analysis_table=patch_table,
-            hartmann_unfiltered_plot=initial_fig,
-            hartmann_filtered_plot=filtered_fig,
-            hartmann_residual_plot=resid_fig,
-            hartmann_zernikes=zernikes,
-            hartmann_exposure_table=exposure_table,
+            analysis_table=patch_table,
+            unfiltered_plot=initial_fig,
+            filtered_plot=filtered_fig,
+            residual_plot=resid_fig,
+            zernikes=zernikes,
+            exposure_table=exposure_table,
+            reference_exposure_id=reference_exposure.info.getVisitInfo().id,
         )
 
     def get_det_dz(self, exposure):
@@ -859,7 +922,7 @@ class HartmannSensitivityAnalysis(
         """Prepare exposures by running ISR (optional) and background subtraction.
         Sort exposures by visit ID and select reference exposure.
         """
-        exposures.sort(key=lambda exp: exp.getInfo().getVisitInfo().id)
+        exposures.sort(key=lambda exp: exp.info.getVisitInfo().id)
         if run_isr:
             self.log.info("Running ISR on %d exposures", len(exposures))
             exposures = [self.isr.run(exp, **isr_kwargs).exposure for exp in exposures]
@@ -1346,8 +1409,8 @@ class HartmannSensitivityAnalysis(
                     x_ref, y_ref, dx_test, dy_test
                 )
 
-                patch_table[f"dx_{idx}_predict"][select] = dx_test_align
-                patch_table[f"dy_{idx}_predict"][select] = dy_test_align
+                patch_table[f"dx_{idx}_predict"][select] = dx_test_align * units.pix
+                patch_table[f"dy_{idx}_predict"][select] = dy_test_align * units.pix
 
     def fit_zernikes(self, patch_table, rtp, nrot):
         if patch_table is None:
