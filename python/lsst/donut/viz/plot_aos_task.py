@@ -1363,7 +1363,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         Parameters
         ----------
         zk_deviation_ccs : `numpy.ndarray`
-            Zernike coefficients in microns in CCS coordinates.
+            Zernike deviation coefficients in microns in CCS coordinates.
         zk_intrinsic_ccs : `numpy.ndarray`
             Intrinsic Zernike coefficients in microns in CCS coordinates.
         noll_indices : `list` of `int`
