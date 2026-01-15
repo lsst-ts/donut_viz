@@ -17,6 +17,7 @@ tasks:
       # but turn off quadratic crosstalk because it's currently broken
       doSaturation: True
       crosstalk.doQuadraticCrosstalkCorrection: False
+      doDefect: True
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
