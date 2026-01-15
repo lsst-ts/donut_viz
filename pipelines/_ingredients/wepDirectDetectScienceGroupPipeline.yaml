@@ -10,14 +10,8 @@ tasks:
       # Although we don't have to apply the amp offset corrections, we do want
       # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
       doAmpOffset: True
-      ampOffset.doApplyAmpOffset: False
-      # Turn off slow steps in ISR
-      doBrighterFatter: False
-      # Mask saturated pixels,
-      # but turn off quadratic crosstalk because it's currently broken
-      doSaturation: True
-      crosstalk.doQuadraticCrosstalkCorrection: False
       doDefect: True
+      doInterpolate: True
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
