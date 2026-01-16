@@ -746,6 +746,10 @@ class HartmannSensitivityAnalysisConfig(
         doc="Maximum number of exposures to plot",
         default=4,
     )
+    do_derotate = pexConfig.Field[bool](
+        doc="Whether to attempt an image derotation before matching patches",
+        default=True,
+    )
     fea_dir = pexConfig.Field[str](
         doc="batoid_rubin fea_dir",
         default="/sdf/home/j/jmeyers3/.local/batoid_rubin_data",
@@ -1223,8 +1227,23 @@ class HartmannSensitivityAnalysis(
                         test_exposure.info.getVisitInfo().id,
                     )
                     break
+
                 test_stamp = Stamp(test_exposure.maskedImage[test_box])
                 test_stamp_arr = test_stamp.stamp_im.image.array
+                test_rtp = get_rtp(test_exposure)
+
+                if self.config.do_derotate:
+                    from scipy import ndimage
+
+                    rotated_arr = ndimage.rotate(
+                        test_stamp_arr,
+                        angle=(test_rtp - rtp).to_value(units.deg),
+                        reshape=False,
+                        order=3,
+                        mode='reflect',
+                    )
+                    test_stamp_arr[...] = rotated_arr
+
                 offset = get_offset(ref_stamp_arr, test_stamp_arr, search_radius=60)
                 self.log.info(
                     "    Exposure %d: offset (y,x) = (%.2f, %.2f)",
