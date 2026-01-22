@@ -12,3 +12,5 @@ tasks:
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 20
       donutSelector.maxFieldDist: 1.725
+      photoRefFilterPrefix: "monster_ComCam"
+      catalogFilterList: ["monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r", "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y"]
