@@ -1,0 +1,45 @@
+description: rapid analysis pipeline for LSSTCam
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepWcsCatalogCwfsPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
+tasks:
+  plotDonutFitsTask: # donut viz task that applies only to Danish
+    class: lsst.donut.viz.PlotDonutFitsTask
+    config:
+      doRubinTVUpload: True
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutCatalogWcsTask
+      - cutOutDonutsCwfsPairTask
+      - reassignCwfsCutoutsPairTask
+      - calcZernikesTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
+  step1b-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesCwfsTask
+      - aggregateAOSVisitTableCwfsTask
+      - plotAOSTask
+      - aggregateDonutStampsTask
+      - plotDonutCwfsTask
+      - plotPairingTask
+      - plotPsfZernTask
+      - plotDonutFitsTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-visits
+    dimensions: [visit]
