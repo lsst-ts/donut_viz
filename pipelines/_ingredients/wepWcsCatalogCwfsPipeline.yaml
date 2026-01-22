@@ -1,0 +1,14 @@
+description: wep direct detect pipeline for wavefront sensors
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
+    exclude:
+      - generateDonutDirectDetectTask
+
+tasks:
+  generateDonutCatalogWcsTask:
+    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
+    config:
+      connections.refCatalogs: "the_monster_20250219"
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 20
+      donutSelector.maxFieldDist: 1.725
