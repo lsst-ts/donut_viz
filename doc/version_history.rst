@@ -15,6 +15,29 @@ Version History
 
 .. towncrier release notes start
 
+v3.3.0 (2026-01-28)
+===================
+
+Bug Fixes
+---------
+
+- Fix treatment of intrinsic zernikes when creating danish model in plotDonutFitsTask after changes to outputs in zernikes tables from ts_wep. (`DM-53818 <https://rubinobs.atlassian.net//browse/DM-53818>`_)
+
+
+Documentation
+-------------
+
+- Turn up verbosity in scipy.optimize.least_squares inside danish optimization. Move least_squares danish parameters into pipelines/ingredients. (`DM-53756 <https://rubinobs.atlassian.net//browse/DM-53756>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Update refitWCS configuration. (`DM-53585 <https://rubinobs.atlassian.net//browse/DM-53585>`_)
+- Changed FAM pipelines to include doDefect. (`DM-53827 <https://rubinobs.atlassian.net//browse/DM-53827>`_)
+- Update pipelines to have a maximum of 30 function evaluations per donut when running least squares minimization inside danish. (`DM-53906 <https://rubinobs.atlassian.net//browse/DM-53906>`_)
+
+
 v3.2.3 (2026-01-06)
 ===================
 
