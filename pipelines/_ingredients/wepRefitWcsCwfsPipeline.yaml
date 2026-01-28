@@ -22,11 +22,12 @@ tasks:
       photoRefFilterPrefix: "monster_ComCam"
       catalogFilterList: ["monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r", "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y"]
       astromTask.referenceSelector.doMagLimit: True
-      astromTask.referenceSelector.magLimit.maximum: 24.0
+      astromTask.referenceSelector.magLimit.maximum: 19.0
       astromTask.referenceSelector.magLimit.fluxField: "monster_ComCam_r_flux"
-      astromTask.maxIter: 3
-      astromTask.matcher.maxOffsetPix: 2000
-      astromTask.matcher.maxRotationDeg: 3.0
+      astromTask.maxIter: 5
+      astromTask.matcher.maxOffsetPix: 100
+      astromTask.matcher.maxRotationDeg: 0.3
+      astromTask.matcher.numPointsForShape: 3
       failTask: False
       # Settings to use to add blended donuts
       # donutSelector.unblendedSeparation: 160

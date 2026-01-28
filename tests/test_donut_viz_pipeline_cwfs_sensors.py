@@ -333,7 +333,8 @@ class TestDonutVizPipeline(TestCase):
         )
         with self.assertRaises(ValueError) as cm2:
             self.task.getModel(
-                aos_raw[0]["zk_CCS"],
+                aos_raw[0]["zk_deviation_CCS"],
+                aos_raw[0]["zk_intrinsic_CCS"],
                 aos_raw.meta["nollIndices"],
                 aos_raw.meta["estimatorInfo"],
                 stamps_extra,

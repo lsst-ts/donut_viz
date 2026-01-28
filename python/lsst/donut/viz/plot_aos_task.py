@@ -27,7 +27,7 @@ from lsst.summit.utils.efdUtils import (
 from lsst.summit.utils.plotting import stretchDataMidTone
 from lsst.ts.wep.estimation import DanishAlgorithm
 from lsst.ts.wep.task import DonutStamp, DonutStamps
-from lsst.ts.wep.utils import DefocalType, convertZernikesToPsfWidth, getTaskInstrument
+from lsst.ts.wep.utils import convertZernikesToPsfWidth, getTaskInstrument
 from lsst.utils.plotting.figures import make_figure
 from lsst.utils.timer import timeMethod
 
@@ -1350,7 +1350,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
     def getModel(
         self,
-        zk_ccs_micron: np.ndarray,
+        zk_deviation_ccs: np.ndarray,
+        zk_intrinsic_ccs: np.ndarray,
         noll_indices: list[int],
         danish_meta: dict,
         stamp_extra: DonutStamp,
@@ -1361,8 +1362,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        zk_ccs_micron : `numpy.ndarray`
-            Zernike coefficients in microns in CCS coordinates.
+        zk_deviation_ccs : `numpy.ndarray`
+            Zernike deviation coefficients in microns in CCS coordinates.
+        zk_intrinsic_ccs : `numpy.ndarray`
+            Intrinsic Zernike coefficients in microns in CCS coordinates.
         noll_indices : `list` of `int`
             List of Noll indices corresponding to the Zernike coefficients.
         danish_meta : `dict`
@@ -1394,43 +1397,25 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 f"but only contains: {set(danish_meta.keys())}"
             )
 
-        zk_CCS = zk_ccs_micron * 1e-6  # convert to meters
+        zk_deviation_CCS = zk_deviation_ccs * 1e-6  # convert to meters
+        zk_intrinsic_CCS = zk_intrinsic_ccs * 1e-6  # convert to meters
         dz_terms = [(1, j) for j in noll_indices]
         wep_im_extra = stamp_extra.wep_im
         wep_im_intra = stamp_intra.wep_im
-        extra_field_x, extra_field_y = wep_im_extra.fieldAngle
-        intra_field_x, intra_field_y = wep_im_intra.fieldAngle
-
-        zk_extra_intrinsic = self.instrument.getIntrinsicZernikes(
-            extra_field_x,
-            extra_field_y,
-            DefocalType.Extra,
-            wep_im_extra.bandLabel,
-            nollIndices=noll_indices,
-        )
-        zk_intra_intrinsic = self.instrument.getIntrinsicZernikes(
-            intra_field_x,
-            intra_field_y,
-            DefocalType.Intra,
-            wep_im_intra.bandLabel,
-            nollIndices=noll_indices,
-        )
 
         img_extra, angle_extra, zkRef_extra, backgroundStd_extra = self.danish_algo._prepDanish(
             image=wep_im_extra,
-            zkStart=zk_extra_intrinsic,
+            zkStart=zk_intrinsic_CCS,
             nollIndices=noll_indices,
             instrument=self.instrument,
         )
         img_intra, angle_intra, zkRef_intra, backgroundStd_intra = self.danish_algo._prepDanish(
             image=wep_im_intra,
-            zkStart=zk_intra_intrinsic,
+            zkStart=zk_intrinsic_CCS,
             nollIndices=noll_indices,
             instrument=self.instrument,
         )
         input_images = [img_extra, img_intra]
-
-        zk_fit = zk_CCS - np.nanmean([zk_extra_intrinsic, zk_intra_intrinsic], axis=0)
 
         model = danish.MultiDonutModel(
             self.factory,
@@ -1446,7 +1431,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             danish_meta["model_dx"],
             danish_meta["model_dy"],
             danish_meta["fwhm"],
-            zk_fit,
+            zk_deviation_CCS,
             sky_levels=danish_meta["model_sky_level"],
             fluxes=np.sum([img_extra, img_intra], axis=(1, 2)),
         )
@@ -1762,7 +1747,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
                 danish_meta = {key: value[irow] for key, value in raft_meta.items()}
                 imgs, model_imgs = self.getModel(
-                    row["zk_CCS"],
+                    row["zk_deviation_CCS"],
+                    row["zk_intrinsic_CCS"],
                     noll_indices,
                     danish_meta,
                     extra_stamp,
