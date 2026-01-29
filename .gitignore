@@ -164,3 +164,8 @@ cython_debug/
 .ruff.toml
 towncrier.toml
 .mypy.ini
+
+# Built by sconsUtils
+version.py
+python/*.dist-info/
+.sconsign.dblite
