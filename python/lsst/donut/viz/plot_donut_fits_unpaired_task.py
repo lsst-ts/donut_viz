@@ -8,6 +8,7 @@ import danish
 import numpy as np
 import yaml
 from astropy.table import QTable, Row, Table
+from astropy.coordinates import Angle
 from astropy.time import Time
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
@@ -180,21 +181,10 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
             "R00_SW0",
             instConfigFile,
         )
-        obsc = self.instrument.obscuration
-        focal_length = self.instrument.focalLength
-        r_outer = self.instrument.radius
-        pixel_scale = self.instrument.pixelSize
-        self.factory = danish.DonutFactory(
-            R_outer=r_outer,
-            R_inner=r_outer * obsc,
-            mask_params=self.mask_params,
-            focal_length=focal_length,
-            pixel_scale=pixel_scale,
-        )
 
         # Setup danish algo
         self.danish_algo = DanishAlgorithm()
-        self.danish_model_keys = ["fwhm", "model_dx", "model_dy", "model_sky_level"]
+        self.danish_model_keys = ["fwhm", "model_bkg", "model_dx", "model_dy", "model_flux"]
 
         # Cache instrument obscuration and focal length
         self.obsc = self.instrument.obscuration
@@ -796,13 +786,14 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
         fitter = danish.SingleDonutModel(
             self.factory,
             z_ref=zk,
-            z_terms=tuple(),  # only fitting x/y/fwhm
+            z_terms=tuple(),  # only fitting flux/x/y/fwhm
             thx=thx,
             thy=thy,
             npix=img.shape[0],
+            bkg_order=-1
         )
 
-        guess = [0.0, 0.0, 0.7]
+        guess = [np.sum(img), 0.0, 0.0, 0.7]
         sky_level = 10000  # What!?
         result = least_squares(
             fitter.chi,
@@ -813,9 +804,11 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
             gtol=1e-3,
             args=(img, sky_level),
         )
-        dx, dy, fwhm = result.x
+        import ipdb; ipdb.set_trace()
+        params = fitter.unpack_params(result.x)
+        fwhm = params["fwhm"]
 
-        model = fitter.model(*result.x, [])
+        model = fitter.model(**params)
         return model, fwhm
 
     def getModelUnpaired(
@@ -1257,6 +1250,18 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
                 axs[row_idx][i].set_xticks([])
                 axs[row_idx][i].set_yticks([])
 
+    @staticmethod
+    def _get_rtp(donutStamps):
+        if not donutStamps:
+            return Angle(np.nan, "rad")
+        metadata = donutStamps.metadata
+        try:
+            rsp = metadata["BORESIGHT_ROT_ANGLE_RAD"]
+            q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
+        except KeyError:
+            return Angle(np.nan, "rad")
+        return Angle(q - rsp - np.pi/2, "rad")
+
     def run(
         self,
         aos_raw: Table,
@@ -1306,6 +1311,20 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
         assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
         wavelength = self.instrument.wavelength[bandpass]
         assert isinstance(wavelength, float)
+
+        obsc = self.instrument.obscuration
+        focal_length = self.instrument.focalLength
+        r_outer = self.instrument.radius
+        pixel_scale = self.instrument.pixelSize
+        rtp = self._get_rtp(donutStampsIntra)
+        self.factory = danish.DonutFactory(
+            R_outer=r_outer,
+            R_inner=r_outer * obsc,
+            mask_params=self.mask_params,
+            focal_length=focal_length,
+            pixel_scale=pixel_scale,
+            spider_angle=rtp.deg
+        )
 
         # Create telescope models with configured defocus for unpaired donuts
         telescope, intra_telescope, extra_telescope = self._buildTelescopeModels(bandpass)

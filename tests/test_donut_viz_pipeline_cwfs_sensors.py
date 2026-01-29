@@ -329,7 +329,7 @@ class TestDonutVizPipeline(TestCase):
         # Test getModel function
         err_msg = str(
             "danish_meta must contain the following keys: "
-            + "['fwhm', 'model_dx', 'model_dy', 'model_sky_level'], but only contains: {'fwhm'}"
+            + "['fwhm', 'model_bkg', 'model_dx', 'model_dy', 'model_flux'], but only contains: {'fwhm'}"
         )
         with self.assertRaises(ValueError) as cm2:
             self.task.getModel(
@@ -494,7 +494,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(agg_zern_task_out.raw), 6)
         self.assertEqual(len(agg_zern_task_out.avg), 3)
 
-    def testAggDonutTablesRunMissingDate(self) -> None:
+    def testAggDonutTablesRunMissingData(self) -> None:
         donutTables = self.butler.query_datasets("donutTable", collections=self.test_run_name)
         qualityTables = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
 

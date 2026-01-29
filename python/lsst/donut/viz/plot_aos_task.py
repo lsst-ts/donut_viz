@@ -7,6 +7,7 @@ import galsim
 import numpy as np
 import yaml
 from astropy import units as u
+from astropy.coordinates import Angle
 from astropy.table import Table
 from astropy.time import Time
 from matplotlib.colors import LinearSegmentedColormap
@@ -1289,21 +1290,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "R00_SW0",
             instConfigFile,
         )
-        obsc = self.instrument.obscuration
-        focal_length = self.instrument.focalLength
-        r_outer = self.instrument.radius
-        pixel_scale = self.instrument.pixelSize
-        self.factory = danish.DonutFactory(
-            R_outer=r_outer,
-            R_inner=r_outer * obsc,
-            mask_params=self.mask_params,
-            focal_length=focal_length,
-            pixel_scale=pixel_scale,
-        )
 
         # Setup danish algo
         self.danish_algo = DanishAlgorithm()
-        self.danish_model_keys = ["fwhm", "model_dx", "model_dy", "model_sky_level"]
+        self.danish_model_keys = ["fwhm", "model_bkg", "model_dx", "model_dy", "model_flux"]
 
     @timeMethod
     def runQuantum(
@@ -1417,7 +1407,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         )
         input_images = [img_extra, img_intra]
 
-        model = danish.MultiDonutModel(
+        zk_fit = zk_deviation_CCS - zk_intrinsic_CCS
+
+        nbkg = danish_meta["model_bkg"].shape[1]
+        bkg_order = int(np.sqrt(9+8*(nbkg-1)) - 3)//2
+        model = danish.DZMultiDonutModel(
             self.factory,
             z_refs=[zkRef_extra, zkRef_intra],
             dz_terms=dz_terms,
@@ -1425,15 +1419,18 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             thxs=[angle_extra[0], angle_intra[0]],
             thys=[angle_extra[1], angle_intra[1]],
             npix=img_extra.shape[0],
+            bkg_order=bkg_order
         )
 
+        # need inner dimension to be type other than ndarray for the cache
+        bkgs = [tuple(bkg) for bkg in danish_meta["model_bkg"]]
         model_images = model.model(
+            danish_meta["model_flux"],
             danish_meta["model_dx"],
             danish_meta["model_dy"],
             danish_meta["fwhm"],
-            zk_deviation_CCS,
-            sky_levels=danish_meta["model_sky_level"],
-            fluxes=np.sum([img_extra, img_intra], axis=(1, 2)),
+            zk_fit,
+            bkgs=bkgs,
         )
 
         return input_images, model_images
@@ -1543,6 +1540,18 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         axs[6].spines["right"].set_edgecolor(color)
         axs[6].spines["right"].set_linewidth(3)
 
+    @staticmethod
+    def _get_rtp(donutStamps):
+        if not donutStamps:
+            return Angle(np.nan, "rad")
+        metadata = donutStamps.metadata
+        try:
+            rsp = metadata["BORESIGHT_ROT_ANGLE_RAD"]
+            q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
+        except KeyError:
+            return Angle(np.nan, "rad")
+        return Angle(q - rsp - np.pi/2, "rad")
+
     def run(
         self,
         aos_raw: Table,
@@ -1590,6 +1599,20 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
         assert all([bandpass == bp for bp in donutStampsExtra.getBandpasses()])
         noll_indices = aos_raw.meta["nollIndices"]
+
+        obsc = self.instrument.obscuration
+        focal_length = self.instrument.focalLength
+        r_outer = self.instrument.radius
+        pixel_scale = self.instrument.pixelSize
+        rtp = self._get_rtp(donutStampsExtra)
+        self.factory = danish.DonutFactory(
+            R_outer=r_outer,
+            R_inner=r_outer * obsc,
+            mask_params=self.mask_params,
+            focal_length=focal_length,
+            pixel_scale=pixel_scale,
+            spider_angle=rtp.deg
+        )
 
         # Get the trim from EFD: applied corrections
         if record is None:
