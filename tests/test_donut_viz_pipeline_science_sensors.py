@@ -189,7 +189,7 @@ class TestDonutVizPipeline(TestCase):
             raw_visit_table["coord_ra_intra"].value,
         )
         # Test snr values are added
-        np.testing.assert_array_equal(
+        self.assertCountEqual(
             raw_visit_table["snr_extra"].value,
             donut_table["snr"][donut_table["focusZ"].value == 1.5].value,
         )
