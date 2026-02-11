@@ -457,6 +457,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                     # Add focusZ to donut table
                     table["focusZ"] = table.meta["visit_info"]["focus_z"]
 
+                    # Add SN from quality table to the donut table
+                    table["snr"] = qualityTable["SN"][qualityTable["FINAL_SELECT"]]
+
                     # Add field angle in CCS to the table
                     pts = tform.applyForward(
                         [Point2D(x, y) for x, y in zip(table["centroid_x"], table["centroid_y"])]
@@ -658,6 +661,9 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 offset = 1.5 if det.getId() in extraDetectorIds else -1.5
                 table["focusZ"] = table.meta["visit_info"]["focus_z"] + offset * u.mm
 
+                # Add SN from quality table to the donut table
+                table["snr"] = qualityTable["SN"][qualityTable["FINAL_SELECT"]]
+
                 # Get pixels -> field angle transform for this detector
                 tform = det.getTransform(PIXELS, FIELD_ANGLE)
 
@@ -764,6 +770,9 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
             # Add focusZ to donut table
             offset = 1.5 if det.getId() in extraDetectorIds else -1.5
             table["focusZ"] = table.meta["visit_info"]["focus_z"] + offset * u.mm
+
+            # Add SN from quality table to the donut table
+            table["snr"] = qualityTable["SN"][qualityTable["FINAL_SELECT"]]
 
             # Get pixels -> field angle transform for this detector
             tform = det.getTransform(PIXELS, FIELD_ANGLE)
@@ -922,6 +931,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
             "thy_OCS",
             "th_N",
             "th_W",
+            "snr",
         ]
         for k in avg_keys:
             avg_table[k] = np.nan  # Allocate
@@ -1014,6 +1024,7 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
             "thy_OCS",
             "th_N",
             "th_W",
+            "snr",
         ]
         for k in avg_keys:
             avg_table[k] = np.nan  # Allocate
@@ -1102,6 +1113,7 @@ class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
             "thy_OCS",
             "th_N",
             "th_W",
+            "snr",
         ]
         for k in avg_keys:
             # Add keys into table. That way even if no donuts
