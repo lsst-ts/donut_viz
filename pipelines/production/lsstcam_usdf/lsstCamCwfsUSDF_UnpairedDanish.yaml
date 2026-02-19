@@ -20,10 +20,10 @@ tasks:
     config:
       connections.donutStampsIn: "donutStampsCwfs"
       maxDonutsPerDetector: 20
-  aggregateDonutTablesUnpairedCwfsTask:
-    class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
-  aggregateAOSVisitTableUnpairedCwfsTask:
-    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedCwfsTask
+  aggregateDonutTablesUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
+  aggregateAOSVisitTableUnpairedTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
 
 
 # Define pipeline steps
@@ -43,8 +43,8 @@ subsets:
   step2-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesUnpairedCwfsTask
-      - aggregateAOSVisitTableUnpairedCwfsTask
+      - aggregateDonutTablesUnpairedTask
+      - aggregateAOSVisitTableUnpairedTask
       - aggregateDonutStampsUnpairedTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
