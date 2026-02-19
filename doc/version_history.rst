@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v3.4.0 (2026-02-18)
+===================
+
+New Features
+------------
+
+- Add SNR information to aggregate tables. (`DM-53908 <https://rubinobs.atlassian.net//browse/DM-53908>`_)
+
+
 v3.3.0 (2026-01-28)
 ===================
 
