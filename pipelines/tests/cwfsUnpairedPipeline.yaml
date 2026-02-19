@@ -46,8 +46,8 @@ tasks:
     class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
     config:
       connections.donutStampsIn: donutStampsCwfs
-  aggregateAOSVisitTableUnpairedCwfsTask:
-    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedCwfsTask
+  aggregateAOSVisitTableUnpairedTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:

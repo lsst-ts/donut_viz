@@ -30,10 +30,6 @@ tasks:
     config:
       connections.donutStamps: donutStampsScienceSensor
       donutStampSelector.maxSelect: 20
-  aggregateDonutStampsTask:
-    class: lsst.donut.viz.AggregateDonutStampsTask
-    config:
-      maxDonutsPerDetector: 1
   aggregateDonutTablesUnpairedTask:
     class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
   aggregateDonutStampsUnpairedTask:
