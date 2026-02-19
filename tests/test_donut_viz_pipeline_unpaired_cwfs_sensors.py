@@ -180,6 +180,11 @@ class TestDonutVizPipeline(TestCase):
             donut_table["coord_ra"].value,
             raw_visit_table["coord_ra"].value,
         )
+        # Test snr values are added
+        np.testing.assert_array_equal(
+            raw_visit_table["snr"].value,
+            donut_table["snr"].value,
+        )
 
     def testAggregateAOSVisitTableAvg(self) -> None:
         avg_visit_table_list = list(
