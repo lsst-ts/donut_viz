@@ -6,6 +6,7 @@ tasks:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       connections.exposure: post_isr_image
+      donutSelector.maxFieldDist: 1.80
   generateDonutFromRefitWcsTask:
     class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
     config:
