@@ -1385,7 +1385,7 @@ class HartmannSensitivityAnalysis(
         if patch_table is None:
             return
         idxs = [
-            int(col[3:4])
+            int(col[3:-8])
             for col in patch_table.colnames
             if col.startswith("dx_") and col.endswith("_aligned")
         ]
