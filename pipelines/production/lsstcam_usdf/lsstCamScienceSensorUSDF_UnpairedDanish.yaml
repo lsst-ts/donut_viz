@@ -44,11 +44,10 @@ subsets:
   step1a-detectors:
     subset:
       - isr
-
-  step1b-visits:
-    subset:
       - generateDonutDirectDetectTask
       - cutOutDonutsScienceSensorGroupTask
+  step1b-visits:
+    subset:
       - calcZernikesUnpairedTask
     description: |
       This step processes the input images with ISR,
