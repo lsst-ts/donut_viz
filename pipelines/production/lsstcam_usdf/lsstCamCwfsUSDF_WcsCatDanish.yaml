@@ -1,4 +1,4 @@
-description: rapid analysis pipeline for LSSTCam
+description: USDF processing pipeline for LSSTCam CWFS data with WCS-based catalog generation using boresight information and Danish Zernike estimation.
 instrument: lsst.obs.lsst.LsstCam
 imports:
   - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_WcsCatDanish.yaml

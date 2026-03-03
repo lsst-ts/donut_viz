@@ -1,4 +1,4 @@
-description: rapid analysis pipeline for LSSTCam
+description: Rapid Analysis pipeline for LSSTCam CWFS data with WCS-based catalog generation using boresight information and Danish Zernike estimation.
 instrument: lsst.obs.lsst.LsstCam
 imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepWcsCatalogCwfsPipeline.yaml

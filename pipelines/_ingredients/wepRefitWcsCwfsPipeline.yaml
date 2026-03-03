@@ -28,7 +28,6 @@ tasks:
       astromTask.maxIter: 5
       astromTask.matcher.maxOffsetPix: 200
       astromTask.matcher.maxRotationDeg: 1.0
-      # astromTask.matcher.numPointsForShape: 3
       failTask: False
       # Settings to use to add blended donuts
       # donutSelector.unblendedSeparation: 160
