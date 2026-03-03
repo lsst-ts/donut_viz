@@ -22,6 +22,8 @@ tasks:
     config:
       connections.exposure: post_isr_image
       donutSelector.unblendedSeparation: 1
+      photoRefFilter: "g"
+      catalogFilterList: ["g"]
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
