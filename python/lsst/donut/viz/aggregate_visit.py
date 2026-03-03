@@ -11,12 +11,12 @@ import lsst.daf.base as dafBase
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
+from lsst.afw.image import VisitInfo
 from lsst.geom import Point2D, radians
 from lsst.pipe.base import connectionTypes as ct
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import convertDictToVisitInfo
 from lsst.utils.timer import timeMethod
-from lsst.afw.image import VisitInfo
 
 __all__ = [
     "AggregateZernikeTablesTaskConnections",
@@ -403,11 +403,11 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 # Select donuts used in Zernike estimation
                 table = donutTable[qualityTable["FINAL_SELECT"]]
 
-                    # Add focusZ to donut table
-                    table["focusZ"] = table.meta["visit_info"]["focus_z"]
+                # Add focusZ to donut table
+                table["focusZ"] = table.meta["visit_info"]["focus_z"]
 
-                    # Add SN from quality table to the donut table
-                    table["snr"] = qualityTable["SN"][qualityTable["FINAL_SELECT"]]
+                # Add SN from quality table to the donut table
+                table["snr"] = qualityTable["SN"][qualityTable["FINAL_SELECT"]]
 
                 # Add field angle in CCS to the table
                 pts = tform.applyForward(
