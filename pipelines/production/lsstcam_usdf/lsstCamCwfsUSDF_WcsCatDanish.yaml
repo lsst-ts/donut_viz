@@ -12,10 +12,15 @@ tasks:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       donutStampSelector.maxSelect: 20
+      doBlurClip: True
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
     config:
       maxDonutsPerDetector: 20
+  plotDonutFitsTask:
+    class: lsst.donut.viz.PlotDonutFitsTask
+    config:
+      doRubinTVUpload: False
 
 
 # Define pipeline steps
