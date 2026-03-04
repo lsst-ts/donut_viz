@@ -19,8 +19,8 @@ subsets:
   step1b-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesUnpairedCwfsTask
-      - aggregateAOSVisitTableUnpairedCwfsTask
+      - aggregateDonutTablesUnpairedTask
+      - aggregateAOSVisitTableUnpairedTask
       - aggregateDonutStampsUnpairedTask
       - plotAOSTask
       - plotDonutUnpairedCwfsTask

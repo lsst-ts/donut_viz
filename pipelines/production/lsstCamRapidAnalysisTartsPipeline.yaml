@@ -50,10 +50,10 @@ tasks:
     class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
     config:
       maxDonutsPerDetector: 10
-  aggregateDonutTablesUnpairedCwfsTask:
-    class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
-  aggregateUnpairedAOSVisitTableCwfsTask:
-    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedCwfsTask
+  aggregateDonutTablesUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
+  aggregateAOSVisitTableUnpairedTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
   plotDonutFitsUnpairedTask:
     class: lsst.donut.viz.PlotDonutFitsUnpairedTask
     config:
@@ -81,8 +81,8 @@ subsets:
     subset:
       - aggregateZernikeTablesTask
       - aggregateDonutStampsUnpairedTask
-      - aggregateDonutTablesUnpairedCwfsTask
-      - aggregateUnpairedAOSVisitTableCwfsTask
+      - aggregateDonutTablesUnpairedTask
+      - aggregateAOSVisitTableUnpairedTask
       - plotAOSTask
       - plotDonutFitsUnpairedTask
       - plotDonutUnpairedCwfsTask

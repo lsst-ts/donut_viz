@@ -1,30 +1,43 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_UnpairedDanish.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamScienceSensorRapidAnalysisPipeline_Danish.yaml
     exclude:
+      - calcZernikesTask
       - plotAOSTask
-      - plotDonutUnpairedCwfsTask
-      - plotDonutFitsUnpairedTask
+      - plotDonutTask
+      - plotPsfZernTask
+      - aggregateDonutStampsTask
+      - aggregateDonutTablesGroupTask
+      - aggregateAOSVisitTableTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.sourceLimit: 40
+  cutOutDonutsScienceSensorGroupTask:
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      python: |
+        from lsst.ts.wep.task.pairTask import GroupPairer
+        config.pairer.retarget(GroupPairer)
+      connections.exposures: post_isr_image
+      donutStampSize: 200
+      initialCutoutPadding: 40
+      runPaired: False
   calcZernikesUnpairedTask:
     class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
     config:
+      connections.donutStamps: donutStampsScienceSensor
       donutStampSelector.maxSelect: 20
+  aggregateDonutTablesUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
   aggregateDonutStampsUnpairedTask:
     class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
     config:
-      connections.donutStampsIn: "donutStampsCwfs"
-      maxDonutsPerDetector: 20
-  aggregateDonutTablesUnpairedTask:
-    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
+      connections.donutStampsIn: donutStampsScienceSensor
   aggregateAOSVisitTableUnpairedTask:
     class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
-
 
 # Define pipeline steps
 subsets:
@@ -32,8 +45,8 @@ subsets:
     subset:
       - isr
       - generateDonutDirectDetectTask
-      - cutOutDonutsCwfsPairTask
-  step1b-detectors:
+      - cutOutDonutsScienceSensorGroupTask
+  step1b-visits:
     subset:
       - calcZernikesUnpairedTask
     description: |
@@ -53,8 +66,8 @@ subsets:
 
 steps:
   - label: step1a-detectors
-    dimensions: [visit, detector]
-  - label: step1b-detectors
-    dimensions: [visit, detector]
+    dimensions: [detector]
+  - label: step1b-visits
+    dimensions: []
   - label: step2-visits
-    dimensions: [visit]
+    dimensions: []
