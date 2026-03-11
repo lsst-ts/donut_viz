@@ -1410,7 +1410,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         zk_fit = zk_deviation_CCS - zk_intrinsic_CCS
 
         nbkg = danish_meta["model_bkg"].shape[1]
-        bkg_order = int(np.sqrt(9+8*(nbkg-1)) - 3)//2
+        bkg_order = int(np.sqrt(9 + 8 * (nbkg - 1)) - 3) // 2
         model = danish.DZMultiDonutModel(
             self.factory,
             z_refs=[zkRef_extra, zkRef_intra],
@@ -1419,7 +1419,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             thxs=[angle_extra[0], angle_intra[0]],
             thys=[angle_extra[1], angle_intra[1]],
             npix=img_extra.shape[0],
-            bkg_order=bkg_order
+            bkg_order=bkg_order,
         )
 
         # need inner dimension to be type other than ndarray for the cache
@@ -1541,7 +1541,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         axs[6].spines["right"].set_linewidth(3)
 
     @staticmethod
-    def _get_rtp(donutStamps):
+    def _get_rtp(donutStamps: DonutStamps | None) -> Angle:
         if not donutStamps:
             return Angle(np.nan, "rad")
         metadata = donutStamps.metadata
@@ -1550,7 +1550,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
         except KeyError:
             return Angle(np.nan, "rad")
-        return Angle(q - rsp - np.pi/2, "rad")
+        return Angle(q - rsp - np.pi / 2, "rad")
 
     def run(
         self,
@@ -1611,7 +1611,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             mask_params=self.mask_params,
             focal_length=focal_length,
             pixel_scale=pixel_scale,
-            spider_angle=rtp.deg
+            spider_angle=rtp.deg,
         )
 
         # Get the trim from EFD: applied corrections
