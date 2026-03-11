@@ -7,8 +7,8 @@ import batoid
 import danish
 import numpy as np
 import yaml
-from astropy.table import QTable, Row, Table
 from astropy.coordinates import Angle
+from astropy.table import QTable, Row, Table
 from astropy.time import Time
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
@@ -790,7 +790,7 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
             thx=thx,
             thy=thy,
             npix=img.shape[0],
-            bkg_order=-1
+            bkg_order=-1,
         )
 
         guess = [np.sum(img), 0.0, 0.0, 0.7]
@@ -804,7 +804,9 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
             gtol=1e-3,
             args=(img, sky_level),
         )
-        import ipdb; ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()
         params = fitter.unpack_params(result.x)
         fwhm = params["fwhm"]
 
@@ -1251,7 +1253,7 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
                 axs[row_idx][i].set_yticks([])
 
     @staticmethod
-    def _get_rtp(donutStamps):
+    def _get_rtp(donutStamps: DonutStamps | None) -> Angle:
         if not donutStamps:
             return Angle(np.nan, "rad")
         metadata = donutStamps.metadata
@@ -1260,7 +1262,7 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
             q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
         except KeyError:
             return Angle(np.nan, "rad")
-        return Angle(q - rsp - np.pi/2, "rad")
+        return Angle(q - rsp - np.pi / 2, "rad")
 
     def run(
         self,
@@ -1323,7 +1325,7 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
             mask_params=self.mask_params,
             focal_length=focal_length,
             pixel_scale=pixel_scale,
-            spider_angle=rtp.deg
+            spider_angle=rtp.deg,
         )
 
         # Create telescope models with configured defocus for unpaired donuts
