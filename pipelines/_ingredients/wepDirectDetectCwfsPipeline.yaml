@@ -23,12 +23,11 @@ tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      donutStampSelector.maxSelect: 8
+      donutStampSelector.maxSelect: 4
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.useCustomSnLimit: True
       donutStampSelector.minSignalToNoise: 100
       donutStampSelector.selectWithMaxPowerGrad: False
-      estimateZernikes.binning: 2
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
         xtol: 1.0e-3
