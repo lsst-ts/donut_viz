@@ -4,52 +4,25 @@ imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
 tasks:
-  generateDonutDirectDetectTask:
-    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
-    config:
-      measurementTask.nSigmaDetection: 5.0
-  cutOutDonutsCwfsPairTask:
-    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
-    config:
-      donutStampSize: 160
-      initialCutoutPadding: 40
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       python: |
         from lsst.ts.wep.task import EstimateZernikesAiDonutTask
         config.estimateZernikes.retarget(EstimateZernikesAiDonutTask)
-      donutStampSelector.maxSelect: 4
+      donutStampSelector.maxSelect: 8
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.useCustomSnLimit: True
       donutStampSelector.minSignalToNoise: 100
       donutStampSelector.selectWithMaxPowerGrad: False
       estimateZernikes.nollIndices:
-        [
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          14,
-          15,
-          16,
-          17,
-          18,
-          19,
-          22,
-          23,
-          24,
-          25,
-          26,
-        ]
+        [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
       estimateZernikes.saveHistory: False
       estimateZernikes.modelPath: /project/rubintv/aidonut_intra_extra_model_2026-03-04.pt
+  plotDonutFitsTask: # donut viz task that applies only to Danish
+    class: lsst.donut.viz.PlotDonutFitsTask
+    config:
+      doRubinTVUpload: True
 
 # Define pipeline steps
 subsets:
@@ -74,6 +47,7 @@ subsets:
       - plotDonutCwfsTask
       - plotPairingTask
       - plotPsfZernTask
+      - plotDonutFitsTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
