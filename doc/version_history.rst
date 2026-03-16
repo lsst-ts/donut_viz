@@ -15,6 +15,16 @@ Version History
 
 .. towncrier release notes start
 
+v3.5.0 (2026-03-16)
+===================
+
+Other Changes and Additions
+---------------------------
+
+- Add new pipelines for WCS catalog pipeline directly from boresight WCS. (`DM-53904 <https://rubinobs.atlassian.net//browse/DM-53904>`_)
+- Add larger maxFieldDist in directDetect catalogs for initial source selection to get more sources in intra-focal detectors for WCS fitting. (`DM-54201 <https://rubinobs.atlassian.net//browse/DM-54201>`_)
+
+
 v3.4.0 (2026-02-18)
 ===================
 
