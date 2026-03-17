@@ -7,7 +7,7 @@ import numpy as np
 from lsst.daf.butler import Butler
 from lsst.donut.viz import (
     AggregateDonutStampsUnpairedTask,
-    AggregateDonutTablesUnpairedCwfsTask,
+    AggregateDonutTablesUnpairedTask,
     AggregateZernikeTablesTask,
     AggregateZernikeTablesTaskConfig,
     PlotDonutFitsUnpairedTask,
@@ -414,6 +414,6 @@ class TestDonutVizPipeline(TestCase):
         # Remove all extra-focal donuts from one detector
         qualityTablesDict[191].remove_rows(np.where(qualityTablesDict[191]["DEFOCAL_TYPE"] == "extra"))
 
-        task = AggregateDonutTablesUnpairedCwfsTask()
+        task = AggregateDonutTablesUnpairedTask()
         agg_donut_table = task.run(camera, donutTablesDict, qualityTablesDict)
         self.assertEqual(len(agg_donut_table.aggregateDonutTable), 2)

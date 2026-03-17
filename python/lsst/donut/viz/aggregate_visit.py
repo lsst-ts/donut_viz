@@ -25,8 +25,8 @@ __all__ = [
     "AggregateDonutTablesTaskConnections",
     "AggregateDonutTablesTaskConfig",
     "AggregateDonutTablesTask",
-    "AggregateDonutTablesUnpairedCwfsTaskConfig",
-    "AggregateDonutTablesUnpairedCwfsTask",
+    "AggregateDonutTablesUnpairedTaskConfig",
+    "AggregateDonutTablesUnpairedTask",
     "AggregateDonutTablesCwfsTaskConnections",
     "AggregateDonutTablesCwfsTaskConfig",
     "AggregateDonutTablesCwfsTask",
@@ -34,7 +34,7 @@ __all__ = [
     "AggregateAOSVisitTableTaskConfig",
     "AggregateAOSVisitTableTask",
     "AggregateAOSVisitTableCwfsTask",
-    "AggregateAOSVisitTableUnpairedCwfsTask",
+    "AggregateAOSVisitTableUnpairedTask",
     "AggregateDonutStampsTaskConnections",
     "AggregateDonutStampsTaskConfig",
     "AggregateDonutStampsTask",
@@ -715,16 +715,16 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         return pipeBase.Struct(aggregateDonutTable=out)
 
 
-class AggregateDonutTablesUnpairedCwfsTaskConfig(
+class AggregateDonutTablesUnpairedTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=AggregateDonutTablesCwfsTaskConnections,  # type: ignore
 ):
     pass
 
 
-class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
-    ConfigClass = AggregateDonutTablesUnpairedCwfsTaskConfig  # type: ignore[assignment]
-    _DefaultName = "AggregateDonutTablesUnpairedCwfs"
+class AggregateDonutTablesUnpairedTask(AggregateDonutTablesCwfsTask):
+    ConfigClass = AggregateDonutTablesUnpairedTaskConfig  # type: ignore[assignment]
+    _DefaultName = "AggregateDonutTablesUnpaired"
 
     @timeMethod
     def run(
@@ -751,6 +751,7 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
         """
         tables = []
         extraDetectorIds = [191, 195, 199, 203]
+        intraDetectorIds = [192, 196, 200, 204]
 
         for detector in donutTables.keys():
             if detector not in qualityTables.keys():
@@ -768,7 +769,9 @@ class AggregateDonutTablesUnpairedCwfsTask(AggregateDonutTablesCwfsTask):
             table = donutTable[qualityTable["FINAL_SELECT"]]
 
             # Add focusZ to donut table
-            offset = 1.5 if det.getId() in extraDetectorIds else -1.5
+            offset = (
+                1.5 if det.getId() in extraDetectorIds else -1.5 if det.getId() in intraDetectorIds else 0
+            )
             table["focusZ"] = table.meta["visit_info"]["focus_z"] + offset * u.mm
 
             # Add SN from quality table to the donut table
@@ -1071,9 +1074,9 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
         return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
 
-class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
+class AggregateAOSVisitTableUnpairedTask(AggregateAOSVisitTableTask):
     ConfigClass = AggregateAOSVisitTableTaskConfig
-    _DefaultName = "AggregateAOSVisitTableUnpairedCwfs"
+    _DefaultName = "AggregateAOSVisitTableUnpaired"
 
     @timeMethod
     def run(self, adt: Table, azr: Table, aza: Table) -> pipeBase.Struct:
