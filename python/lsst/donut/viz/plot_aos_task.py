@@ -1737,15 +1737,24 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 idx = np.argmin(dists)
                 extra_stamp = donutStampsExtraSel[idx]
 
-                necessary_keys = set(self.danish_model_keys)
-                if set(row.meta["estimatorInfo"].keys()) & necessary_keys != necessary_keys:
-                    self.log.warning(
-                        f"No model plot produced for {raft}, donut index: {irow}. "
-                        + "Required metadata for danish model not found in aggregateAOSVisitTableRaw."
-                    )
-                    continue
-
-                danish_meta = {key: value[irow] for key, value in raft_meta.items()}
+                # Build danish_meta with available values
+                # and defaults for missing ones
+                defaults = {
+                    "fwhm": 0.7,
+                    "model_dx": [0, 0],
+                    "model_dy": [0, 0],
+                    "model_sky_level": [0, 0],
+                }
+                danish_meta = {}
+                for key in self.danish_model_keys:
+                    if key in raft_meta:
+                        danish_meta[key] = raft_meta[key][irow]
+                    else:
+                        danish_meta[key] = defaults[key]
+                        self.log.warning(
+                            f"Missing {key} for {raft}, donut index: {irow}, "
+                            f"using default value: {defaults[key]}"
+                        )
                 imgs, model_imgs = self.getModel(
                     row["zk_deviation_CCS"],
                     row["zk_intrinsic_CCS"],
