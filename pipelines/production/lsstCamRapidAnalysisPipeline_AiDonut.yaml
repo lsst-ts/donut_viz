@@ -18,7 +18,7 @@ tasks:
       estimateZernikes.nollIndices:
         [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
       estimateZernikes.saveHistory: False
-      estimateZernikes.modelPath: /project/rubintv/aidonut_intra_extra_model_2026-03-04.pt
+      estimateZernikes.modelPath: $AI_DONUT_DATA_DIR/aidonut_intra_extra_model_2026-03-04.pt
   plotDonutFitsTask: # donut viz task that applies only to Danish
     class: lsst.donut.viz.PlotDonutFitsTask
     config:
