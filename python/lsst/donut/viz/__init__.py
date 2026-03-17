@@ -19,6 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from .aggregate_visit import *
+from .aggregate_zernike_tables_task import *
+from .aggregate_donut_tables_task import *
+from .aggregate_aos_visit_table_task import *
+from .aggregate_donut_stamps_task import *
 from .plot_aos_task import *
 from .plot_donut_fits_unpaired_task import *
