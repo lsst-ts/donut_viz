@@ -18,7 +18,6 @@ from lsst.donut.viz import (
     PlotPsfZernTaskConfig,
 )
 from lsst.ts.wep.task import DonutStamps
-from lsst.ts.wep.task.pairTask import ExposurePairer
 from lsst.ts.wep.utils import (
     convertDictToVisitInfo,
     getModulePath,
@@ -396,33 +395,33 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(agg_out.avg), 1)
 
     def testAggDonutTablesRunMissingDate(self) -> None:
-        donutTables = self.butler.query_datasets("donutTable", collections=self.test_run_name)
+        donutTablesIntra = self.butler.query_datasets("donutTableIntra", collections=self.test_run_name)
+        donutTablesExtra = self.butler.query_datasets("donutTableExtra", collections=self.test_run_name)
         qualityTables = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
 
-        visitInfoDict = dict()
-        for donutTableRef in donutTables:
-            table = self.butler.get(donutTableRef)
-            visit_id = table.meta["visit_info"]["visit_id"]
-            if visit_id in visitInfoDict:
-                continue
-            visitInfoDict[visit_id] = convertDictToVisitInfo(table.meta["visit_info"])
-        pairs = ExposurePairer().run(visitInfoDict)
-        donutTablesDict = {
-            (ref.dataId["visit"], ref.dataId["detector"]): self.butler.get(ref) for ref in donutTables
-        }
-        qualityTablesDict = {
-            (ref.dataId["visit"], ref.dataId["detector"]): self.butler.get(ref) for ref in qualityTables
-        }
+        tableIntra = self.butler.get(donutTablesIntra[0])
+        visitInfoIntra = convertDictToVisitInfo(tableIntra.meta["visit_info"])
+        tableExtra = self.butler.get(donutTablesExtra[0])
+        visitInfoExtra = convertDictToVisitInfo(tableExtra.meta["visit_info"])
+        donutTablesIntraDict = {ref.dataId["detector"]: self.butler.get(ref) for ref in donutTablesIntra}
+        donutTablesExtraDict = {ref.dataId["detector"]: self.butler.get(ref) for ref in donutTablesExtra}
+        qualityTablesDict = {ref.dataId["detector"]: self.butler.get(ref) for ref in qualityTables}
         camera = self.butler.get("camera", dataId={"instrument": "LSSTCam"}, collections="LSSTCam/calib")
 
         # Remove all extra-focal donuts from one detector
-        qualityTablesDict[(4021123106001, 94)].remove_rows(
-            np.where(qualityTablesDict[(4021123106001, 94)]["DEFOCAL_TYPE"] == "extra")
-        )
+        qualityTablesDict[94].remove_rows(np.where(qualityTablesDict[94]["DEFOCAL_TYPE"] == "extra"))
 
         task = AggregateDonutTablesTask(config=AggregateDonutTablesTaskConfig())
-        agg_donut_table = task.run(camera, visitInfoDict, pairs, donutTablesDict, qualityTablesDict)
-        self.assertEqual(len(agg_donut_table.pairTables[4021123106001]), 6)
+        agg_donut_table = task.run(
+            camera,
+            visitInfoIntra,
+            visitInfoExtra,
+            donutTablesIntraDict,
+            donutTablesExtraDict,
+            qualityTablesDict,
+        )
+        print(agg_donut_table)
+        self.assertEqual(len(agg_donut_table.out), 6)
 
     def testPlotPsfZernTaskMissingData(self) -> None:
         # Test that if detectors have different numbers of zernikes
