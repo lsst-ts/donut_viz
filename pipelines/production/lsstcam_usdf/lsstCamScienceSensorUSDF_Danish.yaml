@@ -6,23 +6,12 @@ imports:
       - plotAOSTask
       - plotDonutTask
       - plotPsfZernTask
+      - aggregateDonutStampsTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.sourceLimit: 40
-  calcZernikesTask:
-    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
-    config:
-      donutStampSelector.maxSelect: 20
-      estimateZernikes.lstsqKwargs:
-        ftol: 1.0e-3
-        xtol: 1.0e-3
-        gtol: 1.0e-3
-  aggregateDonutStampsTask:
-    class: lsst.donut.viz.AggregateDonutStampsTask
-    config:
-      maxDonutsPerDetector: 20
 
 # Define pipeline steps
 subsets:
@@ -43,7 +32,6 @@ subsets:
       - aggregateZernikeTablesTask
       - aggregateDonutTablesVisitTask
       - aggregateAOSVisitTableTask
-      - aggregateDonutStampsTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and

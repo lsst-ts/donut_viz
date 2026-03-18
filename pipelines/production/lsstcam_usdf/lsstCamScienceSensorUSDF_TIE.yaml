@@ -11,10 +11,15 @@ tasks:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       donutStampSelector.maxSelect: 20
+      connections.zernikes: "zernikes_tie"
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
     config:
       maxDonutsPerDetector: 20
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+    config:
+      connections.zernikeTable: "zernikes_tie"
 
 # Define pipeline steps
 subsets:
