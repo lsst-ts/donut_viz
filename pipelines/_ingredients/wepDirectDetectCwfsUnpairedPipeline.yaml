@@ -24,3 +24,5 @@ tasks:
         xtol: 1.0e-3
         gtol: 1.0e-3
         max_nfev: 30
+        verbose: 2
+        x_scale: 'jac'
