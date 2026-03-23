@@ -37,5 +37,5 @@ tasks:
       donutStampSelector.maxSelect: 16 # Same max density as half size WFS chips (currently at 8 on CWFS)
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.selectWithMaxPowerGrad: False
-      estimateZernikes.binning: 2
+      estimateZernikes.binning: 1
       donutStampSelector.minSignalToNoise: 100

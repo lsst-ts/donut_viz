@@ -28,7 +28,7 @@ tasks:
       donutStampSelector.useCustomSnLimit: True
       donutStampSelector.minSignalToNoise: 100
       donutStampSelector.selectWithMaxPowerGrad: False
-      estimateZernikes.binning: 2
+      estimateZernikes.binning: 1
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
         xtol: 1.0e-3
