@@ -35,11 +35,11 @@ tasks:
     config:
       connections.exposure: post_isr_image
       # Model paths set to null for testing (task will use random weights)
-      wavenetPath: $TARTS_DATA_DIR/best_finetuned_wavennet.ckpt
-      alignetPath: $TARTS_DATA_DIR/best_alignnet_120.ckpt
-      aggregatornetPath: $TARTS_DATA_DIR/best_aggregator.ckpt
+      wavenetPath: $TARTS_DATA_DIR/v4/best_finetuned_wavennet_coral.ckpt
+      alignetPath: $TARTS_DATA_DIR/v4/best_alignnet_120.ckpt
+      aggregatornetPath: $TARTS_DATA_DIR/v4/best_aggregator_coral_rotate_mrsse.ckpt
       datasetParamPath: $TARTS_DIR/python/tarts/dataset_params.yaml
-      oodModelPath: $TARTS_DATA_DIR/ood_model.joblib
+      oodModelPath: $TARTS_DATA_DIR/v4/ood_model.joblib
       # Use CPU for testing
       device: "cpu"
       # Noll indices for Zernike coefficients (Z4-Z28, excluding piston/tip/tilt)
