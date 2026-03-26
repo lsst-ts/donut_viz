@@ -15,6 +15,16 @@ Version History
 
 .. towncrier release notes start
 
+v3.6.0 (2026-03-26)
+===================
+
+New Features
+------------
+
+- Enable RA to run AOS Parallel across each half chip. (`DM-53212 <https://rubinobs.atlassian.net//browse/DM-53212>`_)
+- Update paths to TARTS data files for new TARTS version (TARTS isn't tagged though, so this news is basically meaningless at present) (`DM-54452 <https://rubinobs.atlassian.net//browse/DM-54452>`_)
+
+
 v3.5.0 (2026-03-16)
 ===================
 
