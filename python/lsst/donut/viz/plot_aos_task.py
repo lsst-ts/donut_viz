@@ -1761,10 +1761,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 extra_stamp = donutStampsExtraSel[idx]
 
                 necessary_keys = set(self.danish_model_keys)
-                if set(row.meta["estimatorInfo"].keys()) & necessary_keys != necessary_keys:
+                available_keys = set(row.meta["estimatorInfo"].keys())
+                if available_keys & necessary_keys != necessary_keys:
+                    missing_keys = necessary_keys - available_keys
                     self.log.warning(
                         f"No model plot produced for {raft}, donut index: {irow}. "
-                        + "Required metadata for danish model not found in aggregateAOSVisitTableRaw."
+                        + "Required metadata for danish model not found in aggregateAOSVisitTableRaw. "
+                        + f"Missing keys: {sorted(missing_keys)}"
                     )
                     continue
 
