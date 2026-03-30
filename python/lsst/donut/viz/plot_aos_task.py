@@ -10,6 +10,7 @@ from astropy import units as u
 from astropy.coordinates import Angle
 from astropy.table import Table
 from astropy.time import Time
+from galsim import GalSimFFTSizeError
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -1274,6 +1275,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         super().__init__(*args, **kwargs)
         self.config: PlotDonutFitsTaskConfig = cast(PlotDonutFitsTaskConfig, self.config)
 
+        galsim.errors.raise_fft_size_error = True
+
         if self.config.doRubinTVUpload:
             if not MultiUploader:
                 raise RuntimeError("MultiUploader is not available")
@@ -1424,14 +1427,24 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # need inner dimension to be type other than ndarray for the cache
         bkgs = [tuple(bkg) for bkg in danish_meta["model_bkg"]]
-        model_images = model.model(
-            danish_meta["model_flux"],
-            danish_meta["model_dx"],
-            danish_meta["model_dy"],
-            danish_meta["fwhm"],
-            zk_fit,
-            bkgs=bkgs,
-        )
+        try:
+            model_images = model.model(
+                danish_meta["model_flux"],
+                danish_meta["model_dx"],
+                danish_meta["model_dy"],
+                danish_meta["fwhm"],
+                zk_fit,
+                bkgs=bkgs,
+            )
+        except (GalSimFFTSizeError, ValueError) as e:
+            if isinstance(e, GalSimFFTSizeError) or "cannot convert float NaN to integer" in str(e):
+                self.log.warning(f"Returning empty model images due to following galsim error: {str(e)}")
+            else:
+                raise e
+
+            # If the model fails to generate due to known error,
+            # we return empty model images
+            model_images = [np.zeros_like(img_extra), np.zeros_like(img_intra)]
 
         return input_images, model_images
 
