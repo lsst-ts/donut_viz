@@ -591,9 +591,15 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 self.log.warning(f"{detector + 1} is  not in donutTables, skipping that corner.")
                 continue
             # Load the donut catalog table, and the donut quality table
-            extraDonutTable = donutTables[detector]
-            intraDonutTable = donutTables[detector + 1]
-            qualityTable = qualityTables[detector]
+            extraDonutTable = donutTables.get(detector)
+            intraDonutTable = donutTables.get(detector + 1)
+            qualityTable = qualityTables.get(detector)
+            if extraDonutTable is None or intraDonutTable is None:
+                self.log.warning(f"Missing donut table for detector {detector} or {detector + 1}, skipping.")
+                continue
+            if qualityTable is None:
+                self.log.warning(f"Missing quality table for detector {detector}, skipping.")
+                continue
 
             if len(qualityTable) == 0:
                 continue
@@ -1395,7 +1401,11 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
             stamps = stampsIn.get(detId)
             quality = qualityTables.get(detId)
             # If the detector doesn't have stamps or a quality table move on
-            if stamps is None or quality is None:
+            if stamps is None:
+                self.log.warning(f"Missing stamps for detector {detId}, skipping.")
+                continue
+            if quality is None:
+                self.log.warning(f"Missing quality table for detector {detId}, skipping.")
                 continue
             # If no quality sources in quality table move on
             if len(quality) == 0:
