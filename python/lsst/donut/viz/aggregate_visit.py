@@ -1358,10 +1358,9 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        stampsOut = self.run(
-            butlerQC.get(inputRefs.donutStampsIn),
-            butlerQC.get(inputRefs.qualityTables),
-        )
+        stampsIn = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.donutStampsIn}
+        qualityTables = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.qualityTables}
+        stampsOut = self.run(stampsIn, qualityTables)
 
         butlerQC.put(
             stampsOut.stamps,
@@ -1371,8 +1370,8 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        stampsIn: typing.List,
-        qualityTables: typing.List,
+        stampsIn: dict,
+        qualityTables: dict,
     ) -> pipeBase.Struct:
         """Aggregate donut stamps for a set of visits.
 
@@ -1390,8 +1389,15 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         """
         stampsList = []
         stampsMetadata = None
-        for stamps, quality in zip(stampsIn, qualityTables):
+        allCwfsIds = extra_focal_ids | intra_focal_ids
+        for detId in allCwfsIds:
             # Skip if quality table is empty.
+            stamps = stampsIn.get(detId)
+            quality = qualityTables.get(detId)
+            # If the detector doesn't have stamps or a quality table move on
+            if stamps is None or quality is None:
+                continue
+            # If no quality sources in quality table move on
             if len(quality) == 0:
                 continue
 
