@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v3.6.1 (2026-03-31)
+===================
+
+Other Changes and Additions
+---------------------------
+
+- Changed science sensor Zernike indices calculated to be consistent with the wavefront sensors. (`DM-54424 <https://rubinobs.atlassian.net//browse/DM-54424>`_)
+
+
 v3.6.0 (2026-03-26)
 ===================
 
