@@ -3,14 +3,6 @@ instrument: lsst.obs.lsst.LsstCam
 imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectScienceGroupPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
-tasks:
-  calcZernikesTask:
-    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
-    config:
-      estimateZernikes.lstsqKwargs:
-        ftol: 1.0e-3
-        xtol: 1.0e-3
-        gtol: 1.0e-3
 
 # Define pipeline steps
 subsets:
