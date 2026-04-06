@@ -804,9 +804,6 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
             gtol=1e-3,
             args=(img, sky_level),
         )
-        import ipdb
-
-        ipdb.set_trace()
         params = fitter.unpack_params(result.x)
         fwhm = params["fwhm"]
 
