@@ -1936,13 +1936,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             ("M2 dz (microns)", [0]),
             ("M2 dx (microns)", [1]),
             ("M2 dy (microns)", [2]),
-            ("M2 rx (deg)", [3]),
-            ("M2 ry (deg)", [4]),
+            ("M2 rx (asec)", [3]),
+            ("M2 ry (asec)", [4]),
             ("Camera dz (microns)", [5]),
             ("Camera dx (microns)", [6]),
             ("Camera dy (microns)", [7]),
-            ("Camera rx (deg)", [8]),
-            ("Camera ry (deg)", [9]),
+            ("Camera rx (asec)", [8]),
+            ("Camera ry (asec)", [9]),
         ]
 
         bending_groups = [
@@ -1987,6 +1987,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         # --- Render rigid-body group in first column
         for label, idxs in rigid_groups:
             val = states_val[idxs[0]]
+            if idxs[0] in [3, 4, 8, 9]:
+                val *= 3600  # convert deg to asec for M2/camera rx, ry
             lines = format_group([val], label, rigid=True, max_int=max_int_rigid)
             for line in lines:
                 bottom_ax.text(
