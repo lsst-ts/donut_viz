@@ -934,7 +934,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                 # donut id can't be averaged like coordinates or centroids,
                 # so we process it separately
                 k = "donut_id"
-                if k in adt.colnames():  # safeguard against older data
+                if k in adt.colnames:  # safeguard against older data
                     nrows = len(raw_table)
                     dtype = adt[k].dtype
                     if k + "_intra" not in raw_table.colnames:
