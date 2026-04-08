@@ -913,7 +913,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
             if single_sided:  # single-sided Zernike estimates
                 for k in avg_keys:
                     raw_table[k][w] = adt[k][wadt]
-                raw_table["donut_id"] = adt["donut_id"][wadt]
+                raw_table["donut_id"][w] = adt["donut_id"][wadt]
             else:  # double-sided Zernike estimates
                 wintra = adt[wadt]["focusZ"] == visit_fzmin
                 wextra = adt[wadt]["focusZ"] == visit_fzmax
@@ -1116,7 +1116,12 @@ class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
             for k in avg_keys:
                 # ought to be the same length now
                 raw_table[k][w] = adt[k][wadt]
-            raw_table["donut_id"] = adt["donut_id"][wadt]
+            if "donut_id" in adt.colnames:  # safeguard against older data
+                nrows = len(raw_table)
+                dtype = adt["donut_id"].dtype
+                if "donut_id" not in raw_table.colnames:
+                    raw_table["donut_id"] = np.full(nrows, "", dtype=dtype)
+                raw_table["donut_id"][w] = adt["donut_id"][wadt]
 
         return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
