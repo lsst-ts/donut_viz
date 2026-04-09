@@ -1,13 +1,13 @@
-description: rapid analysis pipeline for LSSTCam
+description: Rapid Analysis pipeline for LSSTCam CWFS data with WCS-based catalog generation using boresight information and Danish Zernike estimation.
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepRefitWcsCwfsPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepWcsCatalogCwfsPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
 tasks:
-  aggregateDonutTablesCwfsTask:
-    class: lsst.donut.viz.AggregateDonutTablesCwfsTask
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      connections.donutTables: refitWcsDonutTable
+      estimateZernikes.binning: 1
   plotDonutFitsTask: # donut viz task that applies only to Danish
     class: lsst.donut.viz.PlotDonutFitsTask
     config:
@@ -18,8 +18,7 @@ subsets:
   step1a-detectors:
     subset:
       - isr
-      - generateDonutDirectDetectTask
-      - generateDonutFromRefitWcsTask
+      - generateDonutCatalogWcsTask
       - cutOutDonutsCwfsPairTask
       - reassignCwfsCutoutsPairTask
       - calcZernikesTask
