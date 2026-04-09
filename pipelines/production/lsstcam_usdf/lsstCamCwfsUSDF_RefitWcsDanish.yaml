@@ -1,7 +1,7 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_RefitWcsDanish_orig.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_RefitWcsDanish.yaml
     exclude:
       - plotAOSTask
       - plotPsfZernTask
