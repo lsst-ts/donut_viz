@@ -30,7 +30,8 @@ from lsst.utils.timer import timeMethod
 
 try:
     from lsst.rubintv.production.uploaders import MultiUploader
-    from lsst.rubintv.production.utils import getAutomaticLocationConfig, makePlotFile
+    from lsst.rubintv.production.locationConfig import getAutomaticLocationConfig
+    from lsst.rubintv.production.formatters import makePlotFile
 except ImportError:
     MultiUploader = None
 
