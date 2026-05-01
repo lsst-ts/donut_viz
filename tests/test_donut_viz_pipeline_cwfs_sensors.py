@@ -325,7 +325,8 @@ class TestDonutVizPipeline(TestCase):
             expected = (
                 "No model plot produced for R00, "
                 f"donut index: {idx}. Required metadata for danish model not found in "
-                "aggregateAOSVisitTableRaw."
+                "aggregateAOSVisitTableRaw. Missing keys: ['model_bkg', 'model_dx', "
+                "'model_dy', 'model_flux']"
             )
             # "rec.getMessage()" gives the real log message
             self.assertEqual(rec.levelname, "WARNING")
