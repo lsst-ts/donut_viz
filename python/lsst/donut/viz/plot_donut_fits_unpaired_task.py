@@ -29,9 +29,9 @@ from lsst.utils.plotting.figures import make_figure
 from lsst.utils.timer import timeMethod
 
 try:
-    from lsst.rubintv.production.uploaders import MultiUploader
-    from lsst.rubintv.production.locationConfig import getAutomaticLocationConfig
     from lsst.rubintv.production.formatters import makePlotFile
+    from lsst.rubintv.production.locationConfig import getAutomaticLocationConfig
+    from lsst.rubintv.production.uploaders import MultiUploader
 except ImportError:
     MultiUploader = None
 

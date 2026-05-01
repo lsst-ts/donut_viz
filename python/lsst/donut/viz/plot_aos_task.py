@@ -44,9 +44,9 @@ from .utilities import (
 from .zernike_pyramid import zernikePyramid
 
 try:
-    from lsst.rubintv.production.uploaders import MultiUploader
-    from lsst.rubintv.production.locationConfig import getAutomaticLocationConfig
     from lsst.rubintv.production.formatters import makePlotFile
+    from lsst.rubintv.production.locationConfig import getAutomaticLocationConfig
+    from lsst.rubintv.production.uploaders import MultiUploader
 except ImportError:
     MultiUploader = None
 
