@@ -7,12 +7,15 @@ imports:
       - plotPsfZernTask
       - plotDonutCwfsTask
       - plotPairingTask
-      - plotDonutFitsTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.sourceLimit: 40
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+    config:
+      customQG: False
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
@@ -21,6 +24,10 @@ tasks:
     class: lsst.donut.viz.AggregateDonutStampsTask
     config:
       maxDonutsPerDetector: 20
+  plotDonutFitsTask:
+    class: lsst.donut.viz.PlotDonutFitsTask
+    config:
+      doRubinTVUpload: False
 
 
 # Define pipeline steps
@@ -48,6 +55,9 @@ subsets:
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
       tables for the AOS visit.
+  step3-visits:
+    subset:
+      - plotDonutFitsTask
 
 steps:
   - label: step1a-detectors
@@ -55,4 +65,6 @@ steps:
   - label: step1b-detectors
     dimensions: [visit, detector]
   - label: step2-visits
+    dimensions: [visit]
+  - label: step3-visits
     dimensions: [visit]

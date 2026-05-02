@@ -591,9 +591,15 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 self.log.warning(f"{detector + 1} is  not in donutTables, skipping that corner.")
                 continue
             # Load the donut catalog table, and the donut quality table
-            extraDonutTable = donutTables[detector]
-            intraDonutTable = donutTables[detector + 1]
-            qualityTable = qualityTables[detector]
+            extraDonutTable = donutTables.get(detector)
+            intraDonutTable = donutTables.get(detector + 1)
+            qualityTable = qualityTables.get(detector)
+            if extraDonutTable is None or intraDonutTable is None:
+                self.log.warning(f"Missing donut table for detector {detector} or {detector + 1}, skipping.")
+                continue
+            if qualityTable is None:
+                self.log.warning(f"Missing quality table for detector {detector}, skipping.")
+                continue
 
             if len(qualityTable) == 0:
                 continue
@@ -1358,10 +1364,9 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        stampsOut = self.run(
-            butlerQC.get(inputRefs.donutStampsIn),
-            butlerQC.get(inputRefs.qualityTables),
-        )
+        stampsIn = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.donutStampsIn}
+        qualityTables = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.qualityTables}
+        stampsOut = self.run(stampsIn, qualityTables)
 
         butlerQC.put(
             stampsOut.stamps,
@@ -1371,8 +1376,8 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        stampsIn: typing.List,
-        qualityTables: typing.List,
+        stampsIn: dict,
+        qualityTables: dict,
     ) -> pipeBase.Struct:
         """Aggregate donut stamps for a set of visits.
 
@@ -1390,8 +1395,19 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         """
         stampsList = []
         stampsMetadata = None
-        for stamps, quality in zip(stampsIn, qualityTables):
+        allCwfsIds = extra_focal_ids | intra_focal_ids
+        for detId in allCwfsIds:
             # Skip if quality table is empty.
+            stamps = stampsIn.get(detId)
+            quality = qualityTables.get(detId)
+            # If the detector doesn't have stamps or a quality table move on
+            if stamps is None:
+                self.log.warning(f"Missing stamps for detector {detId}, skipping.")
+                continue
+            if quality is None:
+                self.log.warning(f"Missing quality table for detector {detId}, skipping.")
+                continue
+            # If no quality sources in quality table move on
             if len(quality) == 0:
                 continue
 

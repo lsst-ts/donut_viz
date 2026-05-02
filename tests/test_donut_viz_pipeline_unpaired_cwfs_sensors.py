@@ -288,14 +288,18 @@ class TestDonutVizPipeline(TestCase):
         # Aggregate only 3 of 4 detectors
         unpaired_datasets = self.butler.query_datasets("donutStampsCwfs", collections=self.test_run_name)
         quality_datasets = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
-        donut_stamps_unpaired = [self.butler.get(dataset) for dataset in unpaired_datasets]
-        quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
+        donut_stamps_unpaired = {
+            dataset.dataId["detector"]: self.butler.get(dataset) for dataset in unpaired_datasets
+        }
+        quality_tables = {
+            dataset.dataId["detector"]: self.butler.get(dataset) for dataset in quality_datasets
+        }
 
-        donut_stamps_unpaired = [copy(donut_stamps_unpaired[0]) for i in range(4)]
-        quality_tables = [copy(quality_tables[0]) for i in range(4)]
+        donut_stamps_unpaired = {det: copy(donut_stamps_unpaired[191]) for det in [191, 192, 195, 196]}
+        quality_tables = {det: copy(quality_tables[191]) for det in [191, 192, 195, 196]}
 
         # Remove all rows in first table
-        quality_tables[0].remove_rows(np.arange(2))
+        quality_tables[191].remove_rows(np.arange(2))
 
         # Test that outputs are still created with only 3 detectors
         agg_donut_task = AggregateDonutStampsUnpairedTask()
@@ -311,15 +315,19 @@ class TestDonutVizPipeline(TestCase):
     def testAggDonutStampsRunMissingData(self) -> None:
         unpaired_datasets = self.butler.query_datasets("donutStampsCwfs", collections=self.test_run_name)
         quality_datasets = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
-        donut_stamps_unpaired = [self.butler.get(dataset) for dataset in unpaired_datasets]
-        quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
-        donut_stamps_unpaired = [copy(donut_stamps_unpaired[0]) for i in range(4)]
-        quality_tables = [copy(quality_tables[0]) for i in range(4)]
+        donut_stamps_unpaired = {
+            dataset.dataId["detector"]: self.butler.get(dataset) for dataset in unpaired_datasets
+        }
+        quality_tables = {
+            dataset.dataId["detector"]: self.butler.get(dataset) for dataset in quality_datasets
+        }
+        donut_stamps_unpaired = {det: copy(donut_stamps_unpaired[191]) for det in [191, 192, 195, 196]}
+        quality_tables = {det: copy(quality_tables[191]) for det in [191, 192, 195, 196]}
 
         # First check that original dataset is length more than 0
-        self.assertEqual(len(quality_tables[0]), 2)
+        self.assertEqual(len(quality_tables[191]), 2)
         # Remove all rows in first table
-        quality_tables[0].remove_rows(np.arange(2))
+        quality_tables[191].remove_rows(np.arange(2))
 
         # Test that outputs are still created
         agg_donut_task = AggregateDonutStampsUnpairedTask()
@@ -364,17 +372,21 @@ class TestDonutVizPipeline(TestCase):
     def testAggDonutStampsSingleStamp(self) -> None:
         unpaired_datasets = self.butler.query_datasets("donutStampsCwfs", collections=self.test_run_name)
         quality_datasets = self.butler.query_datasets("donutQualityTable", collections=self.test_run_name)
-        donut_stamps_unpaired = [self.butler.get(dataset) for dataset in unpaired_datasets]
-        quality_tables = [self.butler.get(dataset) for dataset in quality_datasets]
+        donut_stamps_unpaired = {
+            dataset.dataId["detector"]: self.butler.get(dataset) for dataset in unpaired_datasets
+        }
+        quality_tables = {
+            dataset.dataId["detector"]: self.butler.get(dataset) for dataset in quality_datasets
+        }
 
         # First check that original dataset is length more than 0
-        self.assertEqual(len(quality_tables[0]), 2)
+        self.assertEqual(len(quality_tables[191]), 2)
         # Leave only one DonutStamp in one of the DonutStamps objects
-        quality_tables[0].remove_rows(1)
-        donut_stamps_intra_new = DonutStamps(donut_stamps_unpaired[0][:1])
-        for key in donut_stamps_unpaired[0].metadata.keys():
-            donut_stamps_intra_new.metadata[key] = donut_stamps_unpaired[0].metadata[key]
-        donut_stamps_unpaired[0] = donut_stamps_intra_new
+        quality_tables[191].remove_rows(1)
+        donut_stamps_intra_new = DonutStamps(donut_stamps_unpaired[191][:1])
+        for key in donut_stamps_unpaired[191].metadata.keys():
+            donut_stamps_intra_new.metadata[key] = donut_stamps_unpaired[191].metadata[key]
+        donut_stamps_unpaired[191] = donut_stamps_intra_new
 
         # Test that outputs are still created
         agg_donut_task = AggregateDonutStampsUnpairedTask()
