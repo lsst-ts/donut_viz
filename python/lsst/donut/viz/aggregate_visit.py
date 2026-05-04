@@ -167,6 +167,12 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
             raw_table["detector"] = det_meta["det_name"]
             avg_table["detector"] = det_meta["det_name"]
 
+            # Add donut ids
+            if "extra_donut_id" in zernike_table.colnames:
+                raw_table["extra_donut_id"] = zernike_table["extra_donut_id"][1:]
+            if "intra_donut_id" in zernike_table.colnames:
+                raw_table["intra_donut_id"] = zernike_table["intra_donut_id"][1:]
+
             raw_tables.append(raw_table)
             avg_tables.append(avg_table)
 
@@ -585,9 +591,15 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 self.log.warning(f"{detector + 1} is  not in donutTables, skipping that corner.")
                 continue
             # Load the donut catalog table, and the donut quality table
-            extraDonutTable = donutTables[detector]
-            intraDonutTable = donutTables[detector + 1]
-            qualityTable = qualityTables[detector]
+            extraDonutTable = donutTables.get(detector)
+            intraDonutTable = donutTables.get(detector + 1)
+            qualityTable = qualityTables.get(detector)
+            if extraDonutTable is None or intraDonutTable is None:
+                self.log.warning(f"Missing donut table for detector {detector} or {detector + 1}, skipping.")
+                continue
+            if qualityTable is None:
+                self.log.warning(f"Missing quality table for detector {detector}, skipping.")
+                continue
 
             if len(qualityTable) == 0:
                 continue
@@ -907,6 +919,7 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
             if single_sided:  # single-sided Zernike estimates
                 for k in avg_keys:
                     raw_table[k][w] = adt[k][wadt]
+                raw_table["donut_id"][w] = adt["donut_id"][wadt]
             else:  # double-sided Zernike estimates
                 wintra = adt[wadt]["focusZ"] == visit_fzmin
                 wextra = adt[wadt]["focusZ"] == visit_fzmax
@@ -922,6 +935,17 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                     if k + "_intra" not in raw_table.colnames:
                         raw_table[k + "_intra"] = np.nan
                         raw_table[k + "_extra"] = np.nan
+                    raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
+                    raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
+                # donut id can't be averaged like coordinates or centroids,
+                # so we process it separately
+                k = "donut_id"
+                if k in adt.colnames:  # safeguard against older data
+                    nrows = len(raw_table)
+                    dtype = adt[k].dtype
+                    if k + "_intra" not in raw_table.colnames:
+                        raw_table[k + "_intra"] = np.full(nrows, "", dtype=dtype)
+                        raw_table[k + "_extra"] = np.full(nrows, "", dtype=dtype)
                     raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
                     raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
 
@@ -1014,6 +1038,17 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
                     raw_table[k + "_extra"] = np.nan
                 raw_table[k + "_intra"][w] = adt[k][wintra]
                 raw_table[k + "_extra"][w] = adt[k][wextra]
+            # donut id can't be averaged like coordinates or centroids,
+            # so we process it separately
+            k = "donut_id"
+            if k in adt.colnames:  # safeguard against older data
+                nrows = len(raw_table)
+                dtype = adt[k].dtype
+                if k + "_intra" not in raw_table.colnames:
+                    raw_table[k + "_intra"] = np.full(nrows, "", dtype=dtype)
+                    raw_table[k + "_extra"] = np.full(nrows, "", dtype=dtype)
+                raw_table[k + "_intra"][w] = adt[k][wintra]
+                raw_table[k + "_extra"][w] = adt[k][wextra]
 
         return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
@@ -1087,6 +1122,12 @@ class AggregateAOSVisitTableUnpairedCwfsTask(AggregateAOSVisitTableTask):
             for k in avg_keys:
                 # ought to be the same length now
                 raw_table[k][w] = adt[k][wadt]
+            if "donut_id" in adt.colnames:  # safeguard against older data
+                nrows = len(raw_table)
+                dtype = adt["donut_id"].dtype
+                if "donut_id" not in raw_table.colnames:
+                    raw_table["donut_id"] = np.full(nrows, "", dtype=dtype)
+                raw_table["donut_id"][w] = adt["donut_id"][wadt]
 
         return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
@@ -1257,8 +1298,9 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
                     extraStampsMetadata[key] = extra.metadata[key]
 
             # Append the requested number of donuts
-            intraStampsList.append(intraStampsSelect[: self.config.maxDonutsPerDetector])
-            extraStampsList.append(extraStampsSelect[: self.config.maxDonutsPerDetector])
+            maxKeep = min(len(intraStampsSelect), len(extraStampsSelect), self.config.maxDonutsPerDetector)
+            intraStampsList.append(intraStampsSelect[:maxKeep])
+            extraStampsList.append(extraStampsSelect[:maxKeep])
 
         intraStampsListRavel = [stamp for stampList in intraStampsList for stamp in stampList]
         extraStampsListRavel = [stamp for stampList in extraStampsList for stamp in stampList]
@@ -1322,10 +1364,9 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
-        stampsOut = self.run(
-            butlerQC.get(inputRefs.donutStampsIn),
-            butlerQC.get(inputRefs.qualityTables),
-        )
+        stampsIn = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.donutStampsIn}
+        qualityTables = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.qualityTables}
+        stampsOut = self.run(stampsIn, qualityTables)
 
         butlerQC.put(
             stampsOut.stamps,
@@ -1335,8 +1376,8 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        stampsIn: typing.List,
-        qualityTables: typing.List,
+        stampsIn: dict,
+        qualityTables: dict,
     ) -> pipeBase.Struct:
         """Aggregate donut stamps for a set of visits.
 
@@ -1354,8 +1395,19 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         """
         stampsList = []
         stampsMetadata = None
-        for stamps, quality in zip(stampsIn, qualityTables):
+        allCwfsIds = extra_focal_ids | intra_focal_ids
+        for detId in allCwfsIds:
             # Skip if quality table is empty.
+            stamps = stampsIn.get(detId)
+            quality = qualityTables.get(detId)
+            # If the detector doesn't have stamps or a quality table move on
+            if stamps is None:
+                self.log.warning(f"Missing stamps for detector {detId}, skipping.")
+                continue
+            if quality is None:
+                self.log.warning(f"Missing quality table for detector {detId}, skipping.")
+                continue
+            # If no quality sources in quality table move on
             if len(quality) == 0:
                 continue
 

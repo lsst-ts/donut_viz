@@ -7,8 +7,10 @@ import galsim
 import numpy as np
 import yaml
 from astropy import units as u
+from astropy.coordinates import Angle
 from astropy.table import Table
 from astropy.time import Time
+from galsim import GalSimFFTSizeError
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -42,8 +44,9 @@ from .utilities import (
 from .zernike_pyramid import zernikePyramid
 
 try:
+    from lsst.rubintv.production.formatters import makePlotFile
+    from lsst.rubintv.production.locationConfig import getAutomaticLocationConfig
     from lsst.rubintv.production.uploaders import MultiUploader
-    from lsst.rubintv.production.utils import getAutomaticLocationConfig, makePlotFile
 except ImportError:
     MultiUploader = None
 
@@ -1273,6 +1276,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         super().__init__(*args, **kwargs)
         self.config: PlotDonutFitsTaskConfig = cast(PlotDonutFitsTaskConfig, self.config)
 
+        galsim.errors.raise_fft_size_error = True
+
         if self.config.doRubinTVUpload:
             if not MultiUploader:
                 raise RuntimeError("MultiUploader is not available")
@@ -1289,21 +1294,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             "R00_SW0",
             instConfigFile,
         )
-        obsc = self.instrument.obscuration
-        focal_length = self.instrument.focalLength
-        r_outer = self.instrument.radius
-        pixel_scale = self.instrument.pixelSize
-        self.factory = danish.DonutFactory(
-            R_outer=r_outer,
-            R_inner=r_outer * obsc,
-            mask_params=self.mask_params,
-            focal_length=focal_length,
-            pixel_scale=pixel_scale,
-        )
 
         # Setup danish algo
         self.danish_algo = DanishAlgorithm()
-        self.danish_model_keys = ["fwhm", "model_dx", "model_dy", "model_sky_level"]
+        self.danish_model_keys = ["fwhm", "model_bkg", "model_dx", "model_dy", "model_flux"]
 
     @timeMethod
     def runQuantum(
@@ -1417,7 +1411,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         )
         input_images = [img_extra, img_intra]
 
-        model = danish.MultiDonutModel(
+        zk_fit = zk_deviation_CCS - zk_intrinsic_CCS
+
+        nbkg = danish_meta["model_bkg"].shape[1]
+        bkg_order = int(np.sqrt(9 + 8 * (nbkg - 1)) - 3) // 2
+        model = danish.DZMultiDonutModel(
             self.factory,
             z_refs=[zkRef_extra, zkRef_intra],
             dz_terms=dz_terms,
@@ -1425,16 +1423,29 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             thxs=[angle_extra[0], angle_intra[0]],
             thys=[angle_extra[1], angle_intra[1]],
             npix=img_extra.shape[0],
+            bkg_order=bkg_order,
         )
 
-        model_images = model.model(
-            danish_meta["model_dx"],
-            danish_meta["model_dy"],
-            danish_meta["fwhm"],
-            zk_deviation_CCS,
-            sky_levels=danish_meta["model_sky_level"],
-            fluxes=np.sum([img_extra, img_intra], axis=(1, 2)),
-        )
+        # need inner dimension to be type other than ndarray for the cache
+        bkgs = [tuple(bkg) for bkg in danish_meta["model_bkg"]]
+        try:
+            model_images = model.model(
+                danish_meta["model_flux"],
+                danish_meta["model_dx"],
+                danish_meta["model_dy"],
+                danish_meta["fwhm"],
+                zk_fit,
+                bkgs=bkgs,
+            )
+        except (GalSimFFTSizeError, ValueError) as e:
+            if isinstance(e, GalSimFFTSizeError) or "cannot convert float NaN to integer" in str(e):
+                self.log.warning(f"Returning empty model images due to following galsim error: {str(e)}")
+            else:
+                raise e
+
+            # If the model fails to generate due to known error,
+            # we return empty model images
+            model_images = [np.zeros_like(img_extra), np.zeros_like(img_intra)]
 
         return input_images, model_images
 
@@ -1495,11 +1506,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         axs[0].imshow(imgs[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
         axs[0].text(5, 150, f"blur: {blur:5.3f}")
         axs[1].imshow(models[0], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        axs[1].text(5, 150, f"id:           {row['intra_donut_id'][-3:]}", fontsize="small")
         axs[2].imshow(imgs[0] - models[0], cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
         _, _, ttl_res = self.computeResidualStats(imgs[0], models[0])
         axs[2].text(5, 150, f"res: {ttl_res:5.3f}")
         axs[3].imshow(imgs[1], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
         axs[4].imshow(models[1], cmap=cmap, vmin=-vmax / 10, vmax=vmax)
+        axs[4].text(5, 150, f"id:           {row['extra_donut_id'][-3:]}", fontsize="small")
         axs[5].imshow(imgs[1] - models[1], cmap="bwr", vmin=-vmax / 3, vmax=vmax / 3)
         _, _, ttl_res = self.computeResidualStats(imgs[1], models[1])
         axs[5].text(5, 150, f"res: {ttl_res:5.3f}")
@@ -1542,6 +1555,18 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             color = "green" if row["used"] else "red"
         axs[6].spines["right"].set_edgecolor(color)
         axs[6].spines["right"].set_linewidth(3)
+
+    @staticmethod
+    def _get_rtp(donutStamps: DonutStamps | None) -> Angle:
+        if not donutStamps:
+            return Angle(np.nan, "rad")
+        metadata = donutStamps.metadata
+        try:
+            rsp = metadata["BORESIGHT_ROT_ANGLE_RAD"]
+            q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
+        except KeyError:
+            return Angle(np.nan, "rad")
+        return Angle(q - rsp - np.pi / 2, "rad")
 
     def run(
         self,
@@ -1590,6 +1615,20 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
         assert all([bandpass == bp for bp in donutStampsExtra.getBandpasses()])
         noll_indices = aos_raw.meta["nollIndices"]
+
+        obsc = self.instrument.obscuration
+        focal_length = self.instrument.focalLength
+        r_outer = self.instrument.radius
+        pixel_scale = self.instrument.pixelSize
+        rtp = self._get_rtp(donutStampsExtra)
+        self.factory = danish.DonutFactory(
+            R_outer=r_outer,
+            R_inner=r_outer * obsc,
+            mask_params=self.mask_params,
+            focal_length=focal_length,
+            pixel_scale=pixel_scale,
+            spider_angle=rtp.deg,
+        )
 
         # Get the trim from EFD: applied corrections
         if record is None:
@@ -1738,10 +1777,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 extra_stamp = donutStampsExtraSel[idx]
 
                 necessary_keys = set(self.danish_model_keys)
-                if set(row.meta["estimatorInfo"].keys()) & necessary_keys != necessary_keys:
+                available_keys = set(row.meta["estimatorInfo"].keys())
+                if available_keys & necessary_keys != necessary_keys:
+                    missing_keys = necessary_keys - available_keys
                     self.log.warning(
                         f"No model plot produced for {raft}, donut index: {irow}. "
-                        + "Required metadata for danish model not found in aggregateAOSVisitTableRaw."
+                        + "Required metadata for danish model not found in aggregateAOSVisitTableRaw. "
+                        + f"Missing keys: {sorted(missing_keys)}"
                     )
                     continue
 
@@ -1936,13 +1978,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             ("M2 dz (microns)", [0]),
             ("M2 dx (microns)", [1]),
             ("M2 dy (microns)", [2]),
-            ("M2 rx (deg)", [3]),
-            ("M2 ry (deg)", [4]),
+            ("M2 rx (asec)", [3]),
+            ("M2 ry (asec)", [4]),
             ("Camera dz (microns)", [5]),
             ("Camera dx (microns)", [6]),
             ("Camera dy (microns)", [7]),
-            ("Camera rx (deg)", [8]),
-            ("Camera ry (deg)", [9]),
+            ("Camera rx (asec)", [8]),
+            ("Camera ry (asec)", [9]),
         ]
 
         bending_groups = [
@@ -1987,6 +2029,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         # --- Render rigid-body group in first column
         for label, idxs in rigid_groups:
             val = states_val[idxs[0]]
+            if idxs[0] in [3, 4, 8, 9]:
+                val *= 3600  # convert deg to asec for M2/camera rx, ry
             lines = format_group([val], label, rigid=True, max_int=max_int_rigid)
             for line in lines:
                 bottom_ax.text(
