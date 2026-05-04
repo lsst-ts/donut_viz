@@ -8,7 +8,7 @@ imports:
       - plotDonutTask
       - plotPsfZernTask
       - aggregateDonutStampsTask
-      - aggregateDonutTablesGroupTask
+      - aggregateDonutTablesVisitTask
       - aggregateAOSVisitTableTask
 tasks:
   generateDonutDirectDetectTask:

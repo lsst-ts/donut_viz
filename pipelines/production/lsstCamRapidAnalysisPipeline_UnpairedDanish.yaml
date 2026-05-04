@@ -1,8 +1,8 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsUnpairedPipeline.yaml
-  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsUnpairedPipeline.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectUnpairedPipeline.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizUnpairedPipeline.yaml
 
 # Define pipeline steps
 subsets:
