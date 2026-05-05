@@ -15,6 +15,22 @@ Version History
 
 .. towncrier release notes start
 
+v4.0.0 (2026-05-04)
+===================
+
+New Features
+------------
+
+- Updated to be compatible with danish v1.0.0. (`DM-54280 <https://rubinobs.atlassian.net//browse/DM-54280>`_)
+- Added donut id information into aggregate tables. Trimmed aggregate donut stamps plots to only include the donut stamps that appear in the raw table so they match.  Added the donut id information to the donut fits plots. (`RSO-242 <https://rubinobs.atlassian.net//browse/RSO-242>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Convert M2/Camera tilt values from EFD (displayed in a table below donutPlot) from degrees to asec. (`DM-54584 <https://rubinobs.atlassian.net//browse/DM-54584>`_)
+
+
 v3.6.1 (2026-03-31)
 ===================
 
