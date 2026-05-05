@@ -1,15 +1,12 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamScienceSensorRapidAnalysisPipeline_Danish.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_UnpairedDanish.yaml
     exclude:
-      - calcZernikesTask
+      - cutOutDonutsCwfsPairTask
       - plotAOSTask
-      - plotDonutTask
-      - plotPsfZernTask
-      - aggregateDonutStampsTask
-      - aggregateDonutTablesVisitTask
-      - aggregateAOSVisitTableTask
+      - plotDonutUnpairedCwfsTask
+      - plotDonutFitsUnpairedTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
@@ -30,14 +27,10 @@ tasks:
     config:
       connections.donutStamps: donutStampsScienceSensor
       donutStampSelector.maxSelect: 20
-  aggregateDonutTablesUnpairedTask:
-    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
   aggregateDonutStampsUnpairedTask:
     class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
     config:
       connections.donutStampsIn: donutStampsScienceSensor
-  aggregateAOSVisitTableUnpairedTask:
-    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
 
 # Define pipeline steps
 subsets:

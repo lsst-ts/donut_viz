@@ -1398,8 +1398,8 @@ class AggregateDonutStampsUnpairedTask(pipeBase.PipelineTask):
         """
         stampsList = []
         stampsMetadata = None
-        allCwfsIds = extra_focal_ids | intra_focal_ids
-        for detId in allCwfsIds:
+
+        for detId in stampsIn.keys():
             # Skip if quality table is empty.
             stamps = stampsIn.get(detId)
             quality = qualityTables.get(detId)
