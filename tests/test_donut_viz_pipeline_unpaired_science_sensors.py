@@ -49,7 +49,7 @@ class TestDonutVizPipeline(TestCase):
             "band",
         ]
 
-        cls.butler = Butler(cls.test_repo_dir, instrument="LSSTCam")
+        cls.butler = Butler.from_config(cls.test_repo_dir)
         cls.test_run_name = "test_run_1"
         registry = cls.butler.registry
         collections_list = list(registry.queryCollections())
