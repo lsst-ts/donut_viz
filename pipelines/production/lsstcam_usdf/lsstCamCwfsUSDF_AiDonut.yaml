@@ -28,7 +28,7 @@ tasks:
       python: |
         from lsst.ts.wep.task import EstimateZernikesAiDonutTask
         config.estimateZernikes.retarget(EstimateZernikesAiDonutTask)
-      donutStampSelector.maxSelect: 4
+      donutStampSelector.maxSelect: 20
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.useCustomSnLimit: True
       donutStampSelector.minSignalToNoise: 100
