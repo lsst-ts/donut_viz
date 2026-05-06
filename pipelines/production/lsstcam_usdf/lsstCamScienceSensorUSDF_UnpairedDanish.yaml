@@ -1,4 +1,4 @@
-description: rapid analysis pipeline for LSSTCam
+description: USDF pipeline for AOS analysis on FAM visits using unpaired Danish algorithm.
 instrument: lsst.obs.lsst.LsstCam
 imports:
   - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_UnpairedDanish.yaml
@@ -7,6 +7,7 @@ imports:
       - plotAOSTask
       - plotDonutUnpairedCwfsTask
       - plotDonutFitsUnpairedTask
+      - aggregateDonutStampsUnpairedTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
@@ -27,10 +28,6 @@ tasks:
     config:
       connections.donutStamps: donutStampsScienceSensor
       donutStampSelector.maxSelect: 20
-  aggregateDonutStampsUnpairedTask:
-    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
-    config:
-      connections.donutStampsIn: donutStampsScienceSensor
 
 # Define pipeline steps
 subsets:
@@ -51,7 +48,6 @@ subsets:
       - aggregateZernikeTablesTask
       - aggregateDonutTablesUnpairedTask
       - aggregateAOSVisitTableUnpairedTask
-      - aggregateDonutStampsUnpairedTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
