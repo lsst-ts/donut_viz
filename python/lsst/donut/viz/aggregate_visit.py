@@ -559,6 +559,14 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         donutTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables}
         qualityTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.qualityTables}
 
+        # Guard against empty inputs
+        if len(donutTables) == 0:
+            self.log.warning("No donut tables found. Writing empty output.")
+            empty = QTable()
+            empty.meta = {}
+            butlerQC.put(empty, outputRefs.aggregateDonutTable)
+            return
+
         aggTable = self.run(camera, donutTables, qualityTables)
         butlerQC.put(aggTable.aggregateDonutTable, outputRefs.aggregateDonutTable)
 
@@ -854,6 +862,15 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         adt = butlerQC.get(inputRefs.aggregateDonutTable)
         azr = butlerQC.get(inputRefs.aggregateZernikesRaw)
         aza = butlerQC.get(inputRefs.aggregateZernikesAvg)
+
+        # Guard against empty inputs
+        if len(azr) == 0 or len(aza) == 0 or len(adt) == 0:
+            self.log.warning("Empty input tables. Writing empty outputs.")
+            empty = Table()
+            empty.meta = {}
+            butlerQC.put(empty, outputRefs.aggregateAOSAvg)
+            butlerQC.put(empty, outputRefs.aggregateAOSRaw)
+            return
 
         tables = self.run(adt, azr, aza)
 
