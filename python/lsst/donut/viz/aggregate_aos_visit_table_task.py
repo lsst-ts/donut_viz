@@ -113,6 +113,15 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         azr = butlerQC.get(inputRefs.aggregateZernikesRaw)
         aza = butlerQC.get(inputRefs.aggregateZernikesAvg)
 
+        # Guard against empty inputs
+        if len(azr) == 0 or len(aza) == 0 or len(adt) == 0:
+            self.log.warning("Empty input tables. Writing empty outputs.")
+            empty = Table()
+            empty.meta = {}
+            butlerQC.put(empty, outputRefs.aggregateAOSAvg)
+            butlerQC.put(empty, outputRefs.aggregateAOSRaw)
+            return
+
         tables = self.run(adt, azr, aza)
 
         butlerQC.put(tables.avg, outputRefs.aggregateAOSAvg)

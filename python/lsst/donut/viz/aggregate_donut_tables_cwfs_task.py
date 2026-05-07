@@ -21,7 +21,7 @@
 
 import numpy as np
 from astropy import units as u
-from astropy.table import vstack
+from astropy.table import QTable, vstack
 
 import lsst.pipe.base as pipeBase
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
@@ -95,6 +95,14 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         # Make dictionaries to match detectors
         donutTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables}
         qualityTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.qualityTables}
+
+        # Guard against empty inputs
+        if len(donutTables) == 0:
+            self.log.warning("No donut tables found. Writing empty output.")
+            empty = QTable()
+            empty.meta = {}
+            butlerQC.put(empty, outputRefs.aggregateDonutTable)
+            return
 
         aggTable = self.run(camera, donutTables, qualityTables)
         butlerQC.put(aggTable.aggregateDonutTable, outputRefs.aggregateDonutTable)
