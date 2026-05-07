@@ -1,0 +1,58 @@
+description: USDF pipeline for AOS analysis on FAM visits using unpaired Danish algorithm starting from previously run paired visit data that has donutStampsIntra output
+instrument: lsst.obs.lsst.LsstCam
+
+tasks:
+  calcZernikesUnpairedTask:
+    class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
+    config:
+      connections.donutStamps: donutStampsIntra
+      connections.outputZernikesRaw: zernikeEstimateRawIntra
+      connections.outputZernikesAvg: zernikeEstimateAvgIntra
+      connections.zernikes: zernikesIntra
+      connections.donutQualityTable: donutQualityTableIntra
+      donutStampSelector.maxSelect: 20
+  aggregateDonutTablesUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
+    config:
+      connections.qualityTables: donutQualityTableIntra
+      connections.donutTables: donutTableIntra
+      connections.aggregateDonutTable: aggregateDonutTableIntra
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+    config:
+      connections.zernikeTable: zernikesIntra
+      connections.aggregateZernikesRaw: aggregateZernikesRawIntra
+      connections.aggregateZernikesAvg: aggregateZernikesAvgIntra
+  aggregateAOSVisitTableUnpairedTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
+    config:
+      connections.aggregateDonutTable: aggregateDonutTableIntra
+      connections.aggregateZernikesRaw: aggregateZernikesRawIntra
+      connections.aggregateZernikesAvg: aggregateZernikesAvgIntra
+      connections.aggregateAOSRaw: aggregateAOSVisitTableRawIntra
+      connections.aggregateAOSAvg: aggregateAOSVisitTableAvgIntra
+
+# Define pipeline steps
+subsets:
+  step1b-visits:
+    subset:
+      - calcZernikesUnpairedTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
+  step2-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesUnpairedTask
+      - aggregateAOSVisitTableUnpairedTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
+
+steps:
+  - label: step1b-visits
+    dimensions: []
+  - label: step2-visits
+    dimensions: []
