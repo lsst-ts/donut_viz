@@ -187,6 +187,13 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                     estimator_meta[key] += val
 
         # Aggregate all tables
+        if len(raw_tables) == 0:
+            self.log.warning("No valid zernike tables to aggregate. Returning empty tables.")
+            out_raw = Table()
+            out_avg = Table()
+            out_raw.meta = {}
+            out_avg.meta = {}
+            return pipeBase.Struct(raw=out_raw, avg=out_avg)
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
 
