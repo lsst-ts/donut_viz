@@ -8,10 +8,10 @@ tasks:
     config:
       connections.donutStampsIn: "donutStampsCwfs"
       maxDonutsPerDetector: 4
-  aggregateDonutTablesUnpairedCwfsTask:
-    class: lsst.donut.viz.AggregateDonutTablesUnpairedCwfsTask
-  aggregateAOSVisitTableUnpairedCwfsTask:
-    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedCwfsTask
+  aggregateDonutTablesUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
+  aggregateAOSVisitTableUnpairedTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:
