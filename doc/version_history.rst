@@ -15,6 +15,21 @@ Version History
 
 .. towncrier release notes start
 
+v4.1.0 (2026-05-08)
+===================
+
+New Features
+------------
+
+- Add ability to run pipelines on science sensors in unpaired mode. (`DM-53676 <https://rubinobs.atlassian.net//browse/DM-53676>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Set estimateZernikes.nollIndices to align with expectations of weighted average AI donut model, add USDF AI donut pipeline. (`DM-54785 <https://rubinobs.atlassian.net//browse/DM-54785>`_)
+
+
 v4.0.0 (2026-05-04)
 ===================
 
