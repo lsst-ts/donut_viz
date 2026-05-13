@@ -1,5 +1,11 @@
 description: USDF pipeline for AOS analysis on FAM visits using unpaired Danish algorithm starting from previously run paired visit data that has donutStampsIntra output
 instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectUnpairedPipeline.yaml
+    exclude:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsCwfsPairTask
 
 tasks:
   calcZernikesUnpairedTask:
