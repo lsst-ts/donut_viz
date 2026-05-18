@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v4.1.1 (2026-05-13)
+===================
+
+Bug Fixes
+---------
+
+- Modified the Unpaired Science Sensor Extra/Intra USDF pipelines to get the noll indices in a consistent manner with the other Unpaired Zernike pipelines. (`rso-539 <https://rubinobs.atlassian.net//browse/rso-539>`_)
+
+
 v4.1.0 (2026-05-08)
 ===================
 
