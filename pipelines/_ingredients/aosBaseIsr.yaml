@@ -15,10 +15,10 @@ tasks:
       crosstalk.doQuadraticCrosstalkCorrection: False
       qa.saveStats: False
       doStandardStatistics: False
-      doInterpolate: False
+      doInterpolate: True
       doVariance: False
       doDeferredCharge: False
-      doDefect: False
+      doDefect: True
       doApplyGains: True
       doBias: False
       doFlat: True
