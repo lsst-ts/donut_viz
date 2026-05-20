@@ -1297,7 +1297,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Setup danish algo
         self.danish_algo = DanishAlgorithm()
-        self.danish_model_keys = ["fwhm", "model_bkg", "model_dx", "model_dy", "model_flux"]
+        self.danish_model_keys = ["fit_success", "fwhm", "model_bkg", "model_dx", "model_dy", "model_flux"]
 
     @timeMethod
     def runQuantum(
@@ -1410,6 +1410,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             instrument=self.instrument,
         )
         input_images = [img_extra, img_intra]
+
+        if danish_meta["fit_success"] <= 0:
+            self.log.warning("Original Danish fit was not successful, returning empty model images")
+            model_images = [np.zeros_like(img_extra), np.zeros_like(img_intra)]
+            return input_images, model_images
 
         zk_fit = zk_deviation_CCS - zk_intrinsic_CCS
 
