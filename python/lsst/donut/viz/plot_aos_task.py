@@ -1807,10 +1807,12 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 intra_model = model_imgs[1]
 
                 intra_img /= np.sum(intra_img)
-                intra_model /= np.sum(intra_model)
+                if np.sum(intra_model) > 0:
+                    intra_model /= np.sum(intra_model)
 
                 extra_img /= np.sum(extra_img)
-                extra_model /= np.sum(extra_model)
+                if np.sum(extra_model) > 0:
+                    extra_model /= np.sum(extra_model)
 
                 self.plotResults(
                     axs=axdict[raft][irow],
