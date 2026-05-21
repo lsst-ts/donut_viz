@@ -325,7 +325,7 @@ class TestDonutVizPipeline(TestCase):
             expected = (
                 "No model plot produced for R00, "
                 f"donut index: {idx}. Required metadata for danish model not found in "
-                "aggregateAOSVisitTableRaw. Missing keys: ['model_bkg', 'model_dx', "
+                "aggregateAOSVisitTableRaw. Missing keys: ['fit_success', 'model_bkg', 'model_dx', "
                 "'model_dy', 'model_flux']"
             )
             # "rec.getMessage()" gives the real log message
@@ -335,7 +335,8 @@ class TestDonutVizPipeline(TestCase):
         # Test getModel function
         err_msg = str(
             "danish_meta must contain the following keys: "
-            + "['fwhm', 'model_bkg', 'model_dx', 'model_dy', 'model_flux'], but only contains: {'fwhm'}"
+            + "['fit_success', 'fwhm', 'model_bkg', 'model_dx', 'model_dy', 'model_flux'], "
+            + "but only contains: {'fwhm'}"
         )
         with self.assertRaises(ValueError) as cm2:
             self.task.getModel(
