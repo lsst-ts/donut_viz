@@ -1222,10 +1222,18 @@ class AggregateDonutStampsTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ) -> None:
+        # Make robust to missing data: if any of the inputs are missing
+        # for a given detector, that detector will be skipped.
+        intraStampsDict = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.donutStampsIntra}
+        extraStampsDict = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.donutStampsExtra}
+        qualityTablesDict = {ref.dataId["detector"]: butlerQC.get(ref) for ref in inputRefs.qualityTables}
+        intersectingDetectors = (
+            set(intraStampsDict.keys()) & set(extraStampsDict.keys()) & set(qualityTablesDict.keys())
+        )
         stampsOut = self.run(
-            butlerQC.get(inputRefs.donutStampsIntra),
-            butlerQC.get(inputRefs.donutStampsExtra),
-            butlerQC.get(inputRefs.qualityTables),
+            [intraStampsDict[detector] for detector in intersectingDetectors],
+            [extraStampsDict[detector] for detector in intersectingDetectors],
+            [qualityTablesDict[detector] for detector in intersectingDetectors],
         )
 
         butlerQC.put(
