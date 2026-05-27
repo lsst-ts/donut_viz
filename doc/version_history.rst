@@ -15,6 +15,22 @@ Version History
 
 .. towncrier release notes start
 
+v4.2.0 (2026-05-26)
+===================
+
+New Features
+------------
+
+- Set `doDefect` and `doInterpolate` to True in the base ISR pipeline ingredient. (`RSO-554 <https://rubinobs.atlassian.net//browse/RSO-554>`_)
+
+
+Bug Fixes
+---------
+
+- Stopped trying to make the model in plotDonutFitsTask if the original Danish fit was unsuccessful.
+  Added logic to make sure that the lists of intra-focal stamps, extra-focal stamps, and donutQualityTables going into AggregateDonutStampsTask are the same and aligned. (`RSO-562 <https://rubinobs.atlassian.net//browse/RSO-562>`_)
+
+
 v4.1.1 (2026-05-13)
 ===================
 
