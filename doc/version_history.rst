@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v4.3.0 (2026-05-29)
+===================
+
+Other Changes and Additions
+---------------------------
+
+- Added the most updated AIDonut model configuration yaml files both binned and unbinned version. (`DM-133 <https://rubinobs.atlassian.net//browse/DM-133>`_)
+
+
 v4.2.0 (2026-05-26)
 ===================
 
