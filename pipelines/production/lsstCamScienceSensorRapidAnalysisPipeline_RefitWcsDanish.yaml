@@ -5,16 +5,7 @@ instrument: lsst.obs.lsst.LsstCam
 imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepRefitWcsScienceSensorPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
-tasks:
-  aggregateDonutTablesVisitTask:
-    class: lsst.donut.viz.AggregateDonutTablesTask
-    config: # use the refit table for aggregation
-      connections.donutTables: refitWcsDonutTable
-  plotDonutFitsTask: # donut viz task that applies only to Danish
-    class: lsst.donut.viz.PlotDonutFitsTask
-    config:
-      doRubinTVUpload: True
-      
+
 # Define pipeline steps
 subsets:
   step1a-detectors:
