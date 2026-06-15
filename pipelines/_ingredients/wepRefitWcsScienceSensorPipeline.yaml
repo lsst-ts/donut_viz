@@ -32,7 +32,8 @@ tasks:
       donutSelector.maxFieldDist: 1.725
       donutSelector.sourceLimit: 40
       astromRefFilter: "phot_rp_mean"
-      photoRefFilterPrefix: "phot_rp_mean"
+      #photoRefFilterPrefix: "phot_rp_mean"
+      photoRefFilter: "phot_rp_mean"
       catalogFilterList: ["phot_g_mean", "phot_bp_mean", "phot_rp_mean", "monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r", "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y"]
       astromTask.referenceSelector.doMagLimit: True
       astromTask.referenceSelector.magLimit.maximum: 18.0
