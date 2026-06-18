@@ -34,6 +34,7 @@ class TestDonutVizPipeline(TestCase):
     test_run_name: str
     camera_name: str
     meta_keys: list[str]
+    butler: Butler
 
     @classmethod
     def setUpClass(cls) -> None:
