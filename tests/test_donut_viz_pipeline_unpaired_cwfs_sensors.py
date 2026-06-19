@@ -34,6 +34,7 @@ class TestDonutVizPipeline(TestCase):
     meta_keys: list[str]
     extra_detector_names: list[str]
     intra_detector_names: list[str]
+    butler: Butler
 
     @classmethod
     def setUpClass(cls) -> None:
