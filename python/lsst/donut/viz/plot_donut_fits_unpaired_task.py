@@ -191,6 +191,9 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
         self.obsc = self.instrument.obscuration
         self.fl = self.instrument.focalLength
 
+        # Initialize factory (will be set in run method)
+        self.factory: danish.DonutFactory | None = None
+
     # Helpers
     def _safeNormalize(self, arr: np.ndarray) -> np.ndarray:
         try:

@@ -19,15 +19,15 @@ tasks:
       donutSelector.useCustomMagLimit: True
       donutSelector.maxFieldDist: 1.725
       donutSelector.sourceLimit: 40
-      astromRefFilter: "monster_ComCam_r"
-      photoRefFilterPrefix: "monster_ComCam"
-      catalogFilterList: ["monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r", "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y"]
+      astromRefFilter: "phot_rp_mean"
+      photoRefFilter: "phot_rp_mean"
+      catalogFilterList: ["phot_g_mean", "phot_bp_mean", "phot_rp_mean", "monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r", "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y"]
       astromTask.referenceSelector.doMagLimit: True
-      astromTask.referenceSelector.magLimit.maximum: 24.0
-      astromTask.referenceSelector.magLimit.fluxField: "monster_ComCam_r_flux"
+      astromTask.referenceSelector.magLimit.maximum: 18.0
+      astromTask.referenceSelector.magLimit.fluxField: "phot_rp_mean_flux"
       astromTask.maxIter: 5
-      astromTask.matcher.maxOffsetPix: 200
-      astromTask.matcher.maxRotationDeg: 1.0
+      astromTask.matcher.maxOffsetPix: 1000
+      # astromTask.matcher.maxRotationDeg: 1.0
       failTask: False
       # Settings to use to add blended donuts
       # donutSelector.unblendedSeparation: 160
