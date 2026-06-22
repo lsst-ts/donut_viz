@@ -15,6 +15,21 @@ Version History
 
 .. towncrier release notes start
 
+v4.4.0 (2026-06-22)
+===================
+
+Bug Fixes
+---------
+
+- Fixed mypy errors in code and tests. (`RSO-529 <https://rubinobs.atlassian.net//browse/RSO-529>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Updated the filters used in refitWCS catalog generation to match the better settings used in the baseline WCS catalog generation. (`RSO-617 <https://rubinobs.atlassian.net//browse/RSO-617>`_)
+
+
 v4.3.0 (2026-05-29)
 ===================
 
