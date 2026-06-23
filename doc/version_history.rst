@@ -15,6 +15,16 @@ Version History
 
 .. towncrier release notes start
 
+v4.5.0 (2026-06-23)
+===================
+
+New Features
+------------
+
+- Turned on triangle mode when estimating Zernikes using Danish. (`RSO-655 <https://rubinobs.atlassian.net//browse/RSO-655>`_)
+- Turned on cone mode in estimateZernikesDanishTask. (`rso-549 <https://rubinobs.atlassian.net//browse/rso-549>`_)
+
+
 v4.4.0 (2026-06-22)
 ===================
 
