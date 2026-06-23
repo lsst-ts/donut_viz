@@ -11,6 +11,7 @@ tasks:
       donutStampSelector.selectWithMaxPowerGrad: False
       estimateZernikes.binning: 2
       estimateZernikes.doAoiThroughput: True
+      estimateZernikes.triangleMode: True
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
         xtol: 1.0e-3
