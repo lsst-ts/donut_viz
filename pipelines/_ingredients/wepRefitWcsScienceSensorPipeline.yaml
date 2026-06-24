@@ -29,3 +29,4 @@ tasks:
       class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
       config:
         donutStampSelector.maxSelect: 16 # Same max density as half size WFS chips (currently at 8 on CWFS)
+
