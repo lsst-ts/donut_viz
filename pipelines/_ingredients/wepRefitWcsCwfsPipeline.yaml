@@ -1,10 +1,25 @@
 description: wep refitWCS pipeline for wavefront sensors
 imports:
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/aosBaseIsr.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/danishCalcZernikesBase.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/aosBaseRefitWcs.yaml
 tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      connections.exposure: post_isr_image
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 20
+      donutSelector.maxFieldDist: 1.725
+      measurementTask.nSigmaDetection: 5.0
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       connections.exposure: post_fit_post_isr_image
       connections.donutCatalog: refitWcsDonutTable
+      donutStampSize: 160
+      initialCutoutPadding: 40
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+    config:
+      customQG: True
