@@ -15,6 +15,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import ConnectionPatch
+from packaging import version as pkg_version
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -1626,7 +1627,15 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         r_outer = self.instrument.radius
         pixel_scale = self.instrument.pixelSize
         rtp = self._get_rtp(donutStampsExtra)
-        self.factory = danish.DonutFactory(
+        danish_version = pkg_version.parse(danish.__version__)
+        min_triangle_mode_version = pkg_version.parse("1.2")
+        if danish_version >= min_triangle_mode_version:
+            self.log.info(f"Using danish version {danish.__version__} with triangle mode support")
+            factory_class = danish.DonutTriangleFactory
+        else:
+            self.log.info(f"Using danish version {danish.__version__} without triangle mode support")
+            factory_class = danish.DonutFactory
+        self.factory = factory_class(
             R_outer=r_outer,
             R_inner=r_outer * obsc,
             mask_params=self.mask_params,
@@ -1793,14 +1802,32 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     continue
 
                 danish_meta = {key: value[irow] for key, value in raft_meta.items()}
-                imgs, model_imgs = self.getModel(
-                    row["zk_deviation_CCS"],
-                    row["zk_intrinsic_CCS"],
-                    noll_indices,
-                    danish_meta,
-                    extra_stamp,
-                    intra_stamp,
-                )
+                if "model_img" in danish_meta.keys():
+                    self.log.info(f"Using precomputed model images for {raft}, donut index: {irow}")
+                    img_extra, angle_extra, zkRef_extra, backgroundStd_extra = self.danish_algo._prepDanish(
+                        image=extra_stamp.wep_im,
+                        zkStart=row["zk_intrinsic_CCS"],
+                        nollIndices=noll_indices,
+                        instrument=self.instrument,
+                    )
+                    img_intra, angle_intra, zkRef_intra, backgroundStd_intra = self.danish_algo._prepDanish(
+                        image=intra_stamp.wep_im,
+                        zkStart=row["zk_intrinsic_CCS"],
+                        nollIndices=noll_indices,
+                        instrument=self.instrument,
+                    )
+                    imgs = [img_extra, img_intra]
+                    model_imgs = [danish_meta["model_img"][0], danish_meta["model_img"][1]]
+                else:
+                    self.log.info(f"Computing model images for {raft}, donut index: {irow}")
+                    imgs, model_imgs = self.getModel(
+                        row["zk_deviation_CCS"],
+                        row["zk_intrinsic_CCS"],
+                        noll_indices,
+                        danish_meta,
+                        extra_stamp,
+                        intra_stamp,
+                    )
                 extra_img = imgs[0]
                 intra_img = imgs[1]
                 extra_model = model_imgs[0]
