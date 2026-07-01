@@ -1,0 +1,73 @@
+description: USDF processing pipeline for LSSTCam CWFS data with WCS-based catalog generation using boresight information and Danish Zernike estimation.
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstcam_usdf/lsstCamCwfsUSDF_WcsCatDanish.yaml
+    exclude:
+      - reassignCwfsCutoutsPairTask
+      - plotDonutFitsTask
+    labeledSubsetModifyMode: "EDIT"
+
+tasks:
+  generateDonutCatalogWcsTask:
+    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
+    config:
+      connections.refCatalogs: "the_monster_20250219"
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 20
+      donutSelector.maxFieldDist: 1.725
+      donutSelector.unblendedSeparation: 320
+      donutSelector.isolatedMagDiff: 1.0
+      photoRefFilter: "phot_rp_mean"
+      catalogFilterList: ["phot_g_mean", "phot_bp_mean", "phot_rp_mean", "monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r", "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y"]
+  cutOutDonutsCwfsPairTask:
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    config:
+      donutStampSize: 320
+      maxRecenterDistance: 40
+      instConfigFile: "policy:instruments/LsstCam3mm.yaml"
+  reassignCwfsCutoutsFamPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsFamTask.ReassignCwfsCutoutsFamTask
+    config:
+      customQG: False
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      donutStampSelector.maxSelect: 20
+      doBlurClip: True
+      estimateZernikes.instConfigFile: "policy:instruments/LsstCam3mm.yaml"
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutCatalogWcsTask
+      - cutOutDonutsCwfsPairTask
+      - reassignCwfsCutoutsFamPairTask
+  step1b-detectors:
+    subset:
+      - calcZernikesTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
+  step2-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesCwfsTask
+      - aggregateAOSVisitTableCwfsTask
+      - aggregateDonutStampsTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
+
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-detectors
+    dimensions: [visit, detector]
+  - label: step2-visits
+    dimensions: [visit]
+
