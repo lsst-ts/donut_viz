@@ -12,6 +12,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
 from lsst.afw.image import VisitInfo
+from lsst.daf.butler import DataCoordinate
 from lsst.geom import Point2D, radians
 from lsst.pipe.base import connectionTypes as ct
 from lsst.ts.wep.task.donutStamps import DonutStamps
@@ -30,6 +31,9 @@ __all__ = [
     "AggregateDonutTablesCwfsTaskConnections",
     "AggregateDonutTablesCwfsTaskConfig",
     "AggregateDonutTablesCwfsTask",
+    "AggregateDonutTablesCwfsFamTaskConnections",
+    "AggregateDonutTablesCwfsFamTaskConfig",
+    "AggregateDonutTablesCwfsFamTask",
     "AggregateAOSVisitTableTaskConnections",
     "AggregateAOSVisitTableTaskConfig",
     "AggregateAOSVisitTableTask",
@@ -672,6 +676,55 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
 
         return pipeBase.Struct(aggregateDonutTable=out)
+
+
+class AggregateDonutTablesCwfsFamTaskConnections(
+    AggregateDonutTablesCwfsTaskConnections,
+    dimensions=("instrument", "visit"),  # type: ignore
+):
+    def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
+        """Move each intra-focal detector's donutTables ref into the
+        following visit's quantum, then drop the emptied quantum.
+        Classification is snapshotted up front since `get_inputs`
+        reflects live state and would otherwise re-flag an
+        extra-focal visit as intra-focal once it receives moved refs.
+        """
+        to_do = set(adjuster.iter_data_ids())
+        intra_refs_by_data_id = {
+            data_id: intra_refs
+            for data_id in to_do
+            if (
+                intra_refs := [
+                    ref
+                    for ref in adjuster.get_inputs(data_id)["donutTables"]
+                    if ref.dataId["detector"] in intra_focal_ids
+                ]
+            )
+        }
+
+        for data_id, intra_refs in intra_refs_by_data_id.items():
+            # The way RA runs the custom QG builder will ensure the
+            # extra focal quantum has the intra focal input.
+            extra_focal_data_id = DataCoordinate.standardize(data_id, visit=int(data_id["visit"]) + 1)
+
+            assert extra_focal_data_id in to_do, f"DataId {extra_focal_data_id} not found in to_do set."
+
+            for ref in intra_refs:
+                adjuster.add_input(extra_focal_data_id, "donutTables", ref)
+
+            adjuster.remove_quantum(data_id)
+
+
+class AggregateDonutTablesCwfsFamTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=AggregateDonutTablesCwfsFamTaskConnections,  # type: ignore
+):
+    pass
+
+
+class AggregateDonutTablesCwfsFamTask(AggregateDonutTablesCwfsTask):
+    ConfigClass = AggregateDonutTablesCwfsFamTaskConfig  # type: ignore[assignment]
+    _DefaultName = "AggregateDonutTablesCwfsFam"
 
 
 class AggregateDonutTablesUnpairedTaskConfig(
