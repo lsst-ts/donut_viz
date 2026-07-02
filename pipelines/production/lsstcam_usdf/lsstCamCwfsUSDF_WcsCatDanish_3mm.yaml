@@ -5,6 +5,7 @@ imports:
     exclude:
       - reassignCwfsCutoutsPairTask
       - plotDonutFitsTask
+      - aggregateDonutTablesCwfsTask
     labeledSubsetModifyMode: "EDIT"
 
 tasks:
@@ -35,6 +36,8 @@ tasks:
       donutStampSelector.maxSelect: 20
       doBlurClip: True
       estimateZernikes.instConfigFile: "policy:instruments/LsstCam3mm.yaml"
+  aggregateDonutTablesCwfsFamTask:
+    class: lsst.donut.viz.AggregateDonutTablesCwfsFamTask
 
 # Define pipeline steps
 subsets:
@@ -54,7 +57,7 @@ subsets:
   step2-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesCwfsTask
+      - aggregateDonutTablesCwfsFamTask
       - aggregateAOSVisitTableCwfsTask
       - aggregateDonutStampsTask
     description: |
