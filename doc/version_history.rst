@@ -15,6 +15,16 @@ Version History
 
 .. towncrier release notes start
 
+v4.6.0 (2026-07-09)
+===================
+
+New Features
+------------
+
+- Added danish v1.2 support. Added functionality for plotDonutFits to just use the danish model saved in the zernikes metadata. (`RSO-800 <https://rubinobs.atlassian.net//browse/RSO-800>`_)
+- Changed the maxRefObjects for astrometry task in refitWCS pipeline down to 2048 from the default 8192 to speed up crowded fields. (`RSO-822 <https://rubinobs.atlassian.net//browse/RSO-822>`_)
+
+
 v4.5.0 (2026-06-23)
 ===================
 
