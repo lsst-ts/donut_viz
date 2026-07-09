@@ -27,7 +27,7 @@ tasks:
       astromTask.referenceSelector.magLimit.fluxField: "phot_rp_mean_flux"
       astromTask.maxIter: 5
       astromTask.matcher.maxOffsetPix: 1000
-      # astromTask.matcher.maxRotationDeg: 1.0
+      astromTask.matcher.maxRefObjects: 2048
       failTask: False
       # Settings to use to add blended donuts
       # donutSelector.unblendedSeparation: 160
