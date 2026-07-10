@@ -1804,6 +1804,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 danish_meta = {key: value[irow] for key, value in raft_meta.items()}
                 if "model_img" in danish_meta.keys():
                     self.log.info(f"Using precomputed model images for {raft}, donut index: {irow}")
+                    binning = int(extra_stamp.wep_im.image.shape[0] / danish_meta["model_img"][0].shape[0])
+                    self.danish_algo.binning = binning
                     img_extra, angle_extra, zkRef_extra, backgroundStd_extra = self.danish_algo._prepDanish(
                         image=extra_stamp.wep_im,
                         zkStart=row["zk_intrinsic_CCS"],
