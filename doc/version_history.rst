@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v4.6.1 (2026-07-10)
+===================
+
+Bug Fixes
+---------
+
+- Fixed binning error in plotDonutFitsTask. (`RSO-824 <https://rubinobs.atlassian.net//browse/RSO-824>`_)
+
+
 v4.6.0 (2026-07-09)
 ===================
 
