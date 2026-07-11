@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v4.6.2 (2026-07-11)
+===================
+
+Bug Fixes
+---------
+
+- Fixed labeling error in plotDonutFits by switching to axis fractional coordinates. (`RSO-827 <https://rubinobs.atlassian.net//browse/RSO-827>`_)
+
+
 v4.6.1 (2026-07-10)
 ===================
 
