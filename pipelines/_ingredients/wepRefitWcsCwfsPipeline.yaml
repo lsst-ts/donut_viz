@@ -10,7 +10,7 @@ tasks:
       connections.exposure: post_isr_image
       donutSelector.useCustomMagLimit: True
       donutSelector.sourceLimit: 20
-      donutSelector.maxFieldDist: 1.725
+      donutSelector.maxFieldDist: 1.8
       measurementTask.nSigmaDetection: 5.0
   cutOutDonutsCwfsPairTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
