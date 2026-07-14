@@ -1,0 +1,32 @@
+# combination of _ingredients/wepRefitWcsCwfsPipeline.yaml
+# and _ingredients/wepDirectDetectScienceGroupPipeline.yaml
+description: wep refitWCS pipeline for science sensors
+imports:
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/aosBaseIsr.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/danishCalcZernikesBase.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/aosBaseRefitWcs.yaml
+tasks:
+  isr:
+    class: lsst.ip.isr.IsrTaskLSST
+    config:
+      connections.outputExposure: post_isr_image
+      # Although we don't have to apply the amp offset corrections, we do want
+      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
+      doAmpOffset: True
+      doDefect: True
+      doInterpolate: True
+  cutOutDonutsScienceSensorGroupTask:
+      class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+      config:
+        python: |
+          from lsst.ts.wep.task.pairTask import GroupPairer
+          config.pairer.retarget(GroupPairer)
+        connections.exposures: "post_fit_post_isr_image"
+        connections.donutCatalog: "refitWcsDonutTable"
+        donutStampSize: 200
+        initialCutoutPadding: 40
+  calcZernikesTask:
+      class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+      config:
+        donutStampSelector.maxSelect: 16 # Same max density as half size WFS chips (currently at 8 on CWFS)
+
