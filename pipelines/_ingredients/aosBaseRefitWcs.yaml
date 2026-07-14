@@ -6,6 +6,9 @@ tasks:
     config:
       connections.exposure: "post_isr_image"
       donutSelector.maxFieldDist: 1.8
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 20
+      measurementTask.nSigmaDetection: 5.0
   generateDonutFromRefitWcsTask:
     class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
     config:
