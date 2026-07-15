@@ -1,18 +1,17 @@
+# based on lsstCamCwfsUSDF_RefitWcsDanish.yaml
+# and lsstCamScienceSensorUSDF_Danish.yaml
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_RefitWcsDanish.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamScienceSensorRapidAnalysisPipeline_RefitWcsDanish.yaml
     exclude:
       - plotAOSTask
+      - plotDonutTask
       - plotPsfZernTask
-      - plotDonutCwfsTask
-      - plotPairingTask
-      - plotDonutFitsTask
+      - aggregateDonutStampsTask
+
+# config overrides to use more donut pairs
 tasks:
-  reassignCwfsCutoutsPairTask:
-    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
-    config:
-      customQG: False
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
@@ -21,25 +20,16 @@ tasks:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       donutStampSelector.maxSelect: 20
-  aggregateDonutTablesCwfsTask:
-    class: lsst.donut.viz.AggregateDonutTablesCwfsTask
-    config:
-      connections.donutTables: refitWcsDonutTable
-  aggregateDonutStampsTask:
-    class: lsst.donut.viz.AggregateDonutStampsTask
-    config:
-      maxDonutsPerDetector: 20
 
 # Define pipeline steps
 subsets:
   step1a-detectors:
     subset:
       - isr
-      - generateDonutDirectDetectTask
       - generateDonutFromRefitWcsTask
-      - cutOutDonutsCwfsPairTask
-      - reassignCwfsCutoutsPairTask
-  step1b-detectors:
+      - generateDonutDirectDetectTask
+      - cutOutDonutsScienceSensorGroupTask
+  step1b-visits:
     subset:
       - calcZernikesTask
     description: |
@@ -49,9 +39,8 @@ subsets:
   step2-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesCwfsTask
-      - aggregateAOSVisitTableCwfsTask
-      - aggregateDonutStampsTask
+      - aggregateDonutTablesVisitTask
+      - aggregateAOSVisitTableTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
@@ -59,9 +48,9 @@ subsets:
 
 steps:
   - label: step1a-detectors
-    dimensions: [visit, detector]
-  - label: step1b-detectors
-    dimensions: [visit, detector]
+    dimensions: [detector]
+  - label: step1b-visits
+    dimensions: []
   - label: step2-visits
-    dimensions: [visit]
+    dimensions: []
 
