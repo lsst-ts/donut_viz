@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v4.7.0 (2026-07-15)
+===================
+
+New Features
+------------
+
+- Add refitWCS pipelines for Science Sensor (FAM). (`RSO-619 <https://rubinobs.atlassian.net//browse/RSO-619>`_)
+
+
 v4.6.2 (2026-07-11)
 ===================
 
