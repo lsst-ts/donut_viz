@@ -10,7 +10,7 @@ from astropy import units as u
 from astropy.coordinates import Angle
 from astropy.table import Table
 from astropy.time import Time
-from galsim import GalSimFFTSizeError
+from galsim import GalSimFFTSizeError, GalSimRangeError
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -1443,8 +1443,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 zk_fit,
                 bkgs=bkgs,
             )
-        except (GalSimFFTSizeError, ValueError) as e:
-            if isinstance(e, GalSimFFTSizeError) or "cannot convert float NaN to integer" in str(e):
+        except (GalSimFFTSizeError, GalSimRangeError, ValueError) as e:
+            if isinstance(
+                e, (GalSimFFTSizeError, GalSimRangeError)
+            ) or "cannot convert float NaN to integer" in str(e):
                 self.log.warning(f"Returning empty model images due to following galsim error: {str(e)}")
             else:
                 raise e
@@ -1826,16 +1828,14 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     self.log.info(f"Using precomputed model images for {raft}, donut index: {irow}")
                     binning = int(extra_stamp.wep_im.image.shape[0] / danish_meta["model_img"][0].shape[0])
                     self.danish_algo.binning = binning
-                    img_extra, angle_extra, zkRef_extra, backgroundStd_extra = self.danish_algo._prepDanish(
+                    img_extra, backgroundStd_extra = self.danish_algo.prepImage(
                         image=extra_stamp.wep_im,
                         zkStart=row["zk_intrinsic_CCS"],
-                        nollIndices=noll_indices,
                         instrument=self.instrument,
                     )
-                    img_intra, angle_intra, zkRef_intra, backgroundStd_intra = self.danish_algo._prepDanish(
+                    img_intra, backgroundStd_intra = self.danish_algo.prepImage(
                         image=intra_stamp.wep_im,
                         zkStart=row["zk_intrinsic_CCS"],
-                        nollIndices=noll_indices,
                         instrument=self.instrument,
                     )
                     imgs = [img_extra, img_intra]
