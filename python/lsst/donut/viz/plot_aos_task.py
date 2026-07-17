@@ -1672,29 +1672,33 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         startTime = record.timespan.begin
         endTime = record.timespan.end
         efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
-        states_val = np.empty(
-            50,
-        )
+        # Default to zeros (no applied correction) so that a missing topic or
+        # missing data degrades gracefully rather than plotting garbage.
+        states_val = np.zeros(50)
         visit_logevent: int | str = "unknown"
         # catch test data that may have historic day_obs
         if day_obs > 20250101:
-            event = getMostRecentRowWithDataBefore(
-                self.efd_client,
-                efd_topic,
-                timeToLookBefore=Time(startTime, scale="utc"),
-            )
+            try:
+                event = getMostRecentRowWithDataBefore(
+                    self.efd_client,
+                    efd_topic,
+                    timeToLookBefore=Time(startTime, scale="utc"),
+                )
+                for i in range(50):
+                    states_val[i] = event[f"aggregatedDoF{i}"]
+                if "visitId" in event.keys():
+                    visit_logevent = event["visitId"]
+            except ValueError as e:
+                self.log.warning(f"Could not get {efd_topic} from EFD, using zeroed corrections: {e}")
 
-            for i in range(50):
-                states_val[i] = event[f"aggregatedDoF{i}"]
-            if "visitId" in event.keys():
-                visit_logevent = event["visitId"]
-
-        # Get the rotator angle
+        # Get the rotator angle. Allow a missing topic to return an empty
+        # DataFrame, which is handled downstream when reading the position.
         rotData = getEfdData(
             client=self.efd_client,
             topic="lsst.sal.MTRotator.rotation",
             begin=startTime,
             end=endTime,
+            raiseIfTopicNotInSchema=False,
         )
         # Prepare figure
         # number of rafts per column and rows
@@ -1795,11 +1799,12 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 key: np.array(value)[selected_rows] for key, value in aos_raw.meta["estimatorInfo"].items()
             }
 
-
             if "binning" in aos_raw.meta["estimatorInfo"].keys():
                 binning = aos_raw.meta["estimatorInfo"]["binning"]
             else:
-                binning = int(donutStampsExtraSel[0].wep_im.image.shape[0] / raft_meta["model_img"][0][0].shape[0])
+                binning = int(
+                    donutStampsExtraSel[0].wep_im.image.shape[0] / raft_meta["model_img"][0][0].shape[0]
+                )
 
             # catching the case when we may wish to plot 8 donuts,
             # but the aggregated table has less than that
@@ -1830,7 +1835,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     continue
                 elif (np.isnan(row["zk_deviation_CCS"]).any()) or (np.isnan(row["zk_intrinsic_CCS"]).any()):
                     self.log.warning(
-                        f"NaN values found in zk_deviation_CCS or zk_intrinsic_CCS for {raft}, donut index: {irow}. "
+                        f"NaN values found in zk_deviation_CCS or zk_intrinsic_CCS for {raft}, "
+                        + f"donut index: {irow}. "
                         + "Skipping model plot production."
                     )
                     continue
