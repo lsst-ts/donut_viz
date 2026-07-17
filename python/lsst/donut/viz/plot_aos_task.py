@@ -1850,6 +1850,8 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                         zkStart=row["zk_intrinsic_CCS"],
                         instrument=self.instrument,
                     )
+                    img_extra[np.where(img_extra < 0)] = 0
+                    img_intra[np.where(img_intra < 0)] = 0
                     imgs = [img_extra, img_intra]
                     model_imgs = [danish_meta["model_img"][0], danish_meta["model_img"][1]]
                 else:
