@@ -1795,6 +1795,12 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 key: np.array(value)[selected_rows] for key, value in aos_raw.meta["estimatorInfo"].items()
             }
 
+
+            if "binning" in aos_raw.meta["estimatorInfo"].keys():
+                binning = aos_raw.meta["estimatorInfo"]["binning"]
+            else:
+                binning = int(donutStampsExtraSel[0].wep_im.image.shape[0] / raft_meta["model_img"][0][0].shape[0])
+
             # catching the case when we may wish to plot 8 donuts,
             # but the aggregated table has less than that
             nrows_plot = min(ndonuts, len(rows))
@@ -1832,7 +1838,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 danish_meta = {key: value[irow] for key, value in raft_meta.items()}
                 if "model_img" in danish_meta.keys():
                     self.log.info(f"Using precomputed model images for {raft}, donut index: {irow}")
-                    binning = int(extra_stamp.wep_im.image.shape[0] / danish_meta["model_img"][0].shape[0])
                     self.danish_algo.binning = binning
 
                     img_extra, backgroundStd_extra = self.danish_algo.prepImage(
