@@ -1846,6 +1846,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     self.log.info(f"Using precomputed model images for {raft}, donut index: {irow}")
                     self.danish_algo.binning = binning
 
+                    # Accept the whole stamp for plotting, don't try to mask
+                    extra_stamp.wep_im.maskBackground = np.ones(np.shape(extra_stamp.wep_im.image))
+                    intra_stamp.wep_im.maskBackground = np.ones(np.shape(intra_stamp.wep_im.image))
                     img_extra, backgroundStd_extra = self.danish_algo.prepImage(
                         image=extra_stamp.wep_im,
                         zkStart=row["zk_intrinsic_CCS"],
