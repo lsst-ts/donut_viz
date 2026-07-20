@@ -1796,7 +1796,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
             # Grab the metadata for the selected rows
             raft_meta = {
-                key: np.array(value)[selected_rows] for key, value in aos_raw.meta["estimatorInfo"].items()
+                key: np.array(value)[selected_rows]
+                for key, value in aos_raw.meta["estimatorInfo"].items()
+                if isinstance(value, (list, tuple, np.ndarray))
             }
 
             if "binning" in aos_raw.meta["estimatorInfo"].keys():
