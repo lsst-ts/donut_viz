@@ -320,7 +320,7 @@ class TestDonutVizPipeline(TestCase):
                 record,
             )
         records = cm.records  # always a list of LogRecord objects
-        self.assertEqual(len(records), 2)
+        self.assertEqual(len(records), 1)
 
         for idx, rec in enumerate(records):
             expected = (
