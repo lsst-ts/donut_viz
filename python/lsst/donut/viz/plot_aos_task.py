@@ -1787,13 +1787,11 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             # aggregatedDonutStamps
             idxToAggIntra = np.array(donutStampsIntra.metadata.getArray("DET_NAME")) == f"{raft}_SW1"
             donutStampsIntraSel = np.array(donutStampsIntra)[idxToAggIntra]
-            intra_x = [stamp.centroid_position.x for stamp in donutStampsIntraSel]
-            intra_y = [stamp.centroid_position.y for stamp in donutStampsIntraSel]
+            intra_id = np.array([stamp.donut_id for stamp in donutStampsIntraSel])
 
             idxToAggExtra = np.array(donutStampsExtra.metadata.getArray("DET_NAME")) == f"{raft}_SW0"
             donutStampsExtraSel = np.array(donutStampsExtra)[idxToAggExtra]
-            extra_x = [stamp.centroid_position.x for stamp in donutStampsExtraSel]
-            extra_y = [stamp.centroid_position.y for stamp in donutStampsExtraSel]
+            extra_id = np.array([stamp.donut_id for stamp in donutStampsExtraSel])
 
             # Grab the metadata for the selected rows
             raft_meta = {
@@ -1804,20 +1802,24 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
             # catching the case when we may wish to plot 8 donuts,
             # but the aggregated table has less than that
-            nrows_plot = min(ndonuts, len(rows))
+            nrows_plot = min(ndonuts, len(rows), len(donutStampsIntraSel), len(donutStampsExtraSel))
 
             for irow, row in enumerate(rows[:nrows_plot]):
                 # intra
-                dists = np.hypot(intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"])
-                idx = np.argmin(dists)
+                intra_match = np.where(intra_id == row["intra_donut_id"])[0]
+                # extra
+                extra_match = np.where(extra_id == row["extra_donut_id"])[0]
+                if len(intra_match) == 0 or len(extra_match) == 0:
+                    self.log.warning(
+                        f"No model plot produced for {raft}, donut index: {irow}. "
+                        + "Could not find aggregated donut stamps matching donut ids "
+                        + f"intra: {row['intra_donut_id']}, extra: {row['extra_donut_id']}."
+                    )
+                    continue
                 # select stamps from the subset of aggregated donuts
                 # corresponding to current corner
-                intra_stamp = donutStampsIntraSel[idx]
-
-                # extra
-                dists = np.hypot(extra_x - row["centroid_x_extra"], extra_y - row["centroid_y_extra"])
-                idx = np.argmin(dists)
-                extra_stamp = donutStampsExtraSel[idx]
+                intra_stamp = donutStampsIntraSel[intra_match[0]]
+                extra_stamp = donutStampsExtraSel[extra_match[0]]
 
                 necessary_keys = set(self.danish_model_keys)
                 available_keys = set(row.meta["estimatorInfo"].keys())
@@ -1842,11 +1844,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     self.log.info(f"Using precomputed model images for {raft}, donut index: {irow}")
                     if binning is None:
                         if "binning" in aos_raw.meta["estimatorInfo"].keys():
-                            binning = aos_raw.meta["estimatorInfo"]["binning"]
+                            binning = int(danish_meta["binning"])
                         else:
                             binning = int(
-                                donutStampsExtraSel[0].wep_im.image.shape[0]
-                                / raft_meta["model_img"][0][0].shape[0]
+                                extra_stamp.wep_im.image.shape[0] / danish_meta["model_img"][0].shape[0]
                             )
                     self.danish_algo.binning = binning
 
@@ -1863,8 +1864,6 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                         zkStart=row["zk_intrinsic_CCS"],
                         instrument=self.instrument,
                     )
-                    img_extra[np.where(img_extra < 0)] = 0
-                    img_intra[np.where(img_intra < 0)] = 0
                     imgs = [img_extra, img_intra]
                     model_imgs = [danish_meta["model_img"][0], danish_meta["model_img"][1]]
                 else:
@@ -1877,16 +1876,20 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                         extra_stamp,
                         intra_stamp,
                     )
+                for img in imgs:
+                    img[np.where(img < 0)] = 0
                 extra_img = imgs[0]
                 intra_img = imgs[1]
                 extra_model = model_imgs[0]
                 intra_model = model_imgs[1]
 
-                intra_img /= np.sum(intra_img)
+                if np.sum(intra_img) > 0:
+                    intra_img /= np.sum(intra_img)
                 if np.sum(intra_model) > 0:
                     intra_model /= np.sum(intra_model)
 
-                extra_img /= np.sum(extra_img)
+                if np.sum(extra_img) > 0:
+                    extra_img /= np.sum(extra_img)
                 if np.sum(extra_model) > 0:
                     extra_model /= np.sum(extra_model)
 

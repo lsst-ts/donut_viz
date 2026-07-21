@@ -182,11 +182,9 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                 table_meta = zernike_table.meta
             if "estimatorInfo" in zernike_table.meta.keys():
                 for key, val in zernike_table.meta["estimatorInfo"].items():
-                    if isinstance(val, list):
-                        estimator_meta.setdefault(key, [])
-                        estimator_meta[key].extend(val)
-                    else:
-                        estimator_meta.setdefault(key, val)
+                    if key not in estimator_meta:
+                        estimator_meta[key] = []
+                    estimator_meta[key] += val
 
         # Aggregate all tables
         out_raw = vstack(raw_tables)
