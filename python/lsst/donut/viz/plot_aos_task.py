@@ -10,7 +10,7 @@ from astropy import units as u
 from astropy.coordinates import Angle
 from astropy.table import Table
 from astropy.time import Time
-from galsim import GalSimFFTSizeError
+from galsim import GalSimFFTSizeError, GalSimRangeError
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -1443,8 +1443,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 zk_fit,
                 bkgs=bkgs,
             )
-        except (GalSimFFTSizeError, ValueError) as e:
-            if isinstance(e, GalSimFFTSizeError) or "cannot convert float NaN to integer" in str(e):
+        except (GalSimFFTSizeError, GalSimRangeError, ValueError) as e:
+            if isinstance(
+                e, (GalSimFFTSizeError, GalSimRangeError)
+            ) or "cannot convert float NaN to integer" in str(e):
                 self.log.warning(f"Returning empty model images due to following galsim error: {str(e)}")
             else:
                 raise e
@@ -1670,29 +1672,33 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         startTime = record.timespan.begin
         endTime = record.timespan.end
         efd_topic = "lsst.sal.MTAOS.logevent_degreeOfFreedom"
-        states_val = np.empty(
-            50,
-        )
+        # Default to zeros (no applied correction) so that a missing topic or
+        # missing data degrades gracefully rather than plotting garbage.
+        states_val = np.zeros(50)
         visit_logevent: int | str = "unknown"
         # catch test data that may have historic day_obs
         if day_obs > 20250101:
-            event = getMostRecentRowWithDataBefore(
-                self.efd_client,
-                efd_topic,
-                timeToLookBefore=Time(startTime, scale="utc"),
-            )
+            try:
+                event = getMostRecentRowWithDataBefore(
+                    self.efd_client,
+                    efd_topic,
+                    timeToLookBefore=Time(startTime, scale="utc"),
+                )
+                for i in range(50):
+                    states_val[i] = event[f"aggregatedDoF{i}"]
+                if "visitId" in event.keys():
+                    visit_logevent = event["visitId"]
+            except ValueError as e:
+                self.log.warning(f"Could not get {efd_topic} from EFD, using zeroed corrections: {e}")
 
-            for i in range(50):
-                states_val[i] = event[f"aggregatedDoF{i}"]
-            if "visitId" in event.keys():
-                visit_logevent = event["visitId"]
-
-        # Get the rotator angle
+        # Get the rotator angle. Allow a missing topic to return an empty
+        # DataFrame, which is handled downstream when reading the position.
         rotData = getEfdData(
             client=self.efd_client,
             topic="lsst.sal.MTRotator.rotation",
             begin=startTime,
             end=endTime,
+            raiseIfTopicNotInSchema=False,
         )
         # Prepare figure
         # number of rafts per column and rows
@@ -1767,6 +1773,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             selected_rows = aos_raw["detector"] == detname
             rows = aos_raw[selected_rows]
             blur = donut_blur[selected_rows]
+            binning = None
             if len(rows) == 0:
                 continue
 
@@ -1780,35 +1787,39 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             # aggregatedDonutStamps
             idxToAggIntra = np.array(donutStampsIntra.metadata.getArray("DET_NAME")) == f"{raft}_SW1"
             donutStampsIntraSel = np.array(donutStampsIntra)[idxToAggIntra]
-            intra_x = [stamp.centroid_position.x for stamp in donutStampsIntraSel]
-            intra_y = [stamp.centroid_position.y for stamp in donutStampsIntraSel]
+            intra_id = np.array([stamp.donut_id for stamp in donutStampsIntraSel])
 
             idxToAggExtra = np.array(donutStampsExtra.metadata.getArray("DET_NAME")) == f"{raft}_SW0"
             donutStampsExtraSel = np.array(donutStampsExtra)[idxToAggExtra]
-            extra_x = [stamp.centroid_position.x for stamp in donutStampsExtraSel]
-            extra_y = [stamp.centroid_position.y for stamp in donutStampsExtraSel]
+            extra_id = np.array([stamp.donut_id for stamp in donutStampsExtraSel])
 
             # Grab the metadata for the selected rows
             raft_meta = {
-                key: np.array(value)[selected_rows] for key, value in aos_raw.meta["estimatorInfo"].items()
+                key: np.array(value)[selected_rows]
+                for key, value in aos_raw.meta["estimatorInfo"].items()
+                if isinstance(value, (list, tuple, np.ndarray))
             }
 
             # catching the case when we may wish to plot 8 donuts,
             # but the aggregated table has less than that
-            nrows_plot = min(ndonuts, len(rows))
+            nrows_plot = min(ndonuts, len(rows), len(donutStampsIntraSel), len(donutStampsExtraSel))
 
             for irow, row in enumerate(rows[:nrows_plot]):
                 # intra
-                dists = np.hypot(intra_x - row["centroid_x_intra"], intra_y - row["centroid_y_intra"])
-                idx = np.argmin(dists)
+                intra_match = np.where(intra_id == row["intra_donut_id"])[0]
+                # extra
+                extra_match = np.where(extra_id == row["extra_donut_id"])[0]
+                if len(intra_match) == 0 or len(extra_match) == 0:
+                    self.log.warning(
+                        f"No model plot produced for {raft}, donut index: {irow}. "
+                        + "Could not find aggregated donut stamps matching donut ids "
+                        + f"intra: {row['intra_donut_id']}, extra: {row['extra_donut_id']}."
+                    )
+                    continue
                 # select stamps from the subset of aggregated donuts
                 # corresponding to current corner
-                intra_stamp = donutStampsIntraSel[idx]
-
-                # extra
-                dists = np.hypot(extra_x - row["centroid_x_extra"], extra_y - row["centroid_y_extra"])
-                idx = np.argmin(dists)
-                extra_stamp = donutStampsExtraSel[idx]
+                intra_stamp = donutStampsIntraSel[intra_match[0]]
+                extra_stamp = donutStampsExtraSel[extra_match[0]]
 
                 necessary_keys = set(self.danish_model_keys)
                 available_keys = set(row.meta["estimatorInfo"].keys())
@@ -1820,22 +1831,37 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                         + f"Missing keys: {sorted(missing_keys)}"
                     )
                     continue
+                elif (np.isnan(row["zk_deviation_CCS"]).any()) or (np.isnan(row["zk_intrinsic_CCS"]).any()):
+                    self.log.warning(
+                        f"NaN values found in zk_deviation_CCS or zk_intrinsic_CCS for {raft}, "
+                        + f"donut index: {irow}. "
+                        + "Skipping model plot production."
+                    )
+                    continue
 
                 danish_meta = {key: value[irow] for key, value in raft_meta.items()}
                 if "model_img" in danish_meta.keys():
                     self.log.info(f"Using precomputed model images for {raft}, donut index: {irow}")
-                    binning = int(extra_stamp.wep_im.image.shape[0] / danish_meta["model_img"][0].shape[0])
+                    if binning is None:
+                        if "binning" in aos_raw.meta["estimatorInfo"].keys():
+                            binning = int(danish_meta["binning"])
+                        else:
+                            binning = int(
+                                extra_stamp.wep_im.image.shape[0] / danish_meta["model_img"][0].shape[0]
+                            )
                     self.danish_algo.binning = binning
-                    img_extra, angle_extra, zkRef_extra, backgroundStd_extra = self.danish_algo._prepDanish(
+
+                    # Accept the whole stamp for plotting, don't try to mask
+                    extra_stamp.wep_im.maskBackground = np.ones(np.shape(extra_stamp.wep_im.image))
+                    intra_stamp.wep_im.maskBackground = np.ones(np.shape(intra_stamp.wep_im.image))
+                    img_extra, backgroundStd_extra = self.danish_algo.prepImage(
                         image=extra_stamp.wep_im,
                         zkStart=row["zk_intrinsic_CCS"],
-                        nollIndices=noll_indices,
                         instrument=self.instrument,
                     )
-                    img_intra, angle_intra, zkRef_intra, backgroundStd_intra = self.danish_algo._prepDanish(
+                    img_intra, backgroundStd_intra = self.danish_algo.prepImage(
                         image=intra_stamp.wep_im,
                         zkStart=row["zk_intrinsic_CCS"],
-                        nollIndices=noll_indices,
                         instrument=self.instrument,
                     )
                     imgs = [img_extra, img_intra]
@@ -1850,16 +1876,20 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                         extra_stamp,
                         intra_stamp,
                     )
+                for img in imgs:
+                    img[np.where(img < 0)] = 0
                 extra_img = imgs[0]
                 intra_img = imgs[1]
                 extra_model = model_imgs[0]
                 intra_model = model_imgs[1]
 
-                intra_img /= np.sum(intra_img)
+                if np.sum(intra_img) > 0:
+                    intra_img /= np.sum(intra_img)
                 if np.sum(intra_model) > 0:
                     intra_model /= np.sum(intra_model)
 
-                extra_img /= np.sum(extra_img)
+                if np.sum(extra_img) > 0:
+                    extra_img /= np.sum(extra_img)
                 if np.sum(extra_model) > 0:
                     extra_model /= np.sum(extra_model)
 
