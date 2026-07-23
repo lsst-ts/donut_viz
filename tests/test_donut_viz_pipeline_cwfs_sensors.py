@@ -115,7 +115,7 @@ class TestDonutVizPipeline(TestCase):
         agg_zern_avg = self.butler.get(average_dataset_list[0])
         self.assertEqual(len(agg_zern_avg), 1)
         self.assertCountEqual(agg_zern_avg["detector"], self.extra_detector_names)
-        self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys + ["estimatorInfo"])
+        self.assertCountEqual(agg_zern_avg.meta.keys(), self.meta_keys + ["estimatorInfo", "band"])
 
     def testAggregateZernikesRaw(self) -> None:
         raw_dataset_list = list(
@@ -129,7 +129,7 @@ class TestDonutVizPipeline(TestCase):
             agg_zern_raw["detector"],
             sorted([det for det in self.extra_detector_names for _ in range(2)]),
         )
-        self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys + ["estimatorInfo"])
+        self.assertCountEqual(agg_zern_raw.meta.keys(), self.meta_keys + ["estimatorInfo", "band"])
 
     def testAggregateDonuts(self) -> None:
         donut_table_list = list(
@@ -145,11 +145,28 @@ class TestDonutVizPipeline(TestCase):
             sorted([det for det in all_detectors for _ in range(2)]),
         )
         self.assertCountEqual(agg_donut_table["focusZ"].value, [1.5] * 2 + [-1.5] * 2)
-        self.assertCountEqual(agg_donut_table.meta.keys(), ["visitInfo"])
+        self.assertCountEqual(agg_donut_table.meta.keys(), ["visitInfo", "blendInfo"])
         donut_meta_keys = self.meta_keys + ["focusZ"]
         donut_meta_keys.remove("nollIndices")
         donut_meta_keys.remove("band")  # this is not present in donutTable
         self.assertCountEqual(agg_donut_table.meta["visitInfo"].keys(), donut_meta_keys)
+
+        # Check that the donut table blend info is correct
+        donut_table_list = list(
+            self.butler.query_datasets("donutTable", collections=self.test_run_name)
+        )
+        blend_x = list()
+        blend_y = list()
+        for donut_table_ref in donut_table_list:
+            donut_table = self.butler.get(donut_table_ref)
+            blend_x += donut_table.meta["blend_centroid_x"]
+            blend_y += donut_table.meta["blend_centroid_y"]
+        self.assertCountEqual(
+            agg_donut_table.meta["blendInfo"]["blend_centroid_x"], blend_x
+        )
+        self.assertCountEqual(
+            agg_donut_table.meta["blendInfo"]["blend_centroid_y"], blend_y
+        )
 
     def testAggregateDonutStamps(self) -> None:
         intra_dataset_list = list(
@@ -180,7 +197,8 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(raw_visit_table_list), 1)
         self.assertEqual(raw_visit_table_list[0].dataId["visit"], 4021123106000)
         raw_visit_table = self.butler.get(raw_visit_table_list[0])
-        self.assertCountEqual(raw_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo"])
+        raw_table_keys = self.meta_keys + ["blendInfo", "estimatorInfo", "band"]
+        self.assertCountEqual(raw_visit_table.meta.keys(), raw_table_keys)
         raw_zern_table = self.butler.get(
             "aggregateZernikesRaw",
             dataId=raw_visit_table_list[0].dataId,
@@ -206,6 +224,55 @@ class TestDonutVizPipeline(TestCase):
             donut_table["snr"][donut_table["focusZ"].value == 1.5].value,
         )
 
+        agg_donut_table_list = list(
+            self.butler.query_datasets(
+                "aggregateDonutTable", collections=self.test_run_name
+            )
+        )
+        agg_donut_table = self.butler.get(agg_donut_table_list[0])
+        extra_idx = np.where(agg_donut_table["focusZ"].value == 1.5)[0]
+        intra_idx = np.where(agg_donut_table["focusZ"].value == -1.5)[0]
+        self.assertCountEqual(
+            raw_visit_table.meta["blendInfo"]["blend_centroid_x_extra"],
+            [
+                x
+                for idx, x in enumerate(
+                    agg_donut_table.meta["blendInfo"]["blend_centroid_x"]
+                )
+                if idx in extra_idx
+            ],
+        )
+        self.assertCountEqual(
+            raw_visit_table.meta["blendInfo"]["blend_centroid_x_intra"],
+            [
+                x
+                for idx, x in enumerate(
+                    agg_donut_table.meta["blendInfo"]["blend_centroid_x"]
+                )
+                if idx in intra_idx
+            ],
+        )
+        self.assertCountEqual(
+            raw_visit_table.meta["blendInfo"]["blend_centroid_y_extra"],
+            [
+                x
+                for idx, x in enumerate(
+                    agg_donut_table.meta["blendInfo"]["blend_centroid_y"]
+                )
+                if idx in extra_idx
+            ],
+        )
+        self.assertCountEqual(
+            raw_visit_table.meta["blendInfo"]["blend_centroid_y_intra"],
+            [
+                x
+                for idx, x in enumerate(
+                    agg_donut_table.meta["blendInfo"]["blend_centroid_y"]
+                )
+                if idx in intra_idx
+            ],
+        )
+
     def testAggregateAOSVisitTableAvg(self) -> None:
         avg_visit_table_list = list(
             self.butler.query_datasets("aggregateAOSVisitTableAvg", collections=self.test_run_name)
@@ -213,7 +280,7 @@ class TestDonutVizPipeline(TestCase):
         self.assertEqual(len(avg_visit_table_list), 1)
         self.assertEqual(avg_visit_table_list[0].dataId["visit"], 4021123106000)
         avg_visit_table = self.butler.get(avg_visit_table_list[0])
-        self.assertCountEqual(avg_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo"])
+        self.assertCountEqual(avg_visit_table.meta.keys(), self.meta_keys + ["estimatorInfo", "band"])
         avg_zern_table = self.butler.get(
             "aggregateZernikesAvg",
             dataId=avg_visit_table_list[0].dataId,
