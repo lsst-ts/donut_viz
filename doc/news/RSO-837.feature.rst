@@ -1,5 +1,5 @@
 Add pipelines for unpaired wavefront estimation with refit WCS using the danish algorithm:
 
-* ``wepRefitWcsUnpairedPipeline.yaml`` ingredient
+* ``danishCalcZernikesUnpairedBase.yaml`` ingredient
 * ``lsstCamRapidAnalysisPipeline_UnpairedRefitWcsDanish.yaml`` production pipeline
 * ``lsstCamCwfsUSDF_UnpairedRefitWcsDanish.yaml`` USDF production pipeline
