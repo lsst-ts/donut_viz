@@ -1,10 +1,5 @@
-description: wep refitWCS unpaired pipeline for wavefront sensors
-instrument: lsst.obs.lsst.LsstCam
-imports:
-  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepRefitWcsCwfsPipeline.yaml
-    exclude:
-      - reassignCwfsCutoutsPairTask
-      - calcZernikesTask
+description: Base calcZernikes configuration for unpaired AOS pipelines. This will keep the nollIndices consistent across danish unpaired pipelines, and can be inherited by other unpaired pipelines (e.g. AI Donut).
+
 tasks:
   calcZernikesUnpairedTask:
     class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
