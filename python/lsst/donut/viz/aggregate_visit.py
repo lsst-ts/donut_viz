@@ -187,6 +187,13 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                     estimator_meta[key] += val
 
         # Aggregate all tables
+        if len(raw_tables) == 0:
+            self.log.warning("No valid zernike tables to aggregate. Returning empty tables.")
+            out_raw = Table()
+            out_avg = Table()
+            out_raw.meta = {}
+            out_avg.meta = {}
+            return pipeBase.Struct(raw=out_raw, avg=out_avg)
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
 
@@ -552,6 +559,14 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         donutTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables}
         qualityTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.qualityTables}
 
+        # Guard against empty inputs
+        if len(donutTables) == 0:
+            self.log.warning("No donut tables found. Writing empty output.")
+            empty = QTable()
+            empty.meta = {}
+            butlerQC.put(empty, outputRefs.aggregateDonutTable)
+            return
+
         aggTable = self.run(camera, donutTables, qualityTables)
         butlerQC.put(aggTable.aggregateDonutTable, outputRefs.aggregateDonutTable)
 
@@ -850,6 +865,15 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         adt = butlerQC.get(inputRefs.aggregateDonutTable)
         azr = butlerQC.get(inputRefs.aggregateZernikesRaw)
         aza = butlerQC.get(inputRefs.aggregateZernikesAvg)
+
+        # Guard against empty inputs
+        if len(azr) == 0 or len(aza) == 0 or len(adt) == 0:
+            self.log.warning("Empty input tables. Writing empty outputs.")
+            empty = Table()
+            empty.meta = {}
+            butlerQC.put(empty, outputRefs.aggregateAOSAvg)
+            butlerQC.put(empty, outputRefs.aggregateAOSRaw)
+            return
 
         tables = self.run(adt, azr, aza)
 
