@@ -20,10 +20,6 @@ tasks:
     config:
       connections.donutStampsIn: "donutStampsCwfs"
       maxDonutsPerDetector: 20
-  aggregateDonutTablesUnpairedTask:
-    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
-    config:
-      connections.donutTables: refitWcsDonutTable
   aggregateAOSVisitTableUnpairedTask:
     class: lsst.donut.viz.AggregateAOSVisitTableUnpairedTask
 
