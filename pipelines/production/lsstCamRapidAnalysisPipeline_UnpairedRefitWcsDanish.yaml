@@ -1,7 +1,11 @@
 description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepRefitWcsUnpairedPipeline.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepRefitWcsCwfsPipeline.yaml
+    exclude:
+      - reassignCwfsCutoutsPairTask
+      - calcZernikesTask
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/danishCalcZernikesUnpairedBase.yaml
   - location: $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizUnpairedPipeline.yaml
 tasks:
   aggregateDonutTablesUnpairedTask:
