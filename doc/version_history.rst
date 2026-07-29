@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v4.7.2 (2026-07-28)
+===================
+
+Other Changes and Additions
+---------------------------
+
+- Updated AIDonut model paths (`RSO-852 <https://rubinobs.atlassian.net//browse/RSO-852>`_)
+
+
 v4.7.1 (2026-07-22)
 ===================
 
