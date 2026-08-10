@@ -15,6 +15,25 @@ Version History
 
 .. towncrier release notes start
 
+v4.8.0 (2026-08-10)
+===================
+
+New Features
+------------
+
+- Add pipelines for unpaired wavefront estimation with refit WCS using the danish algorithm:
+
+  * ``danishCalcZernikesUnpairedBase.yaml`` ingredient
+  * ``lsstCamRapidAnalysisPipeline_UnpairedRefitWcsDanish.yaml`` production pipeline
+  * ``lsstCamCwfsUSDF_UnpairedRefitWcsDanish.yaml`` USDF production pipeline (`RSO-837 <https://rubinobs.atlassian.net//browse/RSO-837>`_)
+
+
+Documentation
+-------------
+
+- updated model paths (`DM-updatedfiles <https://rubinobs.atlassian.net//browse/DM-updatedfiles>`_)
+
+
 v4.7.2 (2026-07-28)
 ===================
 
