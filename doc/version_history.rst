@@ -28,12 +28,6 @@ New Features
   * ``lsstCamCwfsUSDF_UnpairedRefitWcsDanish.yaml`` USDF production pipeline (`RSO-837 <https://rubinobs.atlassian.net//browse/RSO-837>`_)
 
 
-Documentation
--------------
-
-- updated model paths (`DM-updatedfiles <https://rubinobs.atlassian.net//browse/DM-updatedfiles>`_)
-
-
 v4.7.2 (2026-07-28)
 ===================
 
