@@ -1943,7 +1943,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         max_cols = 26
         nollIndices = nollIndices[:max_cols]
         col_labels = [f"Z{n}" for n in nollIndices]  # eg. Z4, Z15
-        row_labels = [det[:3] for det in detectors.data]  # eg. R00, R40
+        row_labels = [det[:3] for det in detectors]  # eg. R00, R40
 
         # --- Prepare data for table display ---
         table_data = []
