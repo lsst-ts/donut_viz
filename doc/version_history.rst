@@ -15,6 +15,30 @@ Version History
 
 .. towncrier release notes start
 
+v4.8.1 (2026-08-12)
+===================
+
+Bug Fixes
+---------
+
+- Fixed `NotImplementedError: memoryview: unsupported format 7w` when building the per-detector Zernike summary table in `PlotAOSTask`.
+
+  `np.unique` on an astropy `Column` used to return a `Column`, whose `.data` gives the underlying array. With NumPy >= 2.3 the new hash-based `unique` path re-wraps the result and astropy demotes it to a plain `ndarray`, where `.data` is the raw PEP 3118 buffer instead. Iterating that buffer fails for unicode dtypes. The `.data` access was unnecessary and has been removed. (`DM-55792 <https://rubinobs.atlassian.net//browse/DM-55792>`_)
+
+
+v4.8.0 (2026-08-10)
+===================
+
+New Features
+------------
+
+- Add pipelines for unpaired wavefront estimation with refit WCS using the danish algorithm:
+
+  * ``danishCalcZernikesUnpairedBase.yaml`` ingredient
+  * ``lsstCamRapidAnalysisPipeline_UnpairedRefitWcsDanish.yaml`` production pipeline
+  * ``lsstCamCwfsUSDF_UnpairedRefitWcsDanish.yaml`` USDF production pipeline (`RSO-837 <https://rubinobs.atlassian.net//browse/RSO-837>`_)
+
+
 v4.7.2 (2026-07-28)
 ===================
 
