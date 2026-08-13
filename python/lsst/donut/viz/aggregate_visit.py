@@ -218,6 +218,7 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
         # Noll indices corresponding to the Zernike coefficients
         noll_indices = np.array(zernike_table.meta["noll_indices"])
         meta["nollIndices"] = noll_indices
+        meta["band"] = table_meta["extra"]["band"]
 
         # Transform Zernike coefficients to OCS and NW frames
         q = meta["parallacticAngle"]
@@ -384,6 +385,11 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
 
         tables = []
 
+        blendInfo = {
+            "blend_centroid_x": list(),
+            "blend_centroid_y": list(),
+        }
+
         # Iterate over the common (visit, detector) pairs
         for detector in detectors:
             # Get pixels -> field angle transform for this detector
@@ -394,6 +400,7 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             intraDonutTable = donutTablesIntra[detector]
             extraDonutTable = donutTablesExtra[detector]
             qualityTable = qualityTables[detector]
+
 
             # Get rows of quality table for this exposure
             intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
@@ -422,6 +429,15 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
                 table["thx_CCS"] = [pt.y for pt in pts]  # Transpose from DVCS to CCS
                 table["thy_CCS"] = [pt.x for pt in pts]
                 table["detector"] = det.getName()
+
+                # Select donuts used in Zernike estimation
+                defocal_type = qualityTable["DEFOCAL_TYPE"][0]
+                blendInfo[f"{defocal_type}_blend_x"] += [
+                    donutTable.meta["blend_centroid_x"][idx] for idx in use_idx
+                ]
+                blendInfo[f"{defocal_type}_blend_y"] += [
+                    donutTable.meta["blend_centroid_y"][idx] for idx in use_idx
+                ]
 
                 tables.append(table)
 
@@ -462,6 +478,9 @@ class AggregateDonutTablesTask(pipeBase.PipelineTask):
             "alt": intraVisitInfo.boresightAzAlt.getLatitude().asRadians(),
             "mjd": intraVisitInfo.date.toAstropy().mjd,
         }
+
+        # Add blend info to the table
+        out.meta["blendInfo"] = blendInfo
 
         # Carefully average angles in meta
         out.meta["average"] = {}
@@ -580,6 +599,10 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         """
         tables = []
         extraDetectorIds = [191, 195, 199, 203]
+        blendInfo = {
+            "blend_centroid_x": list(),
+            "blend_centroid_y": list(),
+        }
 
         for detector in donutTables.keys():
             if detector not in extraDetectorIds:
@@ -601,9 +624,6 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 self.log.warning(f"Missing quality table for detector {detector}, skipping.")
                 continue
 
-            if len(qualityTable) == 0:
-                continue
-
             # Get rows of quality table for this exposure
             intraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "intra"]
             extraQualityTable = qualityTable[qualityTable["DEFOCAL_TYPE"] == "extra"]
@@ -613,8 +633,17 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 [extraQualityTable, intraQualityTable],
                 [det_extra, det_intra],
             ):
+                if len(qualityTable) == 0:
+                    continue
                 # Select donuts used in Zernike estimation
-                table = donutTable[qualityTable["FINAL_SELECT"]]
+                use_idx = np.where(qualityTable["FINAL_SELECT"])[0]
+                table = donutTable[use_idx]
+                blendInfo["blend_centroid_x"] += [
+                    donutTable.meta["blend_centroid_x"][idx] for idx in use_idx
+                ]
+                blendInfo["blend_centroid_y"] += [
+                    donutTable.meta["blend_centroid_y"][idx] for idx in use_idx
+                ]
 
                 # Add focusZ to donut table
                 offset = 1.5 if det.getId() in extraDetectorIds else -1.5
@@ -670,6 +699,9 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         out["thy_OCS"] = np.sin(rtp) * out["thx_CCS"] + np.cos(rtp) * out["thy_CCS"]
         out["th_N"] = np.cos(q) * out["thx_CCS"] - np.sin(q) * out["thy_CCS"]
         out["th_W"] = np.sin(q) * out["thx_CCS"] + np.cos(q) * out["thy_CCS"]
+
+        # Add blend info to the table
+        out.meta["blendInfo"] = blendInfo
 
         return pipeBase.Struct(aggregateDonutTable=out)
 
@@ -913,7 +945,14 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         # we can assume single-sided Zernike estimates
         if visit_fzmin == visit_fzmax:
             single_sided = True
-        # Create the final table
+
+        # Prepare to store blend info in the raw table metadata
+        raw_table.meta["blendInfo"] = {
+            "blend_centroid_x_intra": list(),
+            "blend_centroid_x_extra": list(),
+            "blend_centroid_y_intra": list(),
+            "blend_centroid_y_extra": list(),
+        }
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
         for det in dets:
@@ -951,6 +990,23 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                         raw_table[k + "_extra"] = np.full(nrows, "", dtype=dtype)
                     raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
                     raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
+
+                # Add blend information into metadata
+                for blend_key in ["blend_centroid_x", "blend_centroid_y"]:
+                    # Just need to match the items kept from each detector.
+                    det_select = [
+                        adt.meta["blendInfo"][blend_key][idx]
+                        for idx, x in enumerate(wadt)
+                        if x
+                    ]
+                    intra_select = [
+                        det_select[idx] for idx, x in enumerate(wintra) if x
+                    ]
+                    extra_select = [
+                        det_select[idx] for idx, x in enumerate(wextra) if x
+                    ]
+                    raw_table.meta["blendInfo"][f"{blend_key}_intra"] += intra_select
+                    raw_table.meta["blendInfo"][f"{blend_key}_extra"] += extra_select
 
         return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
@@ -1015,6 +1071,12 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
 
         # Process raw table
         raw_table = azr.copy()
+        raw_table.meta["blendInfo"] = {
+            "blend_centroid_x_intra": list(),
+            "blend_centroid_x_extra": list(),
+            "blend_centroid_y_intra": list(),
+            "blend_centroid_y_extra": list(),
+        }
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
         for det_extra, det_intra in zip(extraDetectorNames, intraDetectorNames):
@@ -1131,6 +1193,24 @@ class AggregateAOSVisitTableUnpairedTask(AggregateAOSVisitTableTask):
                 if "donut_id" not in raw_table.colnames:
                     raw_table["donut_id"] = np.full(nrows, "", dtype=dtype)
                 raw_table["donut_id"][w] = adt["donut_id"][wadt]
+
+            # Add blend information into metadata
+            for blend_key in ["blend_centroid_x", "blend_centroid_y"]:
+                # Just need to match the items kept from each detector.
+                extra_select = [
+                    adt.meta["blendInfo"][blend_key][idx]
+                    for idx, x in enumerate(wextra)
+                    if x
+                ]
+                intra_select = [
+                    adt.meta["blendInfo"][blend_key][idx]
+                    for idx, x in enumerate(wintra)
+                    if x
+                ]
+                extra_select = extra_select[: wextra.sum()]  # Match lengths
+                intra_select = intra_select[: wintra.sum()]
+                raw_table.meta["blendInfo"][f"{blend_key}_intra"] += intra_select
+                raw_table.meta["blendInfo"][f"{blend_key}_extra"] += extra_select
 
         return pipeBase.Struct(raw=raw_table, avg=avg_table)
 
