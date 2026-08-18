@@ -1,0 +1,45 @@
+description: >
+  LATISS wavefront estimation with the self-contained monolith task.
+
+  One task, one quantum: ISR -> QuickFrameMeasurement -> stamp cutout ->
+  danish fit. This deliberately bypasses calcZernikesTask, whose Danish path
+  (_prepDanish) is broken for AuxTel on modern ts_wep: it builds zkRef from
+  transverse-aberration Zernikes, which for AuxTel are 43.5x too large because
+  AuxTel.yaml offsets M2 rather than the Detector, and it no longer
+  peak-normalizes stamps. Stock ts_wep 17.8.1 returns NaN on 11 of 12 LATISS
+  pairs; the monolith fits all 12.
+
+  Detection is QuickFrameMeasurement rather than generateDonutDirectDetectTask,
+  matching ts_externalscripts/auxtel/latiss_wep_align.py: a LATISS alignment
+  exposure has one bright donut near the boresight, which QFM finds reliably.
+
+  See RSO-873.
+instrument: lsst.obs.lsst.Latiss
+tasks:
+  latissMonolithTask:
+    class: lsst.ts.wep.task.latissMonolithTask.LatissMonolithTask
+    config:
+      # 228 px is what latiss_wep_align derives for dz=0.8. The ts_wep default
+      # of 160 is LSSTCam-sized and clips an AuxTel donut, which spans 194 px.
+      donutDiameter: 228
+      # Required for AuxTel: there is no off-axis batoid fit, so the offAxis
+      # default is wrong.
+      opticalModel: "onAxis"
+      nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+      doSaveStamps: True
+      # maxFitCost is left unset on purpose. Fit cost predicts |Z4 error| at
+      # r=0.90, so it is the best quality flag available without truth, but it
+      # is not comparable across stamp sizes or seeing -- pick a threshold from
+      # a run's own cost distribution before pinning one here.
+
+subsets:
+  step1-latiss:
+    subset:
+      - latissMonolithTask
+    description: |
+      ISR, donut detection, cutout and Zernike estimation for LATISS, all in
+      one quantum per detector.
+
+steps:
+  - label: step1-latiss
+    dimensions: [detector]
