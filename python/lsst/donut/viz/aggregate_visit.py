@@ -187,8 +187,20 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                     estimator_meta[key] += val
 
         # Aggregate all tables
+        if not raw_tables:
+            raise pipeBase.NoWorkFound("No usable zernike tables were produced for this visit")
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
+        if len(out_raw) == 0:
+            # If no donut pairs were used on any detector, every zernike table
+            # contains only its average row and the stacked raw table has zero
+            # rows. A zero-row table with fixed-shape vector columns cannot be
+            # round-tripped through ECSV (astropy reads it back with "shape
+            # mismatch between value and column specifier"), so following the
+            # convention of CalcZernikesTask.empty(), write one NaN placeholder
+            # row per detector, marked unused, instead.
+            out_raw = out_avg.copy()
+            out_raw["used"] = False
 
         # Metadata about pointing, rotation, etc.
         # TODO: Swap parallactic angle for pseudo parallactic angle.
