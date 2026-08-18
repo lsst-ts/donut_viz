@@ -1639,9 +1639,10 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         """
         ndonuts = self.config.nDonutsPerCorner
 
-        bandpass = donutStampsIntra.getBandpasses()[0]
-        assert all([bandpass == bp for bp in donutStampsIntra.getBandpasses()])
-        assert all([bandpass == bp for bp in donutStampsExtra.getBandpasses()])
+        # All stamps in the visit share a single bandpass; either stamp set
+        # may be empty when no donuts were used on that side of the pairs.
+        bandpasses = set(donutStampsIntra.getBandpasses()) | set(donutStampsExtra.getBandpasses())
+        assert len(bandpasses) <= 1
         noll_indices = aos_raw.meta["nollIndices"]
 
         obsc = self.instrument.obscuration
@@ -1775,6 +1776,13 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             blur = donut_blur[selected_rows]
             binning = None
             if len(rows) == 0:
+                continue
+            if len(donutStampsIntra) == 0 or len(donutStampsExtra) == 0:
+                # No aggregated donut stamps on one side (e.g. no donut pairs
+                # were used in this visit, leaving only NaN placeholder rows
+                # in the aggregate), so there is nothing to plot for this
+                # corner; leave the panels blank. The metadata arrays used
+                # below don't exist on empty stamps.
                 continue
 
             # add title to each corner
@@ -1954,54 +1962,58 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
             table_data.append(row)
 
         # --- Create the table inside the middle_ax ---
-        bbox = [0.05, 0.05, 0.85, 0.85]  # [xmin, ymin, width, height],
-        table = middle_ax.table(
-            cellText=table_data,
-            rowLabels=row_labels,
-            colLabels=col_labels,
-            loc="left",
-            cellLoc="center",
-            bbox=bbox,
-        )
+        # If there are no used donut pairs in the visit there is nothing to
+        # average, so leave the table area blank (matplotlib cannot draw a
+        # table with no rows).
+        if table_data:
+            bbox = [0.05, 0.05, 0.85, 0.85]  # [xmin, ymin, width, height],
+            table = middle_ax.table(
+                cellText=table_data,
+                rowLabels=row_labels,
+                colLabels=col_labels,
+                loc="left",
+                cellLoc="center",
+                bbox=bbox,
+            )
 
-        # Adjust table style
-        table.auto_set_font_size(False)
-        table.set_fontsize(9)
+            # Adjust table style
+            table.auto_set_font_size(False)
+            table.set_fontsize(9)
 
-        # Set monospace font for all cells FIRST
-        for (row, col_idx), cell in table.get_celld().items():
-            cell.get_text().set_fontfamily("monospace")
-            # Center align all data cells
-            if row > 0 and col_idx >= 0:  # data cells only
-                cell.get_text().set_horizontalalignment("center")
+            # Set monospace font for all cells FIRST
+            for (row, col_idx), cell in table.get_celld().items():
+                cell.get_text().set_fontfamily("monospace")
+                # Center align all data cells
+                if row > 0 and col_idx >= 0:  # data cells only
+                    cell.get_text().set_horizontalalignment("center")
 
-        # Loop through all cells
-        for (row, col_idx), cell in table.get_celld().items():
-            # Hide all lines first
-            cell.visible_edges = ""
+            # Loop through all cells
+            for (row, col_idx), cell in table.get_celld().items():
+                # Hide all lines first
+                cell.visible_edges = ""
 
-            # Keep horizontal line below header (row == 0)
-            if row == 0:
-                cell.visible_edges += "B"  # bottom border
+                # Keep horizontal line below header (row == 0)
+                if row == 0:
+                    cell.visible_edges += "B"  # bottom border
 
-            # Keep vertical line after row labels (col == -1 means row label)
-            if col_idx == -1:
-                cell.visible_edges += "R"  # right border
+                # Keep vertical line after row labels (col == -1)
+                if col_idx == -1:
+                    cell.visible_edges += "R"  # right border
 
-        # Move all data rows slightly down
-        for row in range(1, len(row_labels) + 1):  # row=1..4 (data rows)
-            for col in range(-1, len(col_labels)):
-                cell = table[(row, col)]
+            # Move all data rows slightly down
+            for row in range(1, len(row_labels) + 1):  # row=1..4 (data rows)
+                for col in range(-1, len(col_labels)):
+                    cell = table[(row, col)]
+                    text = cell.get_text()
+                    text.set_verticalalignment("top")  # align to top of cell
+                    cell.set_height(cell.get_height() * 0.8)  # shrink cell to enhance offset
+
+            # Adjust row label alignment and padding
+            for row in range(1, len(row_labels) + 1):
+                cell = table[(row, -1)]
                 text = cell.get_text()
-                text.set_verticalalignment("top")  # align to top of cell
-                cell.set_height(cell.get_height() * 0.8)  # shrink cell to enhance offset
-
-        # Adjust row label alignment and padding
-        for row in range(1, len(row_labels) + 1):
-            cell = table[(row, -1)]
-            text = cell.get_text()
-            text.set_horizontalalignment("right")  # right-align within cell
-            cell.PAD = 0.2  # add more padding
+                text.set_horizontalalignment("right")  # right-align within cell
+                cell.PAD = 0.2  # add more padding
 
         # Hide the axis frame
         middle_ax.axis("off")
