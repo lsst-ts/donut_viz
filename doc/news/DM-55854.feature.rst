@@ -1,0 +1,1 @@
+Added ``pipelines/production/auxTelRapidAnalysisPipeline.yaml``, the rapid analysis production copy of the LATISS monolith wavefront pipeline (``lsstcam_usdf/auxtelMonolithBase.yaml``), with the step relabelled to ``step1a`` to match the label the rapid analysis workers dispatch on.
