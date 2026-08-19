@@ -1,0 +1,25 @@
+description: >
+  LATISS wavefront estimation for rapid analysis.
+
+  Runs the self-contained monolith task on CWFS intra/extra pairs, one
+  quantum per detector consuming both raws. The task and its configuration
+  (and the rationale for them) live in _ingredients/auxtelMonolithBase.yaml;
+  this file just gives the step the step1a label that the rapid analysis
+  workers dispatch on.
+
+  See RSO-873 and DM-55854.
+instrument: lsst.obs.lsst.Latiss
+imports:
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/auxtelMonolithBase.yaml
+
+subsets:
+  step1a:
+    subset:
+      - latissMonolithTask
+    description: |
+      ISR, donut detection, cutout and Zernike estimation for LATISS, all in
+      one quantum per detector.
+
+steps:
+  - label: step1a
+    dimensions: [detector]
