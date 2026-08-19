@@ -1,4 +1,4 @@
-Added ``pipelines/production/lsstcam_usdf/auxtelMonolithBase.yaml``, a LATISS wavefront estimation pipeline built around ``lsst.ts.wep.task.latissMonolithTask.LatissMonolithTask``.
+Added ``pipelines/_ingredients/auxtelMonolithBase.yaml``, a LATISS wavefront estimation pipeline ingredient built around ``lsst.ts.wep.task.latissMonolithTask.LatissMonolithTask``. The runnable production pipeline importing it is ``pipelines/production/auxTelRapidAnalysisPipeline.yaml`` (see DM-55854).
 
 The pipeline is a single task that does ISR, donut detection with ``QuickFrameMeasurementTask``, stamp cutout and the Danish fit in one quantum. Detection uses ``QuickFrameMeasurementTask`` rather than ``GenerateDonutDirectDetectTask`` because a LATISS alignment exposure has a single bright donut near the boresight, matching what ``latiss_wep_align`` in ts_externalscripts does on the summit.
 
