@@ -21,13 +21,19 @@
 
 """Tests for the AuxTel monolith pipeline.
 
+The pipeline under test is ``production/auxTelRapidAnalysisPipeline.yaml``,
+which imports the task and its config from
+``_ingredients/auxtelMonolithBase.yaml`` and labels the step ``step1a``, the
+label the rapid analysis workers dispatch on.
+
 ``test_pipelines.py`` already checks that every production pipeline parses and
 expands into a PipelineGraph, which covers this file's *syntax*. What it cannot
 check is the AuxTel-specific *content*: the pipeline would still parse if
 ``donutDiameter`` reverted to the LSSTCam-sized default that clips an AuxTel
 donut, or if ``opticalModel`` were left at ``offAxis``, for which there is no
 batoid fit for AuxTel. Both would silently ruin the fit, so they are asserted
-here.
+here — and because the config lives in the ingredient, these assertions also
+pin that it survives the import merge into the production pipeline.
 
 ``gen3TestRepo`` now carries a LATISS CWFS pair, so
 ``TestDonutVizPipelineAuxTelRun`` below actually executes the pipeline. The
@@ -56,7 +62,7 @@ from lsst.ts.wep.utils import runProgram, writeCleanUpRepoCmd, writePipetaskCmd
 from lsst.utils import getPackageDir
 from lsst.utils.tests import TestCase
 
-PIPELINE_NAME = "auxtelMonolithBase.yaml"
+PIPELINE_NAME = "auxTelRapidAnalysisPipeline.yaml"
 TASK_LABEL = "latissMonolithTask"
 
 # The LATISS pair staged in ts_wep's gen3TestRepo. The task keys its outputs on
@@ -90,7 +96,7 @@ class TestDonutVizPipelineAuxTel(TestCase):
         donut_viz_dir = os.getenv("DONUT_VIZ_DIR")
         if donut_viz_dir is None:
             raise RuntimeError("Environment variable DONUT_VIZ_DIR must be set for tests")
-        pipeline_path = Path(donut_viz_dir) / "pipelines" / "production" / "lsstcam_usdf" / PIPELINE_NAME
+        pipeline_path = Path(donut_viz_dir) / "pipelines" / "production" / PIPELINE_NAME
         cls.pipeline = Pipeline.fromFile(pipeline_path.as_posix())
         cls.pipeline_graph = cls.pipeline.to_graph(registry=cls.butler.registry)
 
@@ -137,9 +143,11 @@ class TestDonutVizPipelineAuxTel(TestCase):
         self.assertEqual(list(config.nollIndices), list(range(4, 23)))
 
     def testSubsetAndStep(self) -> None:
+        # step1a is the label the rapid analysis workers dispatch on, so a
+        # rename here silently breaks the LATISS head node's AOS dispatch
         subsets = self.pipeline.subsets
-        self.assertIn("step1-latiss", subsets)
-        self.assertEqual(set(subsets["step1-latiss"]), {TASK_LABEL})
+        self.assertIn("step1a", subsets)
+        self.assertEqual(set(subsets["step1a"]), {TASK_LABEL})
 
 
 class TestDonutVizPipelineAuxTelRun(TestCase):
@@ -166,7 +174,7 @@ class TestDonutVizPipelineAuxTelRun(TestCase):
         donut_viz_dir = os.getenv("DONUT_VIZ_DIR")
         if donut_viz_dir is None:
             raise RuntimeError("Environment variable DONUT_VIZ_DIR must be set for tests")
-        pipeline_path = Path(donut_viz_dir) / "pipelines" / "production" / "lsstcam_usdf" / PIPELINE_NAME
+        pipeline_path = Path(donut_viz_dir) / "pipelines" / "production" / PIPELINE_NAME
 
         # LATISS ISR needs only raws plus the camera from the curated calibs.
         pipe_cmd = writePipetaskCmd(

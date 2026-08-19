@@ -1,6 +1,10 @@
 description: >
   LATISS wavefront estimation with the self-contained monolith task.
 
+  Ingredient: task and config only, following the _ingredients convention.
+  The runnable pipeline is production/auxTelRapidAnalysisPipeline.yaml,
+  which imports this and defines the subsets and steps.
+
   One task, one quantum: ISR -> QuickFrameMeasurement -> stamp cutout ->
   danish fit. This deliberately bypasses calcZernikesTask, whose Danish path
   (_prepDanish) is broken for AuxTel on modern ts_wep: it builds zkRef from
@@ -14,7 +18,6 @@ description: >
   exposure has one bright donut near the boresight, which QFM finds reliably.
 
   See RSO-873.
-instrument: lsst.obs.lsst.Latiss
 tasks:
   latissMonolithTask:
     class: lsst.ts.wep.task.latissMonolithTask.LatissMonolithTask
@@ -31,15 +34,3 @@ tasks:
       # r=0.90, so it is the best quality flag available without truth, but it
       # is not comparable across stamp sizes or seeing -- pick a threshold from
       # a run's own cost distribution before pinning one here.
-
-subsets:
-  step1-latiss:
-    subset:
-      - latissMonolithTask
-    description: |
-      ISR, donut detection, cutout and Zernike estimation for LATISS, all in
-      one quantum per detector.
-
-steps:
-  - label: step1-latiss
-    dimensions: [detector]
