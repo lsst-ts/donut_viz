@@ -1,0 +1,16 @@
+description: >
+  LSSTCam CWFS AiDonut pipeline for USDF reprocessing of refitWCS donut stamps.
+  Identical to lsstCamCwfsUSDF_AiDonut.yaml except that the visit-level
+  aggregation reads refitWcsDonutTable instead of donutTable, which is required
+  when the donut stamps being reused were cut out from the refitWCS catalogue.
+  Without that override AggregateDonutTablesCwfsTask masks donutTable (the
+  pre-refit direct-detect catalogue) with the quality table of the refit stamps,
+  and the two have different lengths.
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - $DONUT_VIZ_DIR/pipelines/production/lsstcam_usdf/lsstCamCwfsUSDF_AiDonut.yaml
+tasks:
+  aggregateDonutTablesCwfsTask:
+    class: lsst.donut.viz.AggregateDonutTablesCwfsTask
+    config:
+      connections.donutTables: refitWcsDonutTable
