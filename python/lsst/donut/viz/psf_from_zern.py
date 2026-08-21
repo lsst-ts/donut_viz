@@ -85,11 +85,19 @@ def psfPanel(
         case _:
             raise ValueError("Detector type not known")
 
-    # setting the common colormap limits
-    pmax = np.nanmax(np.concatenate(psf))
-    pmin = np.nanmin(np.concatenate(psf))
+    # setting the common colormap limits; if there are no psf values at all
+    # (e.g. no donut pairs were used anywhere in the visit) the panels are
+    # all left blank, so the limits are irrelevant
+    all_psf = np.concatenate(psf) if len(psf) > 0 else np.array([])
+    if all_psf.size > 0:
+        pmax = np.nanmax(all_psf)
+        pmin = np.nanmin(all_psf)
+    else:
+        pmax = None
+        pmin = None
 
     # cycling through the axes.
+    im = None
     for i, dn in enumerate(detname):
         axs[i].set(xlim=det_lim_x, ylim=det_lim_y, xticks=[], yticks=[], aspect="equal")
         if len(psf[i]) == 0:
@@ -97,8 +105,10 @@ def psfPanel(
         im = axs[i].scatter(xs[i], ys[i], c=psf[i], cmap=cmap, vmax=pmax, vmin=pmin)
         axs[i].set_title(f"{dn}: {np.nanmean(psf[i]):.3f} +/- {np.nanstd(psf[i]):.3f}")
 
-    # setting the colorbar
-    cb = fig.colorbar(im, cax=ax_cbar, location="bottom")
-    cb.set_label(label="PSF width, arcsecond", fontsize="large")
+    # setting the colorbar; skipped if nothing was plotted since there is no
+    # mappable to attach it to
+    if im is not None:
+        cb = fig.colorbar(im, cax=ax_cbar, location="bottom")
+        cb.set_label(label="PSF width, arcsecond", fontsize="large")
 
     return fig

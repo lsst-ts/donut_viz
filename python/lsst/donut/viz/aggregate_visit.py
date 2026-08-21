@@ -187,8 +187,20 @@ class AggregateZernikeTablesTask(pipeBase.PipelineTask):
                     estimator_meta[key] += val
 
         # Aggregate all tables
+        if not raw_tables:
+            raise pipeBase.NoWorkFound("No usable zernike tables were produced for this visit")
         out_raw = vstack(raw_tables)
         out_avg = vstack(avg_tables)
+        if len(out_raw) == 0:
+            # If no donut pairs were used on any detector, every zernike table
+            # contains only its average row and the stacked raw table has zero
+            # rows. A zero-row table with fixed-shape vector columns cannot be
+            # round-tripped through ECSV (astropy reads it back with "shape
+            # mismatch between value and column specifier"), so following the
+            # convention of CalcZernikesTask.empty(), write one NaN placeholder
+            # row per detector, marked unused, instead.
+            out_raw = out_avg.copy()
+            out_raw["used"] = False
 
         # Metadata about pointing, rotation, etc.
         # TODO: Swap parallactic angle for pseudo parallactic angle.
@@ -840,6 +852,22 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
     ConfigClass = AggregateAOSVisitTableTaskConfig
     _DefaultName = "AggregateAOSVisitTable"
 
+    def _warnOnMismatch(self, n_donuts: int, n_zernikes: int, det: str) -> None:
+        """Warn when donut rows cannot be matched to the zernike rows.
+
+        A mismatch with donuts present means the donut values in the raw
+        table are being left as NaN for this detector; no warning is issued
+        when there are no donuts to match at all.
+        """
+        if n_donuts > 0:
+            self.log.warning(
+                "Number of donut rows (%d) does not match the number of zernike rows (%d) "
+                "for detector %s; leaving NaN values in the raw table.",
+                n_donuts,
+                n_zernikes,
+                det,
+            )
+
     @timeMethod
     def runQuantum(
         self,
@@ -913,19 +941,42 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         # we can assume single-sided Zernike estimates
         if visit_fzmin == visit_fzmax:
             single_sided = True
-        # Create the final table
+        # Create the final table. Allocate all columns up front so that the
+        # output schema does not depend on which detectors had donuts
+        # matching their zernike rows.
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
+        if not single_sided:
+            for k in avg_keys:
+                raw_table[k + "_intra"] = np.nan
+                raw_table[k + "_extra"] = np.nan
+            if "donut_id" in adt.colnames:  # safeguard against older data
+                raw_table["donut_id_intra"] = np.full(len(raw_table), "", dtype=adt["donut_id"].dtype)
+                raw_table["donut_id_extra"] = np.full(len(raw_table), "", dtype=adt["donut_id"].dtype)
         for det in dets:
             w = raw_table["detector"] == det
             wadt = adt["detector"] == det
             if single_sided:  # single-sided Zernike estimates
+                if wadt.sum() != w.sum():
+                    # The donut rows don't align with the zernike rows for
+                    # this detector (e.g. the zernike table contains only NaN
+                    # placeholder rows because no donuts were used), so leave
+                    # the NaN values allocated above.
+                    self._warnOnMismatch(int(wadt.sum()), int(w.sum()), str(det))
+                    continue
                 for k in avg_keys:
                     raw_table[k][w] = adt[k][wadt]
                 raw_table["donut_id"][w] = adt["donut_id"][wadt]
             else:  # double-sided Zernike estimates
                 wintra = adt[wadt]["focusZ"] == visit_fzmin
                 wextra = adt[wadt]["focusZ"] == visit_fzmax
+                if min(wintra.sum(), wextra.sum()) != w.sum():
+                    # No aligned donut pairs for this detector (e.g. donuts on
+                    # only one side, or the zernike table contains only NaN
+                    # placeholder rows because no pairs were used), so leave
+                    # the NaN values allocated above.
+                    self._warnOnMismatch(int(min(wintra.sum(), wextra.sum())), int(w.sum()), str(det))
+                    continue
                 for k in avg_keys:
                     # If one table has more rows than the other,
                     # trim the longer one
@@ -935,20 +986,12 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
                         wextra[wextra] = [True] * wintra.sum() + [False] * (wextra.sum() - wintra.sum())
                     # ought to be the same length now
                     raw_table[k][w] = 0.5 * (adt[k][wadt][wintra] + adt[k][wadt][wextra])
-                    if k + "_intra" not in raw_table.colnames:
-                        raw_table[k + "_intra"] = np.nan
-                        raw_table[k + "_extra"] = np.nan
                     raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
                     raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
                 # donut id can't be averaged like coordinates or centroids,
                 # so we process it separately
                 k = "donut_id"
                 if k in adt.colnames:  # safeguard against older data
-                    nrows = len(raw_table)
-                    dtype = adt[k].dtype
-                    if k + "_intra" not in raw_table.colnames:
-                        raw_table[k + "_intra"] = np.full(nrows, "", dtype=dtype)
-                        raw_table[k + "_extra"] = np.full(nrows, "", dtype=dtype)
                     raw_table[k + "_intra"][w] = adt[k][wadt][wintra]
                     raw_table[k + "_extra"][w] = adt[k][wadt][wextra]
 
@@ -1013,10 +1056,17 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
             for k in avg_keys:
                 avg_table[k][w] = np.mean(adt[k][wadt])
 
-        # Process raw table
+        # Process raw table. Allocate all columns up front so that the output
+        # schema does not depend on which detectors had donuts matching their
+        # zernike rows.
         raw_table = azr.copy()
         for k in avg_keys:
             raw_table[k] = np.nan  # Allocate
+            raw_table[k + "_intra"] = np.nan
+            raw_table[k + "_extra"] = np.nan
+        if "donut_id" in adt.colnames:  # safeguard against older data
+            raw_table["donut_id_intra"] = np.full(len(raw_table), "", dtype=adt["donut_id"].dtype)
+            raw_table["donut_id_extra"] = np.full(len(raw_table), "", dtype=adt["donut_id"].dtype)
         for det_extra, det_intra in zip(extraDetectorNames, intraDetectorNames):
             w = raw_table["detector"] == det_extra
             wextra = adt["detector"] == det_extra
@@ -1025,6 +1075,13 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
             wadt = np.logical_or(wextra, wintra)
             # Check if there are any matching rows
             if not np.any(wadt):
+                continue
+            if min(wintra.sum(), wextra.sum()) != w.sum():
+                # No aligned donut pairs for this detector pair (e.g. donuts
+                # on only one side, or the zernike table contains only NaN
+                # placeholder rows because no pairs were used), so leave the
+                # NaN values allocated above.
+                self._warnOnMismatch(int(min(wintra.sum(), wextra.sum())), int(w.sum()), det_extra)
                 continue
 
             for k in avg_keys:
@@ -1036,20 +1093,12 @@ class AggregateAOSVisitTableCwfsTask(AggregateAOSVisitTableTask):
                     wextra[wextra] = [True] * wintra.sum() + [False] * (wextra.sum() - wintra.sum())
                 # ought to be the same length now
                 raw_table[k][w] = 0.5 * (adt[k][wintra] + adt[k][wextra])
-                if k + "_intra" not in raw_table.colnames:
-                    raw_table[k + "_intra"] = np.nan
-                    raw_table[k + "_extra"] = np.nan
                 raw_table[k + "_intra"][w] = adt[k][wintra]
                 raw_table[k + "_extra"][w] = adt[k][wextra]
             # donut id can't be averaged like coordinates or centroids,
             # so we process it separately
             k = "donut_id"
             if k in adt.colnames:  # safeguard against older data
-                nrows = len(raw_table)
-                dtype = adt[k].dtype
-                if k + "_intra" not in raw_table.colnames:
-                    raw_table[k + "_intra"] = np.full(nrows, "", dtype=dtype)
-                    raw_table[k + "_extra"] = np.full(nrows, "", dtype=dtype)
                 raw_table[k + "_intra"][w] = adt[k][wintra]
                 raw_table[k + "_extra"][w] = adt[k][wextra]
 
@@ -1111,25 +1160,32 @@ class AggregateAOSVisitTableUnpairedTask(AggregateAOSVisitTableTask):
             for k in avg_keys:
                 avg_table[k][w] = np.mean(adt[k][adt["detector"] == det])
 
-        # Process raw table
+        # Process raw table. Allocate all columns up front so that the output
+        # schema does not depend on which detectors had donuts matching their
+        # zernike rows.
         raw_table = azr.copy()
         for k in avg_keys:
             raw_table[k] = np.nan
+        if "donut_id" in adt.colnames:  # safeguard against older data
+            raw_table["donut_id"] = np.full(len(raw_table), "", dtype=adt["donut_id"].dtype)
         for det in dets:
             w = raw_table["detector"] == det
             wadt = adt["detector"] == det
             # Check if there are any matching rows
             if not np.any(wadt):
                 continue
+            if wadt.sum() != w.sum():
+                # The donut rows don't align with the zernike rows for this
+                # detector (e.g. the zernike table contains only NaN
+                # placeholder rows because no donuts were used), so leave the
+                # NaN values allocated above.
+                self._warnOnMismatch(int(wadt.sum()), int(w.sum()), str(det))
+                continue
 
             for k in avg_keys:
                 # ought to be the same length now
                 raw_table[k][w] = adt[k][wadt]
             if "donut_id" in adt.colnames:  # safeguard against older data
-                nrows = len(raw_table)
-                dtype = adt["donut_id"].dtype
-                if "donut_id" not in raw_table.colnames:
-                    raw_table["donut_id"] = np.full(nrows, "", dtype=dtype)
                 raw_table["donut_id"][w] = adt["donut_id"][wadt]
 
         return pipeBase.Struct(raw=raw_table, avg=avg_table)
