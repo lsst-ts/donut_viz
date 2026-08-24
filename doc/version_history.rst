@@ -15,6 +15,19 @@ Version History
 
 .. towncrier release notes start
 
+v4.8.2 (2026-08-24)
+===================
+
+Bug Fixes
+---------
+
+- Fixed ``AggregateZernikeTablesTask`` writing an unreadable ``aggregateZernikesRaw`` table when no donut pairs were used on any detector in the visit.
+
+  A zero-row table with fixed-shape vector columns writes to ECSV successfully but cannot be read back (astropy fails with "shape mismatch between value and column specifier"), which broke every downstream consumer of the table. Following the convention of ``CalcZernikesTask.empty()``, the task now writes one NaN placeholder row per detector, marked unused, and ECSV roundtrip regression tests have been added.
+
+  The downstream consumers were also made robust to such visits: the ``AggregateAOSVisitTable*`` tasks now leave their NaN donut-value allocations in place when the donut rows cannot be aligned with the zernike rows for a detector (instead of crashing on the row-count mismatch), and allocate all output columns (including the per-side ``_intra``/``_extra`` ones) up front so the output schema no longer depends on the data; ``psfPanel`` draws a fully blank panel grid with the colorbar omitted when no detector has any psf values, matching its existing blank-panel behaviour for individual pair-less detectors; and ``PlotDonutFitsTask`` tolerates empty donut stamp sets, leaving the affected corner panels and the average-Zernike table blank. (`DM-55596 <https://rubinobs.atlassian.net//browse/DM-55596>`_)
+
+
 v4.8.1 (2026-08-12)
 ===================
 
