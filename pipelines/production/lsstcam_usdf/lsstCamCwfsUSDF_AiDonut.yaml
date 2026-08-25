@@ -1,15 +1,63 @@
-description: rapid analysis pipeline for LSSTCam CWFS using the AiDonut algorithm
+description: >
+  rapid analysis pipeline for LSSTCam CWFS using the AiDonut algorithm,
+  configured for USDF reprocessing. The AiDonut task configuration and model
+  are inherited from the production blueprint; the granular step layout lets
+  step1b onward reuse the donut stamps produced by step1a of an earlier run.
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - $DONUT_VIZ_DIR/pipelines/production/lsstcam_usdf/lsstCamCwfsUSDF_Danish.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_AiDonut_Bin1x.yaml
+    exclude:
+      - plotAOSTask
+      - plotPsfZernTask
+      - plotDonutCwfsTask
+      - plotPairingTask
 tasks:
-  calcZernikesTask:
-    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
-      python: |
-        from lsst.ts.wep.task import EstimateZernikesAiDonutTask
-        config.estimateZernikes.retarget(EstimateZernikesAiDonutTask)
-      estimateZernikes.nollIndices:
-        [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
-      estimateZernikes.saveHistory: False
-      estimateZernikes.modelPath: $AI_DONUT_DATA_DIR/wavenet_fwhm_2026-04-16_07-50-43.pt
+      donutSelector.sourceLimit: 40
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+    config:
+      customQG: False
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+    config:
+      maxDonutsPerDetector: 20
+
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsCwfsPairTask
+      - reassignCwfsCutoutsPairTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps. Its outputs (the donut
+      stamps) can be reused as inputs to step1b of a later AiDonut run.
+  step1b-detectors:
+    subset:
+      - calcZernikesTask
+    description: |
+      Estimate the Zernike coefficients from the donut pairs using the
+      AiDonut algorithm. Reuses the donut stamps produced by step1a.
+  step2-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesCwfsTask
+      - aggregateAOSVisitTableCwfsTask
+      - aggregateDonutStampsTask
+    description: |
+      AOS Donut aggregation tasks. This step generates the aggregated
+      tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-detectors
+    dimensions: [visit, detector]
+  - label: step2-visits
+    dimensions: [visit]
