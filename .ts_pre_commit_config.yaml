@@ -1,4 +1,5 @@
 black: false
+insert-license: true
 check-xml: true
 check-yaml: true
 clang-format: false
