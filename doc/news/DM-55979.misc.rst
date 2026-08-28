@@ -1,0 +1,1 @@
+Added a minimal ``pyproject.toml`` so that ``ts-pre-commit-config`` 0.10+ (which reads the project name from it) works in the GitHub Actions news fragment check.
