@@ -169,3 +169,4 @@ towncrier.toml
 version.py
 python/*.dist-info/
 .sconsign.dblite
+.LICENSE.txt

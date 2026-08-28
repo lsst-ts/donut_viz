@@ -1,3 +1,24 @@
+# This file is part of donut-viz.
+#
+# Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
+# This product includes software developed by the LSST Project
+# (https://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 from copy import copy
 from pathlib import Path
 from typing import Any, cast
@@ -49,7 +70,7 @@ try:
     from lsst.rubintv.production.locationConfig import getAutomaticLocationConfig
     from lsst.rubintv.production.uploaders import MultiUploader
 except ImportError:
-    MultiUploader = None
+    MultiUploader = None  # type: ignore[assignment,misc]
 
 __all__ = [
     "PlotAOSTaskConnections",
@@ -140,7 +161,7 @@ class PlotAOSTask(pipeBase.PipelineTask):
         self.config: PlotAOSTaskConfig = cast(PlotAOSTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
-            if not MultiUploader:
+            if MultiUploader is None:
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
@@ -390,7 +411,7 @@ class PlotDonutTask(pipeBase.PipelineTask):
         self.config: PlotDonutTaskConfig = cast(PlotDonutTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
-            if not MultiUploader:
+            if MultiUploader is None:
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
@@ -569,7 +590,7 @@ class PlotDonutCwfsTask(pipeBase.PipelineTask):
         self.config: PlotDonutCwfsTaskConfig = cast(PlotDonutCwfsTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
-            if not MultiUploader:
+            if MultiUploader is None:
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
@@ -750,7 +771,7 @@ class PlotDonutUnpairedCwfsTask(pipeBase.PipelineTask):
         self.config: PlotDonutUnpairedCwfsTaskConfig = cast(PlotDonutUnpairedCwfsTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
-            if not MultiUploader:
+            if MultiUploader is None:
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
@@ -944,7 +965,7 @@ class PlotCwfsPairingTask(pipeBase.PipelineTask):
         self.config: PlotCwfsPairingTaskConfig = cast(PlotCwfsPairingTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
-            if not MultiUploader:
+            if MultiUploader is None:
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
@@ -1108,7 +1129,7 @@ class PlotPsfZernTask(pipeBase.PipelineTask):
         self.config: PlotPsfZernTaskConfig = cast(PlotPsfZernTaskConfig, self.config)
 
         if self.config.doRubinTVUpload:
-            if not MultiUploader:
+            if MultiUploader is None:
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
@@ -1280,7 +1301,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         galsim.errors.raise_fft_size_error = True
 
         if self.config.doRubinTVUpload:
-            if not MultiUploader:
+            if MultiUploader is None:
                 raise RuntimeError("MultiUploader is not available")
             self.uploader = MultiUploader()
 
