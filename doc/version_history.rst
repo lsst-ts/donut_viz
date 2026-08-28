@@ -15,6 +15,34 @@ Version History
 
 .. towncrier release notes start
 
+v4.8.4 (2026-08-28)
+===================
+
+Other Changes and Additions
+---------------------------
+
+- Updated the license headers using the ``insert-license`` hook. (`DM-55979 <https://rubinobs.atlassian.net//browse/DM-55979>`_)
+
+
+v4.8.3 (2026-08-25)
+===================
+
+New Features
+------------
+
+- Add a USDF production pipeline for wavefront estimation with the AiDonut algorithm on refit WCS donut stamps:
+
+  * ``lsstCamCwfsUSDF_AiDonutRefitWcs.yaml`` USDF production pipeline
+
+  It imports ``lsstCamCwfsUSDF_AiDonut.yaml`` and overrides only
+  ``aggregateDonutTablesCwfsTask.connections.donutTables`` to ``refitWcsDonutTable``, so the
+  AiDonut task configuration, model and step layout are inherited rather than duplicated.
+  The override is required when the donut stamps being reused were cut out from the refit WCS
+  catalog: ``AggregateDonutTablesCwfsTask`` masks the donut table with the quality table
+  positionally, and reading the pre-refit ``donutTable`` instead raises ``IndexError`` because
+  the two have different lengths. (`RSO-847 <https://rubinobs.atlassian.net//browse/RSO-847>`_)
+
+
 v4.8.2 (2026-08-24)
 ===================
 
