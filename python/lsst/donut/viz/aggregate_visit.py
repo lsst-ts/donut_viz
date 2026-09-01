@@ -721,6 +721,33 @@ class AggregateDonutTablesCwfsFamTaskConnections(
         Classification is snapshotted up front since `get_inputs`
         reflects live state and would otherwise re-flag an
         extra-focal visit as intra-focal once it receives moved refs.
+
+        Notes
+        -----
+        This task relies on the convention that the intra-focal and
+        extra-focal exposures are consecutive visits (the extra-focal
+        visit is ``visit + 1`` of the intra-focal visit). A visit is
+        treated as intra-focal when it contains donutTables from the
+        intra-focal detectors, and those refs are moved into the paired
+        extra-focal (``visit + 1``) quantum.
+
+        Because of this, the data query must select the intra-focal
+        detectors from the intra-focal visit and the extra-focal detectors
+        from the extra-focal visit, e.g.::
+
+            -d "instrument='LSSTCam' and (
+                    (visit.id=<intra_visit>
+                     and detector.id in (192,196,200,204))
+                 or (visit.id=<extra_visit>
+                     and detector.id in (191,195,199,203)))"
+
+        If instead both visits are selected on their own (without
+        restricting the detectors), the extra-focal visit will also
+        contain intra-focal donutTables. It is then classified as
+        intra-focal and resolves to a paired visit (``visit + 1``) that
+        does not exist in the quantum graph, and a `RuntimeError` will be
+        raised. Restrict each visit to the correct set of detectors as
+        shown above to avoid this.
         """
         to_do = set(adjuster.iter_data_ids())
         intra_refs_by_data_id = {
@@ -740,7 +767,13 @@ class AggregateDonutTablesCwfsFamTaskConnections(
             # extra focal quantum has the intra focal input.
             extra_focal_data_id = DataCoordinate.standardize(data_id, visit=int(data_id["visit"]) + 1)
 
-            assert extra_focal_data_id in to_do, f"DataId {extra_focal_data_id} not found in to_do set."
+            if extra_focal_data_id not in to_do:
+                raise RuntimeError(
+                    f"Could not find the extra-focal visit {extra_focal_data_id} paired with "
+                    f"intra-focal visit {data_id}. Restrict each visit to the correct detectors "
+                    "(intra-focal visit to the intra-focal detectors, extra-focal visit to the "
+                    "extra-focal detectors); see the docstring for an example."
+                )
 
             for ref in intra_refs:
                 adjuster.add_input(extra_focal_data_id, "donutTables", ref)
