@@ -19,7 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from documenteer.conf.pipelinespkg import *  # type: ignore # noqa
+import lsst.donut.viz  # noqa
+from documenteer.conf.guide import *  # type: ignore # noqa
 
 project = "donut_viz"
 html_theme_options["logotext"] = project  # type: ignore # noqa
