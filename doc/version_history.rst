@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v4.8.5 (2026-09-02)
+===================
+
+Documentation
+-------------
+
+- Updated license text to be compatible with v0.10.2 of ts_pre_commit_conf. (`RSO-903 <https://rubinobs.atlassian.net//browse/RSO-903>`_)
+
+
 v4.8.4 (2026-08-28)
 ===================
 
