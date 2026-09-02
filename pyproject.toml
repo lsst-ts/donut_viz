@@ -1,5 +1,5 @@
 [project]
-name = "donut-viz"
+name = "donut_viz"
 description = "Rubin Observatory donut visualization tasks and pipelines"
 license = { text = "GPL" }
 urls = { source_code = "https://github.com/lsst-ts/donut_viz" }

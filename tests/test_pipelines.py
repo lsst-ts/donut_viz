@@ -1,4 +1,4 @@
-# This file is part of donut-viz.
+# This file is part of donut_viz.
 #
 # Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
