@@ -15,6 +15,21 @@ Version History
 
 .. towncrier release notes start
 
+v4.9.0 (2026-09-04)
+===================
+
+New Features
+------------
+
+- Added 3mm pipeline for estimating Zernikes on wavefront sensors when running paired FAM mode images. Added AggregateDonutTablesCwfsFamTask to handle FAM mode aggregation of paired wavefront sensor donut tables. (`RSO-596 <https://rubinobs.atlassian.net//browse/RSO-596>`_)
+
+
+Documentation
+-------------
+
+- Added necessary files to create donut-viz.lsst.io documentation website. (`RSO-904 <https://rubinobs.atlassian.net//browse/RSO-904>`_)
+
+
 v4.8.5 (2026-09-02)
 ===================
 
