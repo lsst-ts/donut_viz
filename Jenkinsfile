@@ -7,7 +7,7 @@ DevelopPipeline(
     extra_packages: ["lsst-ts/ts_wep","lsst-sitcom/summit_utils@main"],
     kickoff_jobs: [],
     slack_build_channel: "aos-builds",
-    has_doc_site: false,
+    has_doc_site: true,
     require_git_lfs: true,
     require_scons: true
 )
