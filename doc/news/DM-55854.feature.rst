@@ -1,0 +1,1 @@
+Added ``pipelines/production/auxTelRapidAnalysisPipeline.yaml``, the rapid analysis production pipeline for LATISS wavefront estimation. It imports the monolith task definition from ``_ingredients/auxtelMonolithBase.yaml`` (following the ingredients convention of task-and-config-only files) and labels the step ``step1a``, which is the label the rapid analysis workers dispatch on.
