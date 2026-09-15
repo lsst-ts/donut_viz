@@ -70,14 +70,20 @@ TASK_LABEL = "latissMonolithTask"
 EXTRA_VISIT = 2026061400018
 INTRA_VISIT = 2026061400017
 
-# What the same pair gives on /repo/main under the RSO-873 stack. Tolerances
-# are loose enough to absorb a danish or scipy point release, but tight enough
-# that either of the two regressions the monolith works around -- the 43.5x OPD
-# zkRef scaling, and stamps no longer being peak-normalized -- would blow
-# straight through them.
-EXPECTED_Z4_NM = -330.0
-EXPECTED_COST = 2542.6
-EXPECTED_FWHM_ARCSEC = 1.92
+# What this pair gives in the test repo under the RSO-873 stack (stock
+# EstimateZernikesDanishTask on peak-normalized stamps, bootstrap ISR -- see
+# BOOTSTRAP_ISR_CONFIG). On /repo/main with the full calibration set the same
+# pair gives Z4 = -219.6 nm, chi-square 0.11, fwhm 2.07"; the ISR difference is
+# worth ~60 nm in Z4 here. Tolerances are loose enough to absorb a danish or
+# scipy point release, but tight enough that dropping the peak normalization
+# -- which leaves the fit at its starting point -- would blow through them.
+EXPECTED_Z4_NM = -276.3
+EXPECTED_CHI_SQUARE = 0.064
+EXPECTED_FWHM_ARCSEC = 2.91
+
+# The test repo has only the curated LATISS calibrations, so ISR must run in
+# bootstrap mode (no PTC, bias, dark, flat or linearizer).
+BOOTSTRAP_ISR_CONFIG = Path(__file__).parent / "testData" / "latissMonolithBootstrapIsr.py"
 
 
 class TestDonutVizPipelineAuxTel(TestCase):
@@ -112,18 +118,24 @@ class TestDonutVizPipelineAuxTel(TestCase):
     def testInstrumentIsLatiss(self) -> None:
         self.assertEqual(self.pipeline.getInstrument(), "lsst.obs.lsst.Latiss")
 
-    def testQuantumIsPerDetectorNotPerVisit(self) -> None:
+    def testQuantumIsPerNightNotPerVisit(self) -> None:
         """The task pairs two exposures itself, so it cannot be visit-keyed.
 
-        Its outputs are visit-dimensioned, but the quantum is not.
+        Its outputs are visit-dimensioned, but the quantum is not. day_obs is
+        the temporal dimension that lets the graph builder pick the night's
+        calibrations; without one the lookup raises when several validity
+        ranges exist.
         """
         task_node = self.pipeline_graph.tasks[TASK_LABEL]
-        self.assertEqual(set(task_node.dimensions.names), {"instrument", "detector"})
+        self.assertEqual(set(task_node.dimensions.names), {"instrument", "detector", "day_obs"})
 
     def testConnections(self) -> None:
         task_node = self.pipeline_graph.tasks[TASK_LABEL]
         self.assertEqual(set(task_node.inputs), {"raws"})
-        self.assertEqual(set(task_node.prerequisite_inputs), {"camera"})
+        self.assertEqual(
+            set(task_node.prerequisite_inputs),
+            {"camera", "bias", "dark", "flat", "defects", "linearizer", "crosstalk", "ptc"},
+        )
         self.assertEqual(set(task_node.outputs), {"zernikes", "donutStampsExtra", "donutStampsIntra"})
 
     def testLatissSpecificConfigIsPinned(self) -> None:
@@ -140,7 +152,10 @@ class TestDonutVizPipelineAuxTel(TestCase):
         self.assertEqual(config.donutDiameter, 228)
         self.assertGreater(config.donutDiameter, 194)
 
-        self.assertEqual(list(config.nollIndices), list(range(4, 23)))
+        self.assertEqual(list(config.estimateZernikes.nollIndices), list(range(4, 23)))
+        # The LSSTCam production lstsqKwargs (x_scale='jac', loose tolerances)
+        # leave a LATISS fit at its starting point; scipy defaults are correct.
+        self.assertEqual(dict(config.estimateZernikes.lstsqKwargs), {})
 
     def testSubsetAndStep(self) -> None:
         # step1a is the label the rapid analysis workers dispatch on, so a
@@ -176,7 +191,6 @@ class TestDonutVizPipelineAuxTelRun(TestCase):
             raise RuntimeError("Environment variable DONUT_VIZ_DIR must be set for tests")
         pipeline_path = Path(donut_viz_dir) / "pipelines" / "production" / PIPELINE_NAME
 
-        # LATISS ISR needs only raws plus the camera from the curated calibs.
         pipe_cmd = writePipetaskCmd(
             cls.test_repo_dir,
             cls.test_run_name,
@@ -184,6 +198,7 @@ class TestDonutVizPipelineAuxTelRun(TestCase):
             "LATISS/raw/all,LATISS/calib",
             pipelineYaml=pipeline_path.as_posix(),
         )
+        pipe_cmd += f" -C {TASK_LABEL}:{BOOTSTRAP_ISR_CONFIG.as_posix()}"
         pipe_cmd += f' -d "exposure IN ({INTRA_VISIT}, {EXTRA_VISIT}) AND detector = 0"'
         runProgram(pipe_cmd)
 
@@ -234,7 +249,7 @@ class TestDonutVizPipelineAuxTelRun(TestCase):
         self.assertTrue(all(zernikes["used"]))
 
         # The columns the monolith adds on top of the CalcZernikesTask schema.
-        for column in ("cost", "fwhm", "nfev", "fit_success"):
+        for column in ("chi_square", "fwhm", "nfev", "fit_success"):
             self.assertIn(column, zernikes.colnames)
         for noll in range(4, 23):
             self.assertIn(f"Z{noll}", zernikes.colnames)
@@ -247,7 +262,7 @@ class TestDonutVizPipelineAuxTelRun(TestCase):
         self.assertTrue(np.isnan(row["Z4_intrinsic"].value))
 
     def testFitProvenanceMetadata(self) -> None:
-        """The metadata that records the two AuxTel workarounds are active."""
+        """The metadata that records how the pair was fit."""
         meta = self.butler.get("zernikes", dataId=self.data_id).meta
 
         self.assertEqual(meta["cam_name"], "LATISS")
@@ -255,10 +270,11 @@ class TestDonutVizPipelineAuxTelRun(TestCase):
         self.assertEqual(meta["donut_diameter"], 228)
         self.assertEqual(list(meta["noll_indices"]), list(range(4, 23)))
 
-        # Regression #1: the OPD-derived zkRef, not getOffAxisCoeff (43.5x too
-        # big for AuxTel). Regression #2: stamps must be peak-normalized.
-        self.assertTrue(meta["opd_zk_ref"])
+        # Stamps must be peak-normalized before the stock Danish fit.
         self.assertTrue(meta["peak_normalized_stamps"])
+        # And the estimator metadata rides along, as in CalcZernikesTask.
+        self.assertEqual(meta["estimatorInfo"]["algo"], ["danish"])
+        self.assertNotIn("model_img", meta["estimatorInfo"])
 
         # Each side's visit is recorded, so a pairing inversion is detectable.
         self.assertEqual(meta["extra"]["visit"], EXTRA_VISIT)
@@ -271,7 +287,7 @@ class TestDonutVizPipelineAuxTelRun(TestCase):
 
         self.assertTrue(row["fit_success"])
         self.assertAlmostEqual(row["Z4"].to_value("nm"), EXPECTED_Z4_NM, delta=5.0)
-        self.assertAlmostEqual(row["cost"], EXPECTED_COST, delta=50.0)
+        self.assertAlmostEqual(row["chi_square"], EXPECTED_CHI_SQUARE, delta=0.05)
         self.assertAlmostEqual(row["fwhm"].to_value("arcsec"), EXPECTED_FWHM_ARCSEC, delta=0.1)
 
         # Sanity floor: a fit that has gone off the rails shows up as absurd
