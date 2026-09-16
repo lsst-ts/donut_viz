@@ -70,16 +70,16 @@ TASK_LABEL = "latissMonolithTask"
 EXTRA_VISIT = 2026061400018
 INTRA_VISIT = 2026061400017
 
-# What this pair gives in the test repo under the RSO-873 stack (stock
-# EstimateZernikesDanishTask on peak-normalized stamps, bootstrap ISR -- see
-# BOOTSTRAP_ISR_CONFIG). On /repo/main with the full calibration set the same
-# pair gives Z4 = -219.6 nm, chi-square 0.11, fwhm 2.07"; the ISR difference is
-# worth ~60 nm in Z4 here. Tolerances are loose enough to absorb a danish or
-# scipy point release, but tight enough that dropping the peak normalization
-# -- which leaves the fit at its starting point -- would blow through them.
-EXPECTED_Z4_NM = -276.3
-EXPECTED_CHI_SQUARE = 0.064
-EXPECTED_FWHM_ARCSEC = 2.91
+# What this pair gives in the test repo (stock EstimateZernikesDanishTask on
+# peak-normalized stamps, x_scale='jac', bootstrap ISR -- see
+# BOOTSTRAP_ISR_CONFIG): -339.8 nm on lsst-scipipe-13.0.0 (Jenkins) and -336.1
+# on 13.1.0. With scipy's default parameter scaling the same stamps gave -237
+# and -276 on those two environments, which is why the task pins 'jac'. The
+# 10 nm tolerance absorbs that residual numpy-level difference but would catch
+# dropping the peak normalization, which leaves the fit at its starting point.
+EXPECTED_Z4_NM = -338.0
+EXPECTED_CHI_SQUARE = 0.061
+EXPECTED_FWHM_ARCSEC = 2.97
 
 # The test repo has only the curated LATISS calibrations, so ISR must run in
 # bootstrap mode (no PTC, bias, dark, flat or linearizer).
@@ -118,16 +118,22 @@ class TestDonutVizPipelineAuxTel(TestCase):
     def testInstrumentIsLatiss(self) -> None:
         self.assertEqual(self.pipeline.getInstrument(), "lsst.obs.lsst.Latiss")
 
-    def testQuantumIsPerNightNotPerVisit(self) -> None:
-        """The task pairs two exposures itself, so it cannot be visit-keyed.
+    def testQuantumIsPerPair(self) -> None:
+        """One quantum per CWFS pair, keyed on the extra-focal visit.
 
-        Its outputs are visit-dimensioned, but the quantum is not. day_obs is
-        the temporal dimension that lets the graph builder pick the night's
-        calibrations; without one the lookup raises when several validity
-        ranges exist.
+        The task's adjust_all_quanta moves the intra-focal raw into its
+        partner's quantum, so the quantum can be visit-keyed even though it
+        consumes two exposures. Rapid analysis writes every pair of a night
+        into one long-lived run, so anything coarser than per-visit would make
+        the second pair collide on the _log/_metadata datasets.
         """
         task_node = self.pipeline_graph.tasks[TASK_LABEL]
-        self.assertEqual(set(task_node.dimensions.names), {"instrument", "detector", "day_obs"})
+        # `.names` includes the dimensions visit implies (band, day_obs,
+        # physical_filter); `.required` is what actually keys the quantum.
+        self.assertEqual(set(task_node.dimensions.required), {"instrument", "visit", "detector"})
+        # day_obs rides along with visit, which is what gives the calibration
+        # lookup its time bound.
+        self.assertIn("day_obs", task_node.dimensions.names)
 
     def testConnections(self) -> None:
         task_node = self.pipeline_graph.tasks[TASK_LABEL]
@@ -153,9 +159,9 @@ class TestDonutVizPipelineAuxTel(TestCase):
         self.assertGreater(config.donutDiameter, 194)
 
         self.assertEqual(list(config.estimateZernikes.nollIndices), list(range(4, 23)))
-        # The LSSTCam production lstsqKwargs (x_scale='jac', loose tolerances)
-        # leave a LATISS fit at its starting point; scipy defaults are correct.
-        self.assertEqual(dict(config.estimateZernikes.lstsqKwargs), {})
+        # Jacobian scaling makes the fit reproducible across conda envs; the
+        # loose tolerances the LSSTCam pipelines add would stall a LATISS fit.
+        self.assertEqual(dict(config.estimateZernikes.lstsqKwargs), {"x_scale": "jac"})
 
     def testSubsetAndStep(self) -> None:
         # step1a is the label the rapid analysis workers dispatch on, so a
@@ -168,8 +174,8 @@ class TestDonutVizPipelineAuxTel(TestCase):
 class TestDonutVizPipelineAuxTelRun(TestCase):
     """Execute the pipeline on the LATISS pair staged in ts_wep's gen3TestRepo.
 
-    Both exposures must be in the same quantum -- the task pairs them itself --
-    so the data query names them explicitly rather than relying on a day_obs.
+    The data query names both exposures of the pair; adjust_all_quanta folds
+    the intra-focal raw into the extra-focal visit's quantum.
     """
 
     test_repo_dir: str
@@ -286,7 +292,7 @@ class TestDonutVizPipelineAuxTelRun(TestCase):
         row = zernikes[zernikes["label"] == "pair1"][0]
 
         self.assertTrue(row["fit_success"])
-        self.assertAlmostEqual(row["Z4"].to_value("nm"), EXPECTED_Z4_NM, delta=5.0)
+        self.assertAlmostEqual(row["Z4"].to_value("nm"), EXPECTED_Z4_NM, delta=10.0)
         self.assertAlmostEqual(row["chi_square"], EXPECTED_CHI_SQUARE, delta=0.05)
         self.assertAlmostEqual(row["fwhm"].to_value("arcsec"), EXPECTED_FWHM_ARCSEC, delta=0.1)
 
