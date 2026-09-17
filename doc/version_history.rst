@@ -15,6 +15,22 @@ Version History
 
 .. towncrier release notes start
 
+v4.10.0 (2026-09-17)
+====================
+
+New Features
+------------
+
+- Added ``pipelines/production/auxTelRapidAnalysisPipeline.yaml``, the rapid analysis production pipeline for LATISS wavefront estimation. It imports the monolith task definition from ``_ingredients/auxtelMonolithBase.yaml`` (following the ingredients convention of task-and-config-only files) and labels the step ``step1a``, which is the label the rapid analysis workers dispatch on. (`DM-55854 <https://rubinobs.atlassian.net//browse/DM-55854>`_)
+- Added ``pipelines/_ingredients/auxtelMonolithBase.yaml``, a LATISS wavefront estimation pipeline ingredient built around ``lsst.ts.wep.task.latissMonolithTask.LatissMonolithTask``. The runnable production pipeline importing it is ``pipelines/production/auxTelRapidAnalysisPipeline.yaml`` (see DM-55854).
+
+  The pipeline is a single task that does ISR, donut detection with ``QuickFrameMeasurementTask``, stamp cutout and the Danish fit in one quantum. Detection uses ``QuickFrameMeasurementTask`` rather than ``GenerateDonutDirectDetectTask`` because a LATISS alignment exposure has a single bright donut near the boresight, matching what ``latiss_wep_align`` in ts_externalscripts does on the summit.
+
+  AuxTel-specific configuration is pinned in the pipeline: ``opticalModel: onAxis`` (there is no off-axis batoid fit for AuxTel), ``nollIndices`` 4 to 22, and ``donutDiameter: 228``, which is the value ``latiss_wep_align`` derives for ``dz = 0.8``. Note that the ts_wep default stamp size of 160 is LSSTCam-sized; the pipeline also includes a default 228 px auxTel stamp size.
+
+  Added ``tests/test_donut_viz_pipeline_auxtel.py``, which both checks the pipeline's structure and configuration and executes it end to end against the LATISS CWFS pair now staged in ``ts_wep/tests/testData/gen3TestRepo``. The execution test asserts the fitted Z4, fit cost and fwhm, so a regression in the AuxTel Danish path is caught numerically rather than only structurally. (`RSO-873 <https://rubinobs.atlassian.net//browse/RSO-873>`_)
+
+
 v4.9.0 (2026-09-04)
 ===================
 
