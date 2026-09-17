@@ -20,15 +20,8 @@ tasks:
   latissMonolithTask:
     class: lsst.ts.wep.task.latissMonolithTask.LatissMonolithTask
     config:
-      # 228 px is what latiss_wep_align derives for dz=0.8. The ts_wep default
-      # of 160 is LSSTCam-sized and clips an AuxTel donut, which spans 194 px.
+      # 228 px is what latiss_wep_align derives for dz=0.8. 
+      # The ts_wep default  of 160 px is LSSTCam-sized.
+      # An AuxTel donut  spans ~194 px.
       donutDiameter: 228
-      # Required for AuxTel: there is no off-axis batoid fit, so the offAxis
-      # default is wrong.
-      opticalModel: "onAxis"
-      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
       doSaveStamps: True
-      # maxChiSquare is left unset on purpose. Fit quality tracks Z4 error, so
-      # it is the best flag available without truth, but a threshold depends
-      # on stamp size and seeing -- pick one from a run's own distribution
-      # before pinning it here.
