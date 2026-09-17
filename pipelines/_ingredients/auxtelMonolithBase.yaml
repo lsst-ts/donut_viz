@@ -1,0 +1,27 @@
+description: >
+  LATISS wavefront estimation with the self-contained monolith task.
+
+  Ingredient: task and config only, following the _ingredients convention.
+  The runnable pipeline is production/auxTelRapidAnalysisPipeline.yaml,
+  which imports this and defines the subsets and steps.
+
+  One task, one quantum: ISR -> QuickFrameMeasurement -> stamp cutout ->
+  peak-normalize -> estimateZernikesDanishTask. The task exists because a
+  LATISS alignment sequence is one bright donut per exposure, which the
+  ts_wep detection tasks and calcZernikesTask's per-visit clipping are not
+  built for; the Zernike fit itself is the stock Danish subtask.
+
+  Detection is QuickFrameMeasurement rather than generateDonutDirectDetectTask,
+  matching ts_externalscripts/auxtel/latiss_wep_align.py: a LATISS alignment
+  exposure has one bright donut near the boresight, which QFM finds reliably.
+
+  See RSO-873.
+tasks:
+  latissMonolithTask:
+    class: lsst.ts.wep.task.latissMonolithTask.LatissMonolithTask
+    config:
+      # 228 px is what latiss_wep_align derives for dz=0.8. 
+      # The ts_wep default  of 160 px is LSSTCam-sized.
+      # An AuxTel donut  spans ~194 px.
+      donutDiameter: 228
+      doSaveStamps: True
