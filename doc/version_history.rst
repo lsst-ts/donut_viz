@@ -15,6 +15,15 @@ Version History
 
 .. towncrier release notes start
 
+v4.11.0 (2026-09-18)
+====================
+
+Other Changes and Additions
+---------------------------
+
+- Pinned the AOS AI model versions in the production pipelines. The AiDonut Bin1x/Bin2x pipelines now point at the date-stamped model filenames and set `estimateZernikes.modelSha256`, and the TARTS unpaired pipeline sets per-file `wavenetSha256`/`alignetSha256`/`aggregatornetSha256`/`oodModelSha256`. ts_wep verifies these at load time. (`RSO-821 <https://rubinobs.atlassian.net//browse/RSO-821>`_)
+
+
 v4.10.0 (2026-09-17)
 ====================
 
