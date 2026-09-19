@@ -1,0 +1,18 @@
+description: rapid analysis pipeline for LSSTCam using the MonolithBlitzTask
+instrument: lsst.obs.lsst.LsstCam
+tasks:
+  donutBlitzMonolithTask:
+    class: lsst.ts.wep.task.donutBlitzMonolith.DonutBlitzMonolithTask
+    config:
+      donutSelector.useCustomMagLimit: True
+      donutSelector.maxFieldDist: 1.725
+      donutSelector.sourceLimit: 40
+      astromRefFilter: "phot_rp_mean"
+      photoRefFilter: "phot_rp_mean"
+      astromTask.referenceSelector.doMagLimit: True
+      astromTask.referenceSelector.magLimit.maximum: 18.0
+      astromTask.referenceSelector.magLimit.fluxField: "phot_rp_mean_flux"
+      astromTask.matcher.maxRefObjects: 2048
+      savePlots: True
+  formatBlitzTask:
+    class: lsst.donut.viz.FormatBlitzTask
