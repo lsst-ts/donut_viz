@@ -19,6 +19,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-from .aggregate_visit import *
-from .plot_aos_task import *
+from .aggregate_aos_visit_table import *
+from .aggregate_aos_visit_table_cwfs import *
+from .aggregate_aos_visit_table_unpaired import *
+from .aggregate_donut_stamps import *
+from .aggregate_donut_stamps_unpaired import *
+from .aggregate_donut_tables import *
+from .aggregate_donut_tables_cwfs import *
+from .aggregate_donut_tables_cwfs_fam import *
+from .aggregate_donut_tables_unpaired import *
+from .aggregate_zernike_tables import *
+from .plot_aos import *
+from .plot_cwfs_pairing import *
+from .plot_donut import *
+from .plot_donut_cwfs import *
+from .plot_donut_fits import *
 from .plot_donut_fits_unpaired_task import *
+from .plot_donut_unpaired_cwfs import *
+from .plot_psf_zern import *

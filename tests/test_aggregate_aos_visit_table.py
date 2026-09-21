@@ -36,7 +36,7 @@ import io
 import numpy as np
 from astropy.table import Table
 
-from lsst.donut.viz.aggregate_visit import AggregateAOSVisitTableCwfsTask
+from lsst.donut.viz.aggregate_aos_visit_table_cwfs import AggregateAOSVisitTableCwfsTask
 from lsst.utils.tests import TestCase
 
 EXTRA_DETECTORS = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]

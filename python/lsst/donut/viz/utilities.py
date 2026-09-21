@@ -36,6 +36,9 @@ from lsst.daf.butler import Butler
 from lsst.geom import Point2D
 from lsst.ts.wep.utils import convertDictToVisitInfo
 
+intra_focal_ids = set([192, 196, 200, 204])
+extra_focal_ids = set([191, 195, 199, 203])
+
 
 @lru_cache()
 def get_cat(
