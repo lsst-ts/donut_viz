@@ -39,7 +39,7 @@ import numpy as np
 from astropy import units as u
 from astropy.table import QTable, Table
 
-from lsst.donut.viz.aggregate_visit import AggregateZernikeTablesTask
+from lsst.donut.viz.aggregate_zernike_tables import AggregateZernikeTablesTask
 from lsst.pipe.base import NoWorkFound
 from lsst.utils.tests import TestCase
 

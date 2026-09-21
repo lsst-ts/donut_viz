@@ -1,0 +1,1 @@
+Split the ``aggregate_visit`` and ``plot_aos_task`` modules into one module per pipeline task to improve maintainability; all tasks remain importable from ``lsst.donut.viz``.
