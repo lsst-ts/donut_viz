@@ -188,6 +188,18 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
 
                 tables.append(table)
 
+        # If every extra-focal detector candidate was skipped (e.g. its
+        # quality table is empty, or its intra-focal pair is missing), the
+        # inner loop above never runs and `table` is never bound; there is
+        # also no visitInfo to grab and nothing to aggregate. Return an
+        # empty table so downstream consumers hit their existing
+        # empty-input guards instead of crashing here.
+        if len(tables) == 0:
+            self.log.warning("No donuts survived quality selection for this visit. Returning empty table.")
+            empty = QTable()
+            empty.meta = {}
+            return pipeBase.Struct(aggregateDonutTable=empty)
+
         # Grab visitInfo. The last one will do since all should be the same.
         visitInfo = convertDictToVisitInfo(table.meta["visit_info"])
 
