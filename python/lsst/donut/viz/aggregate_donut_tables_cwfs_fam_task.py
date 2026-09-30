@@ -22,7 +22,7 @@
 import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate
 
-from .aggregate_donut_tables_cwfs import (
+from .aggregate_donut_tables_cwfs_task import (
     AggregateDonutTablesCwfsTask,
     AggregateDonutTablesCwfsTaskConnections,
 )

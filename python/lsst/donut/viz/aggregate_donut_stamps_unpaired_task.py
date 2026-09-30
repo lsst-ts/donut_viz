@@ -27,7 +27,7 @@ from lsst.pipe.base import connectionTypes as ct
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.utils.timer import timeMethod
 
-from .aggregate_donut_stamps import AggregateDonutStampsTaskConfig
+from .aggregate_donut_stamps_task import AggregateDonutStampsTaskConfig
 
 __all__ = [
     "AggregateDonutStampsUnpairedTaskConnections",

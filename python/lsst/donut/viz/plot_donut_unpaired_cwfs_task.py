@@ -30,7 +30,7 @@ from lsst.ts.wep.task import DonutStamps
 from lsst.utils.plotting.figures import make_figure
 from lsst.utils.timer import timeMethod
 
-from .plot_donut_cwfs import PlotDonutCwfsTaskConfig
+from .plot_donut_cwfs_task import PlotDonutCwfsTaskConfig
 from .utilities import (
     add_coordinate_roses,
     add_rotated_axis,

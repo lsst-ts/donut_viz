@@ -25,7 +25,7 @@ from astropy.table import Table
 import lsst.pipe.base as pipeBase
 from lsst.utils.timer import timeMethod
 
-from .aggregate_aos_visit_table import (
+from .aggregate_aos_visit_table_task import (
     AggregateAOSVisitTableTask,
     AggregateAOSVisitTableTaskConfig,
 )

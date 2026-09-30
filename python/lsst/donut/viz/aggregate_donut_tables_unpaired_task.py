@@ -29,7 +29,7 @@ from lsst.geom import Point2D
 from lsst.ts.wep.utils import convertDictToVisitInfo
 from lsst.utils.timer import timeMethod
 
-from .aggregate_donut_tables_cwfs import (
+from .aggregate_donut_tables_cwfs_task import (
     AggregateDonutTablesCwfsTask,
     AggregateDonutTablesCwfsTaskConnections,
 )
