@@ -21,7 +21,7 @@
 
 import numpy as np
 from astropy import units as u
-from astropy.table import vstack
+from astropy.table import QTable, vstack
 
 import lsst.pipe.base as pipeBase
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
@@ -95,6 +95,14 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
         # Make dictionaries to match detectors
         donutTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.donutTables}
         qualityTables = {(ref.dataId["detector"]): butlerQC.get(ref) for ref in inputRefs.qualityTables}
+
+        # Guard against empty inputs
+        if len(donutTables) == 0:
+            self.log.warning("No donut tables found. Writing empty output.")
+            empty = QTable()
+            empty.meta = {}
+            butlerQC.put(empty, outputRefs.aggregateDonutTable)
+            return
 
         aggTable = self.run(camera, donutTables, qualityTables)
         butlerQC.put(aggTable.aggregateDonutTable, outputRefs.aggregateDonutTable)
@@ -179,6 +187,18 @@ class AggregateDonutTablesCwfsTask(pipeBase.PipelineTask):
                 table["detector"] = det.getName()
 
                 tables.append(table)
+
+        # If every extra-focal detector candidate was skipped (e.g. its
+        # quality table is empty, or its intra-focal pair is missing), the
+        # inner loop above never runs and `table` is never bound; there is
+        # also no visitInfo to grab and nothing to aggregate. Return an
+        # empty table so downstream consumers hit their existing
+        # empty-input guards instead of crashing here.
+        if len(tables) == 0:
+            self.log.warning("No donuts survived quality selection for this visit. Returning empty table.")
+            empty = QTable()
+            empty.meta = {}
+            return pipeBase.Struct(aggregateDonutTable=empty)
 
         # Grab visitInfo. The last one will do since all should be the same.
         visitInfo = convertDictToVisitInfo(table.meta["visit_info"])

@@ -113,6 +113,24 @@ class AggregateAOSVisitTableTask(pipeBase.PipelineTask):
         azr = butlerQC.get(inputRefs.aggregateZernikesRaw)
         aza = butlerQC.get(inputRefs.aggregateZernikesAvg)
 
+        # Guard against empty inputs
+        inputLengths = {
+            "aggregateDonutTable": len(adt),
+            "aggregateZernikesRaw": len(azr),
+            "aggregateZernikesAvg": len(aza),
+        }
+        if any(length == 0 for length in inputLengths.values()):
+            self.log.warning(
+                "Empty input tables. Writing empty outputs. Input lengths: %s; empty: %s.",
+                ", ".join(f"{name}={length}" for name, length in inputLengths.items()),
+                ", ".join(name for name, length in inputLengths.items() if length == 0),
+            )
+            empty = Table()
+            empty.meta = {}
+            butlerQC.put(empty, outputRefs.aggregateAOSAvg)
+            butlerQC.put(empty, outputRefs.aggregateAOSRaw)
+            return
+
         tables = self.run(adt, azr, aza)
 
         butlerQC.put(tables.avg, outputRefs.aggregateAOSAvg)
