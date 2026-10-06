@@ -29,14 +29,24 @@ AggregateZernikeTablesTask (previously a ValueError: "cannot assign 0 input
 values to the 1 output values where the mask is true"). In that case the
 donut values must be left as the NaN allocations, matching how the task
 already skips detectors with no donuts at all.
+
+TestAggregateAOSVisitTableRunQuantum additionally guards runQuantum's
+empty-input short-circuit: when adt/azr/aza are all zero-length (e.g. no
+donuts were found on any detector, so AggregateDonutTablesCwfsTask's own
+empty-input guard produced a zero-column table upstream), run() must never
+be called, since it unconditionally indexes adt["detector"] (previously a
+KeyError: 'detector').
 """
 
 import io
+import types
+from typing import Any
 
 import numpy as np
 from astropy.table import Table
 
-from lsst.donut.viz.aggregate_visit import AggregateAOSVisitTableCwfsTask
+from lsst.donut.viz.aggregate_aos_visit_table_cwfs_task import AggregateAOSVisitTableCwfsTask
+from lsst.donut.viz.aggregate_aos_visit_table_task import AggregateAOSVisitTableTaskConfig
 from lsst.utils.tests import TestCase
 
 EXTRA_DETECTORS = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
@@ -151,3 +161,68 @@ class TestAggregateAOSVisitTableCwfs(TestCase):
         np.testing.assert_array_equal(struct.raw["coord_ra"][w], expected)
         np.testing.assert_array_equal(struct.raw["coord_ra_extra"][w], adt["coord_ra"][wextra])
         np.testing.assert_array_equal(struct.raw["coord_ra_intra"][w], adt["coord_ra"][wintra])
+
+
+class FakeQuantumContext:
+    """Minimal stand-in for `lsst.pipe.base.QuantumContext`.
+
+    Maps opaque "refs" (any hashable placeholder) to pre-set values for
+    `get`, and records `put` calls for later inspection - enough to
+    exercise `runQuantum`'s empty-input short-circuit without a real
+    butler or quantum graph.
+    """
+
+    def __init__(self) -> None:
+        self._values: dict[Any, Any] = {}
+        self.puts: dict[Any, Any] = {}
+
+    def set_get(self, ref: Any, value: Any) -> None:
+        self._values[ref] = value
+
+    def get(self, ref: Any) -> Any:
+        return self._values[ref]
+
+    def put(self, obj: Any, ref: Any) -> None:
+        self.puts[ref] = obj
+
+
+class TestAggregateAOSVisitTableRunQuantum(TestCase):
+    def setUp(self) -> None:
+        self.task = AggregateAOSVisitTableCwfsTask(config=AggregateAOSVisitTableTaskConfig())
+
+    def _runQuantum(self, adt: Table, azr: Table, aza: Table) -> FakeQuantumContext:
+        butlerQC = FakeQuantumContext()
+        butlerQC.set_get("adt_ref", adt)
+        butlerQC.set_get("azr_ref", azr)
+        butlerQC.set_get("aza_ref", aza)
+        inputRefs = types.SimpleNamespace(
+            aggregateDonutTable="adt_ref",
+            aggregateZernikesRaw="azr_ref",
+            aggregateZernikesAvg="aza_ref",
+        )
+        outputRefs = types.SimpleNamespace(aggregateAOSAvg="avg_ref", aggregateAOSRaw="raw_ref")
+        self.task.runQuantum(butlerQC, inputRefs, outputRefs)  # type: ignore[arg-type]
+        return butlerQC
+
+    def testAllEmptyWritesEmptyOutputs(self) -> None:
+        # No donuts were found on any detector for this visit: adt, azr,
+        # and aza are all zero-length (and, for adt, zero-column - see
+        # AggregateDonutTablesCwfsTask's own empty-input guard). run() must
+        # never be called, since it unconditionally indexes adt["detector"].
+        butlerQC = self._runQuantum(Table(), Table(), Table())
+
+        self.assertEqual(len(butlerQC.puts["avg_ref"]), 0)
+        self.assertEqual(len(butlerQC.puts["raw_ref"]), 0)
+        self.assertEqual(butlerQC.puts["avg_ref"].meta, {})
+        self.assertEqual(butlerQC.puts["raw_ref"].meta, {})
+
+    def testNonEmptyInputsCallRun(self) -> None:
+        # The normal case must be unaffected: non-empty inputs reach run()
+        # and produce real, non-empty outputs.
+        azr, aza = make_zernike_tables(rows_per_detector=2, used=True)
+        adt = make_donut_table(EXTRA_DETECTORS + INTRA_DETECTORS, donuts_per_detector=2)
+
+        butlerQC = self._runQuantum(adt, azr, aza)
+
+        self.assertEqual(len(butlerQC.puts["raw_ref"]), 2 * len(EXTRA_DETECTORS))
+        self.assertEqual(len(butlerQC.puts["avg_ref"]), len(EXTRA_DETECTORS))
