@@ -2,7 +2,7 @@ description: rapid analysis pipeline for LSSTCam using the MonolithBlitzTask
 instrument: lsst.obs.lsst.LsstCam
 tasks:
   donutBlitzMonolithTask:
-    class: lsst.ts.wep.task.donutBlitzMonolith.DonutBlitzMonolithTask
+    class: lsst.ts.wep.blitz.donutBlitzMonolithTask.DonutBlitzMonolithTask
     config:
       donutSelector.useCustomMagLimit: True
       donutSelector.maxFieldDist: 1.725
