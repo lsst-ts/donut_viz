@@ -1,0 +1,30 @@
+Add ``pipelines/production/lsstCamRapidAnalysisPipeline_blitz.yaml``, a rapid-analysis
+pipeline that runs ``DonutBlitzCornerTask`` and stores the per-corner ``zernikes`` tables
+via ``doZernikesOutput``.
+
+Rewire ``FormatBlitzTask`` onto the current ts_wep blitz schema. It read an input dataset
+(``donutBlitzResults``) and a set of columns that no longer exist, and because
+``_collectPairs`` gated on a renamed column it failed silently -- emitting empty tables
+rather than raising, which then surfaced downstream as ``KeyError: zk_OCS`` in
+``PlotAOSTask``. It now reads ``donutBlitzCornerResults``, groups on ``group_id``, takes
+the side of focus from ``det_name`` via ``CORNER_DEFOCAL_BY_DET_NAME``, and slices the
+dense Noll-indexed ``zk_deviation_ccs``/``zk_intrinsic_ccs`` array columns instead of
+per-term scalars. The output schema is unchanged.
+
+Three fixes fell out of that work:
+
+* ``estimatorInfo["model_bkg"]`` is kept two-dimensional. ``PlotDonutFitsTask`` indexes
+  ``model_bkg.shape[1]``, so the previous per-row ``float()`` coercion could not have
+  worked.
+* The pair-averaged intrinsic Zernikes are averaged NaN-aware. A donut whose intrinsic
+  calibration is missing carries NaN, and on real data that affects just one side of a
+  pair often enough -- 7 of 28 pairs on the visit used to develop this -- that a plain
+  mean discarded the good side.
+* A visit with no complete pairs now yields a correctly-shaped zero-row table rather than
+  a column-less one, so consumers that index columns unconditionally see an empty plot
+  instead of a ``KeyError``.
+
+Known gap: the ``extra_donut_id``/``intra_donut_id`` strings are built from blitz'
+``donut_id``, which is a reference-catalogue source id rather than the sequential index
+the non-blitz path uses, so they will not match ``DonutStamp.donut_id`` values. Nothing in
+this pipeline cross-references them, since blitz emits no ``donutStamps``.
