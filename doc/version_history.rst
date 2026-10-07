@@ -15,6 +15,23 @@ Version History
 
 .. towncrier release notes start
 
+v4.12.0 (2026-10-06)
+====================
+
+Bug Fixes
+---------
+
+- Guard ``AggregateDonutTablesCwfsTask`` and ``AggregateAOSVisitTableTask`` (and its
+  ``Cwfs`` subclass) against visits where quality selection or upstream aggregation
+  left an empty table, instead of crashing with ``UnboundLocalError``/``KeyError``. (`DM-54893 <https://rubinobs.atlassian.net//browse/DM-54893>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Split the ``aggregate_visit`` and ``plot_aos_task`` modules into one module per pipeline task to improve maintainability; all tasks remain importable from ``lsst.donut.viz``. (`DM-53824 <https://rubinobs.atlassian.net//browse/DM-53824>`_)
+
+
 v4.11.0 (2026-09-18)
 ====================
 
