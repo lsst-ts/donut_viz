@@ -30,6 +30,7 @@ from .aggregate_donut_tables_cwfs_fam_task import *
 from .aggregate_donut_tables_unpaired_task import *
 from .aggregate_zernike_tables_task import *
 from .format_blitz import *
+from .format_blitz_unpaired import *
 from .plot_aos_task import *
 from .plot_cwfs_pairing_task import *
 from .plot_donut_task import *
