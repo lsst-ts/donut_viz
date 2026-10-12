@@ -193,6 +193,11 @@ class FormatBlitzTask(pipeBase.PipelineTask):
     ConfigClass = FormatBlitzTaskConfig
     _DefaultName = "formatBlitz"
 
+    # Whether the raw table carries ``_intra``/``_extra`` split columns.
+    # False for the unpaired subclass, where a row is a single donut and
+    # there is no other side to split against.
+    _rawHasSplits = True
+
     @timeMethod
     def runQuantum(
         self,
@@ -246,21 +251,30 @@ class FormatBlitzTask(pipeBase.PipelineTask):
         meta = self._buildMeta(catalog, visitInfo)
         nollIndices = meta["nollIndices"]
 
-        pairs = self._collectPairs(catalog, camera)
+        groups = self._collectGroups(catalog, camera)
 
-        if len(nollIndices) == 0 or len(pairs) == 0:
+        if len(nollIndices) == 0 or len(groups) == 0:
             # A fully-shaped table with zero rows, not a bare Table(): the
             # consumers index columns unconditionally (PlotAOSTask reads
             # aos_raw["zk_OCS"]), so a column-less table is a KeyError
             # rather than an empty plot.
             return pipeBase.Struct(
-                raw=self._emptyTable(nollIndices, meta, withSplits=True),
-                avg=self._emptyTable(nollIndices, meta, withSplits=False),
+                raw=self._emptyTable(nollIndices, meta, isRaw=True),
+                avg=self._emptyTable(nollIndices, meta, isRaw=False),
             )
 
-        raw = self._buildRawTable(pairs, nollIndices, meta)
+        raw = self._buildRawTable(groups, nollIndices, meta)
         avg = self._buildAvgTable(raw, nollIndices, meta)
         return pipeBase.Struct(raw=raw, avg=avg)
+
+    def _collectGroups(self, catalog: Table, camera: Camera) -> list:
+        """The fit groups this task has an output row shape for.
+
+        Overridden by `FormatBlitzUnpairedTask`, which collects single
+        donuts rather than intra/extra pairs; everything else in `run` and
+        the table builders is shared.
+        """
+        return self._collectPairs(catalog, camera)
 
     def _buildMeta(self, catalog: Table, visitInfo: VisitInfo) -> dict:
         """Build the visit-level metadata dict for the output tables."""
@@ -393,14 +407,7 @@ class FormatBlitzTask(pipeBase.PipelineTask):
         raw["used"] = np.array([bool(p["extra"]["group_fit_success"]) for p in pairs])
         raw["detector"] = [p["detector"] for p in pairs]
 
-        def _donutId(row: Row) -> str:
-            # Keeps AggregateDonutTablesCwfsTask's visit_det_source format.
-            # Note blitz' donut_id is a reference-catalog source id, not the
-            # sequential index the non-blitz path uses, so these strings will
-            # not match DonutStamp.donut_id values; blitz emits no
-            # donutStamps, so nothing in this pipeline cross-references them.
-            return f"{int(row['visit_id'])}_{int(row['det_id']):03d}_{int(row['donut_id'])}"
-
+        _donutId = self._donutId
         raw["extra_donut_id"] = [_donutId(p["extra"]) for p in pairs]
         raw["intra_donut_id"] = [_donutId(p["intra"]) for p in pairs]
         raw["donut_id_extra"] = raw["extra_donut_id"]
@@ -475,6 +482,17 @@ class FormatBlitzTask(pipeBase.PipelineTask):
         return (full @ rotMat)[:, nollIndices - 4]
 
     @staticmethod
+    def _donutId(row: Row) -> str:
+        """A donut's id string in AggregateDonutTablesCwfsTask's format.
+
+        Note blitz' ``donut_id`` is a reference-catalog source id, not the
+        sequential index the non-blitz path uses, so these strings will not
+        match ``DonutStamp.donut_id`` values; blitz emits no donutStamps, so
+        nothing in this pipeline cross-references them.
+        """
+        return f"{int(row['visit_id'])}_{int(row['det_id']):03d}_{int(row['donut_id'])}"
+
+    @staticmethod
     def _pairMean(extra: np.ndarray, intra: np.ndarray) -> np.ndarray:
         """Mean of the two sides, ignoring a side that is NaN.
 
@@ -524,26 +542,39 @@ class FormatBlitzTask(pipeBase.PipelineTask):
         out[inRange] = dense[nollIndices[inRange]]
         return out
 
-    @staticmethod
-    def _emptyTable(nollIndices: np.ndarray, meta: dict, withSplits: bool) -> Table:
-        """A correctly-shaped output table with zero rows."""
+    @classmethod
+    def _emptyTable(cls, nollIndices: np.ndarray, meta: dict, isRaw: bool) -> Table:
+        """A correctly-shaped output table with zero rows.
+
+        ``isRaw`` selects the raw table, which carries the donut-id columns,
+        the per-side geometry splits and the ``estimatorInfo`` meta, over the
+        avg table, which carries none of them. The id columns come from
+        `_emptyIdColumns` so the unpaired subclass can swap in its flat
+        ``donut_id`` without restating the rest of the schema; the splits are
+        gated separately on `_rawHasSplits`, which that subclass turns off.
+        """
         table = Table()
         for key in _ZK_KEYS:
             table[key] = np.zeros((0, len(nollIndices)))
         table["used"] = np.zeros(0, bool)
         table["detector"] = np.zeros(0, dtype="<U8")
-        if withSplits:
-            for key in ("extra_donut_id", "intra_donut_id", "donut_id_extra", "donut_id_intra"):
-                table[key] = np.zeros(0, dtype="<U32")
+        if isRaw:
+            cls._emptyIdColumns(table)
         for key in _GEOM_KEYS:
             table[key] = np.zeros(0)
-            if withSplits:
+            if isRaw and cls._rawHasSplits:
                 table[key + "_intra"] = np.zeros(0)
                 table[key + "_extra"] = np.zeros(0)
         table.meta = dict(meta)
-        if withSplits:
+        if isRaw:
             table.meta["estimatorInfo"] = {key: [] for key in _ESTIMATOR_KEYS}
         return table
+
+    @staticmethod
+    def _emptyIdColumns(table: Table) -> None:
+        """Add the zero-row donut-id columns of the raw table."""
+        for key in ("extra_donut_id", "intra_donut_id", "donut_id_extra", "donut_id_intra"):
+            table[key] = np.zeros(0, dtype="<U32")
 
     @classmethod
     def _sideGeometry(cls, rows: list, rtp: float, q: float) -> dict:
