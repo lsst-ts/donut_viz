@@ -1,0 +1,46 @@
+description: rapid analysis pipeline for LSSTCam using the blitz corner task
+instrument: lsst.obs.lsst.LsstCam
+tasks:
+  donutBlitzCornerTask:
+    class: lsst.ts.wep.blitz.donutBlitzCorner.DonutBlitzCornerTask
+    config:
+      donutSelector.useCustomMagLimit: True
+      donutSelector.maxFieldDist: 1.725
+      donutSelector.sourceLimit: 40
+      astromRefFilter: "phot_rp_mean"
+      photoRefFilter: "phot_rp_mean"
+      astrometry.referenceSelector.doMagLimit: True
+      astrometry.referenceSelector.magLimit.maximum: 18.0
+      astrometry.referenceSelector.magLimit.fluxField: "phot_rp_mean_flux"
+      astrometry.matcher.maxRefObjects: 2048
+      # Emit the per-corner `zernikes` table in the schema CalcZernikesTask
+      # produces, so downstream consumers written against the non-blitz corner
+      # pipeline keep working. Off by default, so RA must ask for it.
+      doZernikesOutput: True
+      # Diagnostic plots are core to RA, so build them in the same quantum:
+      # this emits donutBlitzCornerDonutPlot, donutBlitzCornerWfPlot and
+      # donutBlitzCornerSelectionPlot. With savePlots off the task *deletes*
+      # those output connections, so the plots cannot be produced at all.
+      savePlots: True
+      # Publish those figures to RubinTV. Only meaningful with savePlots
+      # on, since otherwise no figure is ever built.
+      plot.doRubinTVUpload: True
+  formatBlitzTask:
+    class: lsst.donut.viz.FormatBlitzTask
+
+subsets:
+  step1a-visits:
+    subset:
+      - donutBlitzCornerTask
+      - formatBlitzTask
+    description: |
+      Monolithic blitz corner-wavefront task: ISR, donut detection, cutouts
+      and Zernike estimation for all 8 corner sensors in one per-visit
+      quantum. Emits the per-donut donutBlitzCornerResults catalog plus the
+      per-corner `zernikes` tables, and rewrites that catalog into the
+      aggregateAOSVisitTableRaw/Avg schema the donut_viz plotting and
+      analysis path consumes.
+
+steps:
+  - label: step1a-visits
+    dimensions: [visit]
