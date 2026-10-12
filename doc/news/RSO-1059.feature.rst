@@ -2,6 +2,28 @@ Add ``pipelines/production/lsstCamRapidAnalysisPipeline_blitz.yaml``, a rapid-an
 pipeline that runs ``DonutBlitzCornerTask`` and stores the per-corner ``zernikes`` tables
 via ``doZernikesOutput``.
 
+Add ``FormatBlitzUnpairedTask`` and
+``pipelines/production/lsstcam_usdf/lsstCamCwfsUSDF_UnpairedBlitz.yaml``, for blitz run
+with ``wfEstimationMode="unpaired"``. In the default paired mode the deviation is one
+joint fit replicated onto both member rows, so a genuinely per-donut Zernike needs the
+unpaired mode -- under which ``FormatBlitzTask`` emitted nothing, since it requires one
+extra plus one intra donut per group.
+
+The unpaired task subclasses the paired one, reusing its rotation, unit-conversion,
+geometry and diagnostics helpers, and writes the schema
+``AggregateAOSVisitTableUnpairedTask`` produces: the eleven geometry columns with no
+``_intra``/``_extra`` splits, and a flat ``donut_id``. Rows keep the sensor they came
+from, so all eight corner sensors appear -- the paired task labels a pair by its
+extra-focal SW0, which here would discard the only thing distinguishing the two donuts
+of a corner. Feeding it a paired catalog yields a correctly-shaped empty table and a
+warning rather than mislabelled rows, mirroring the paired task's own guard.
+
+Note the blitz ``zernikes`` output cannot be routed through
+``AggregateZernikeTablesTask`` instead: ``zernikesTable`` deliberately leaves
+``meta["opd_columns"]`` and ``meta["intrinsic_columns"]`` empty, so ``zk_CCS`` and
+``zk_intrinsic_CCS`` would come back empty; and that task relabels every row of a corner
+onto one detector name, which silently turns SW1 rows into SW0.
+
 Rewire ``FormatBlitzTask`` onto the current ts_wep blitz schema. It read an input dataset
 (``donutBlitzResults``) and a set of columns that no longer exist, and because
 ``_collectPairs`` gated on a renamed column it failed silently -- emitting empty tables
