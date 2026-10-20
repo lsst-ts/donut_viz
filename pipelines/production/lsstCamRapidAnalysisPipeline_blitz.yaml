@@ -1,0 +1,53 @@
+description: rapid analysis pipeline for LSSTCam using the blitz corner task
+instrument: lsst.obs.lsst.LsstCam
+tasks:
+  donutBlitzCornerTask:
+    class: lsst.ts.wep.blitz.donutBlitzCorner.DonutBlitzCornerTask
+    config:
+      donutSelector.useCustomMagLimit: True
+      donutSelector.maxFieldDist: 1.725
+      donutSelector.sourceLimit: 40
+      astromRefFilter: "phot_rp_mean"
+      photoRefFilter: "phot_rp_mean"
+      astrometry.referenceSelector.doMagLimit: True
+      astrometry.referenceSelector.magLimit.maximum: 18.0
+      astrometry.referenceSelector.magLimit.fluxField: "phot_rp_mean_flux"
+      astrometry.matcher.maxRefObjects: 2048
+      # Do NOT emit the per-corner `zernikes` table. That dataset type is also
+      # what the non-blitz CalcZernikesTask writes, so while blitz runs in
+      # parallel with the existing AOS pipeline on the summit the two would
+      # collide on it. Blitz writes only its own `donutBlitzCornerResults`,
+      # leaving the incumbent chain's output untouched.
+      #
+      # Turn this back on once blitz is the primary path, so that consumers
+      # written against the non-blitz corner schema keep working. The task
+      # itself defaults it off, so this line is belt and braces -- but an
+      # explicit False is what documents the parallel-run decision.
+      doZernikesOutput: False
+      # Diagnostic plots are core to RA, so build them in the same quantum:
+      # this emits donutBlitzCornerDonutPlot, donutBlitzCornerWfPlot and
+      # donutBlitzCornerSelectionPlot. With savePlots off the task *deletes*
+      # those output connections, so the plots cannot be produced at all.
+      savePlots: True
+      # Publish those figures to RubinTV. Only meaningful with savePlots
+      # on, since otherwise no figure is ever built.
+      plot.doRubinTVUpload: True
+  formatBlitzTask:
+    class: lsst.donut.viz.FormatBlitzTask
+
+subsets:
+  step1a-visits:
+    subset:
+      - donutBlitzCornerTask
+      - formatBlitzTask
+    description: |
+      Monolithic blitz corner-wavefront task: ISR, donut detection, cutouts
+      and Zernike estimation for all 8 corner sensors in one per-visit
+      quantum. Emits the per-donut donutBlitzCornerResults catalog plus the
+      per-corner `zernikes` tables, and rewrites that catalog into the
+      aggregateAOSVisitTableRaw/Avg schema the donut_viz plotting and
+      analysis path consumes.
+
+steps:
+  - label: step1a-visits
+    dimensions: [visit]
