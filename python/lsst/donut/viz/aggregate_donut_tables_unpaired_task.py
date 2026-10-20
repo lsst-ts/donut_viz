@@ -21,7 +21,7 @@
 
 import numpy as np
 from astropy import units as u
-from astropy.table import vstack
+from astropy.table import QTable, vstack
 
 import lsst.pipe.base as pipeBase
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
@@ -114,6 +114,18 @@ class AggregateDonutTablesUnpairedTask(AggregateDonutTablesCwfsTask):
             table["detector"] = det.getName()
 
             tables.append(table)
+
+        # If every detector was skipped above (it has no quality table, or an
+        # empty one because no donut survived selection on this visit), the
+        # loop body never runs and `table` is never bound; there is also no
+        # visitInfo to grab and nothing to aggregate. Return an empty table so
+        # downstream consumers hit their existing empty-input guards instead of
+        # crashing here.
+        if len(tables) == 0:
+            self.log.warning("No donuts survived quality selection for this visit. Returning empty table.")
+            empty = QTable()
+            empty.meta = {}
+            return pipeBase.Struct(aggregateDonutTable=empty)
 
         # Grab visitInfo. The last one will do since all should be the same.
         visitInfo = convertDictToVisitInfo(table.meta["visit_info"])
