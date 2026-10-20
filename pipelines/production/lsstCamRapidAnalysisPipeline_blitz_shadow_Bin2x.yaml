@@ -1,0 +1,37 @@
+description: rapid analysis pipeline for LSSTCam running the blitz corner task as a shadow, 2x binned
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_blitz.yaml
+    # A shadow runs alongside another AOS pipeline, on the same visits and
+    # into the same output run, so it must write no dataset type that
+    # pipeline writes, which formatBlitzTask's aggregateAOSVisitTableRaw/Avg
+    # would.
+    exclude:
+      - formatBlitzTask
+tasks:
+  donutBlitzCornerTask:
+    class: lsst.ts.wep.blitz.donutBlitzCorner.DonutBlitzCornerTask
+    config:
+      wavefrontFit.binning: 2
+      # For the same reason, no per-corner `zernikes`.
+      doZernikesOutput: False
+      # The plots are still written to the butler, the only place a shadow's
+      # plots can be seen, but not uploaded: blitz uploads under the same
+      # RubinTV plot names as the non-blitz pipelines, so the two would race.
+      savePlots: True
+      plot.doRubinTVUpload: False
+
+# excluding formatBlitzTask drops the imported subset that holds it
+subsets:
+  step1a-visits:
+    subset:
+      - donutBlitzCornerTask
+    description: |
+      Monolithic blitz corner-wavefront task, run as a shadow of another AOS
+      pipeline: ISR, donut detection, cutouts and Zernike estimation for all
+      8 corner sensors in one per-visit quantum. Emits only the per-donut
+      donutBlitzCornerResults catalog and the blitz diagnostic plots.
+
+steps:
+  - label: step1a-visits
+    dimensions: [visit]

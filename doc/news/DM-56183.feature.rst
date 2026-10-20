@@ -1,0 +1,4 @@
+Add ``pipelines/production/lsstCamRapidAnalysisPipeline_blitz_shadow_Bin1x.yaml`` and
+``_Bin2x.yaml``, for rapid analysis to run blitz alongside another AOS pipeline. They import
+``lsstCamRapidAnalysisPipeline_blitz.yaml`` without ``FormatBlitzTask``, and with the
+``zernikes`` output and the RubinTV upload off, so they write only blitz-named datasets.
