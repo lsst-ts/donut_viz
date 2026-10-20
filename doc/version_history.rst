@@ -15,6 +15,18 @@ Version History
 
 .. towncrier release notes start
 
+v4.13.0 (2026-10-19)
+====================
+
+New Features
+------------
+
+- Point the AiDonut production pipelines at the new binned and unbinned
+  models `aidonut_binned_v2_20261007.pt` (Bin2x) and
+  `aidonut_unbinned_v2_20261016.pt` (Bin1x), updating
+  `estimateZernikes.modelPath` and `estimateZernikes.modelSha256`. (`RSO-1060 <https://rubinobs.atlassian.net//browse/RSO-1060>`_)
+
+
 v4.12.0 (2026-10-06)
 ====================
 
