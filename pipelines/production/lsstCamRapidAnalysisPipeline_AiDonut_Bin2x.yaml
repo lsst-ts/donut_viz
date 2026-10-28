@@ -1,7 +1,7 @@
 description: rapid analysis pipeline for LSSTCam using the AiDonut algorithm
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
+  - $DONUT_VIZ_DIR/pipelines/_ingredients/wepRefitWcsCwfsPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
 tasks:
   generateDonutDirectDetectTask:
@@ -29,6 +29,10 @@ tasks:
       estimateZernikes.saveHistory: False
       estimateZernikes.modelPath: $AI_DONUT_DATA_DIR/aidonut_binned_v2_20261007.pt
       estimateZernikes.modelSha256: 195e6132a752655351bb6c7ad2a5cb15ea3347f040bc018bd3c9c97fad6774bb
+  aggregateDonutTablesCwfsTask:
+    class: lsst.donut.viz.AggregateDonutTablesCwfsTask
+    config:
+      connections.donutTables: refitWcsDonutTable
 
 # Define pipeline steps
 subsets:
@@ -36,6 +40,7 @@ subsets:
     subset:
       - isr
       - generateDonutDirectDetectTask
+      - generateDonutFromRefitWcsTask
       - cutOutDonutsCwfsPairTask
       - reassignCwfsCutoutsPairTask
       - calcZernikesTask

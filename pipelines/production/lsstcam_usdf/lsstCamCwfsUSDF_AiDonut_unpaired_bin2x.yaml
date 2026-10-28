@@ -5,23 +5,22 @@ description: >
   step1b onward reuse the donut stamps produced by step1a of an earlier run.
 instrument: lsst.obs.lsst.LsstCam
 imports:
-  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_AiDonut_Bin1x.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_AiDonut_Bin2x_unpaired.yaml
     exclude:
       - plotAOSTask
-      - plotPsfZernTask
-      - plotDonutCwfsTask
-      - plotPairingTask
+      - plotDonutUnpairedCwfsTask
+      - plotDonutFitsUnpairedTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.sourceLimit: 40
-  reassignCwfsCutoutsPairTask:
-    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+  calcZernikesUnpairedTask:
+    class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
     config:
-      customQG: False
-  aggregateDonutStampsTask:
-    class: lsst.donut.viz.AggregateDonutStampsTask
+      donutStampSelector.maxSelect: 20
+  aggregateDonutStampsUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutStampsUnpairedTask
     config:
       maxDonutsPerDetector: 20
 
@@ -32,24 +31,24 @@ subsets:
     subset:
       - isr
       - generateDonutDirectDetectTask
+      - generateDonutFromRefitWcsTask
       - cutOutDonutsCwfsPairTask
-      - reassignCwfsCutoutsPairTask
     description: |
       This step processes the input images with ISR,
       finds and cuts out the donut stamps. Its outputs (the donut
       stamps) can be reused as inputs to step1b of a later AiDonut run.
   step1b-detectors:
     subset:
-      - calcZernikesTask
+      - calcZernikesUnpairedTask
     description: |
-      Estimate the Zernike coefficients from the donut pairs using the
+      Estimate the Zernike coefficients from unpaired donuts using the
       AiDonut algorithm. Reuses the donut stamps produced by step1a.
   step2-visits:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesCwfsTask
-      - aggregateAOSVisitTableCwfsTask
-      - aggregateDonutStampsTask
+      - aggregateDonutTablesUnpairedTask
+      - aggregateAOSVisitTableUnpairedTask
+      - aggregateDonutStampsUnpairedTask
     description: |
       AOS Donut aggregation tasks. This step generates the aggregated
       tables for the AOS visit.

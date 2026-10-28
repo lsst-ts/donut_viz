@@ -1,0 +1,71 @@
+description: rapid analysis pipeline for LSSTCam using the AiDonut algorithm
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/wepRefitWcsCwfsPipeline.yaml
+    exclude:
+      - reassignCwfsCutoutsPairTask
+      - calcZernikesTask
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizUnpairedPipeline.yaml
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      measurementTask.nSigmaDetection: 5.0
+  cutOutDonutsCwfsPairTask:
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    config:
+      donutStampSize: 160
+      initialCutoutPadding: 40
+  calcZernikesUnpairedTask:
+    class: lsst.ts.wep.task.calcZernikesUnpairedTask.CalcZernikesUnpairedTask
+    config:
+      python: |
+        from lsst.ts.wep.task import EstimateZernikesAiDonutTask
+        config.estimateZernikes.retarget(EstimateZernikesAiDonutTask)
+      donutStampSelector.maxSelect: 4
+      donutStampSelector.maxFracBadPixels: 2.0e-4
+      donutStampSelector.useCustomSnLimit: True
+      donutStampSelector.minSignalToNoise: 100
+      donutStampSelector.selectWithMaxPowerGrad: False
+      estimateZernikes.nollIndices:
+        [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
+      estimateZernikes.saveHistory: False
+      estimateZernikes.modelPath: $AI_DONUT_DATA_DIR/aidonut_unpaired_binned_v1_20261028.pt
+      estimateZernikes.modelSha256: e621757fd333297b39796968314be98ddc0d346fb658c3955c8f9a94c712b4ee
+  aggregateDonutTablesUnpairedTask:
+    class: lsst.donut.viz.AggregateDonutTablesUnpairedTask
+    config:
+      connections.donutTables: refitWcsDonutTable
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - generateDonutFromRefitWcsTask
+      - cutOutDonutsCwfsPairTask
+      - calcZernikesUnpairedTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from unpaired donuts.
+  step1b-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesUnpairedTask
+      - aggregateAOSVisitTableUnpairedTask
+      - aggregateDonutStampsUnpairedTask
+      - plotAOSTask
+      - plotDonutUnpairedCwfsTask
+      - plotDonutFitsUnpairedTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-visits
+    dimensions: [visit]

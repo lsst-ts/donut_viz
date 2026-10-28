@@ -1,0 +1,68 @@
+description: >
+  rapid analysis pipeline for LSSTCam CWFS using the AiDonut algorithm,
+  configured for USDF reprocessing. The AiDonut task configuration and model
+  are inherited from the production blueprint; the granular step layout lets
+  step1b onward reuse the donut stamps produced by step1a of an earlier run.
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - location: $DONUT_VIZ_DIR/pipelines/production/lsstCamRapidAnalysisPipeline_AiDonut_Bin1x.yaml
+    exclude:
+      - plotAOSTask
+      - plotPsfZernTask
+      - plotDonutCwfsTask
+      - plotPairingTask
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.sourceLimit: 40
+  reassignCwfsCutoutsPairTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask
+    config:
+      customQG: False
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      donutStampSelector.maxSelect: 20
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+    config:
+      maxDonutsPerDetector: 20
+
+
+# Define pipeline steps
+subsets:
+  step1a-detectors:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - generateDonutFromRefitWcsTask
+      - cutOutDonutsCwfsPairTask
+      - reassignCwfsCutoutsPairTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps. Its outputs (the donut
+      stamps) can be reused as inputs to step1b of a later AiDonut run.
+  step1b-detectors:
+    subset:
+      - calcZernikesTask
+    description: |
+      Estimate the Zernike coefficients from the donut pairs using the
+      AiDonut algorithm. Reuses the donut stamps produced by step1a.
+  step2-visits:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesCwfsTask
+      - aggregateAOSVisitTableCwfsTask
+      - aggregateDonutStampsTask
+    description: |
+      AOS Donut aggregation tasks. This step generates the aggregated
+      tables for the AOS visit.
+
+steps:
+  - label: step1a-detectors
+    dimensions: [visit, detector]
+  - label: step1b-detectors
+    dimensions: [visit, detector]
+  - label: step2-visits
+    dimensions: [visit]
