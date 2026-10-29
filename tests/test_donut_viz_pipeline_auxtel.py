@@ -72,14 +72,20 @@ INTRA_VISIT = 2026061400017
 
 # What this pair gives in the test repo (stock EstimateZernikesDanishTask on
 # peak-normalized stamps, x_scale='jac', bootstrap ISR -- see
-# BOOTSTRAP_ISR_CONFIG): -339.8 nm on lsst-scipipe-13.0.0 (Jenkins) and -336.1
-# on 13.1.0. With scipy's default parameter scaling the same stamps gave -237
-# and -276 on those two environments, which is why the task pins 'jac'. The
-# 10 nm tolerance absorbs that residual numpy-level difference but would catch
-# dropping the peak normalization, which leaves the fit at its starting point.
-EXPECTED_Z4_NM = -338.0
+# BOOTSTRAP_ISR_CONFIG). With scipy's default parameter scaling the same stamps
+# gave -237 and -276 across two conda environments, which is why the task pins
+# 'jac'. The 10 nm tolerance absorbs the residual numpy-level difference but
+# would catch dropping the peak normalization, which leaves the fit at its
+# starting point.
+#
+# Re-measured on RSO-1109 when triangleMode was enabled: the triangle-mesh
+# forward model is a different (more accurate) model of the same optics, so it
+# moves the answer. Z4 went -338.0 -> -354.60 nm, a 16.6 nm shift, consistent
+# with the 8.2 nm median / 38.6 nm max shift measured across 41 on-sky pairs.
+# chi_square and fwhm barely move (0.061 -> 0.0605, 2.97 -> 3.002").
+EXPECTED_Z4_NM = -354.6
 EXPECTED_CHI_SQUARE = 0.061
-EXPECTED_FWHM_ARCSEC = 2.97
+EXPECTED_FWHM_ARCSEC = 3.00
 
 # The test repo has only the curated LATISS calibrations, so ISR must run in
 # bootstrap mode (no PTC, bias, dark, flat or linearizer).
@@ -159,6 +165,16 @@ class TestDonutVizPipelineAuxTel(TestCase):
         self.assertGreater(config.donutDiameter, 194)
 
         self.assertEqual(list(config.estimateZernikes.nollIndices), list(range(4, 23)))
+
+        # danish's triangle-mesh forward model. Without it a LATISS Z4-Z22 fit
+        # is unstable to the sub-ADU ISR integer dither; 9.44 nm median RMS of
+        # Z4 over 10 dither seeds, against 0.028 nm with it on (41 pairs,
+        # RSO-1109). The default is False, so this must be set explicitly.
+        self.assertTrue(config.estimateZernikes.triangleMode)
+        # bkgOrder is the ts_wep default of -1 (no background fitting). Pinned
+        # because fitting the background w/o triangle mode is floating-point
+        # sensitive, and the two are coupled.
+        self.assertEqual(config.estimateZernikes.bkgOrder, -1)
         # Jacobian scaling makes the fit reproducible across conda envs; the
         # loose tolerances the LSSTCam pipelines add would stall a LATISS fit.
         self.assertEqual(dict(config.estimateZernikes.lstsqKwargs), {"x_scale": "jac"})
