@@ -1,0 +1,4 @@
+Enabled Danish ``triangleMode`` in the AuxTel monolith pipeline (``auxtelMonolithBase.yaml``), which selects the ``DonutTriangleFactory`` forward model in place of ``DonutFactory``.
+Without it a LATISS Z4-Z22 fit is unstable to the sub-ADU ``IsrTaskLSST`` integer dither: over 41 LATISS pairs x 10 forced dither seeds, the per-pair RMS of Z4 is a median 9.44 nm with ``triangleMode`` off against 0.028 nm with it on: a 361x improvement, better on 39 of 41 pairs, where the ts_wep 15.1.0 reference on identical pixels is 1.57 nm RMS.
+The ISR dither stays at its ``SYMMETRIC`` default and the Noll set stays at the task default of Z4-Z22; with triangle mode enabled, repeatability improves monotonically as terms are added, and truncating the basis instead biases the low-order coefficients (fixing Z>8 at zero moves Z4-Z8 by a median 14-35 nm and biases Z5 by -26 nm).
+Requires danish >= 1.2.
