@@ -21,7 +21,11 @@ tasks:
     class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
       connections.exposure: post_isr_image
+      # Effectively disables the blend logic: no neighbor is ever found. The
+      # floor has to come along, since it defaults to 120 and must stay
+      # <= unblendedSeparation.
       donutSelector.unblendedSeparation: 1
+      donutSelector.minBlendedSeparation: 1
       photoRefFilter: "g"
       catalogFilterList: ["g"]
   cutOutDonutsCwfsTask:
