@@ -25,3 +25,25 @@ tasks:
       # An AuxTel donut  spans ~194 px.
       donutDiameter: 228
       doSaveStamps: True
+      # Use danish's triangle-mesh forward model (DonutTriangleFactory instead
+      # of DonutFactory). Without it, a LATISS Z4-Z22 fit is unstable to the
+      # sub-ADU IsrTaskLSST integer dither: measured on 41 LATISS pairs x 10
+      # forced dither seeds, per-pair RMS of Z4 at Z4-Z22 is
+      #
+      #     triangleMode off   median 9.44 nm   (95% of pairs miss the target)
+      #     triangleMode ON    median 0.028 nm  ( 2% miss it)
+      #
+      # a 361x median improvement, better on 39/41 pairs, where the target is
+      # ts_wep 15.1.0 on identical pixels at 1.57 nm RMS.
+      #
+      # The Noll set is left at the task default of Z4-Z22. With
+      # triangle mode on, repeatability improves monotonically as terms are
+      # added (0.069 -> 0.047 -> 0.036 -> 0.028 nm for Z4-Z8/11/15/22), and
+      # truncating instead *biases* the low-order terms: fixing Z>8 at zero
+      # moves Z4-Z8 by a median 14-35 nm, biases Z5 by -26 nm, and the shift
+      # grows with the discarded higher-order power (RSS(Z9-Z22) is a median
+      # 119 nm, about half that of Z4-Z8). So the full basis is both the most
+      # repeatable and the least biased -- there is no trade-off to make.
+      #
+      # Requires danish >= 1.2. See RSO-1109 and RSO-873.
+      estimateZernikes.triangleMode: True
