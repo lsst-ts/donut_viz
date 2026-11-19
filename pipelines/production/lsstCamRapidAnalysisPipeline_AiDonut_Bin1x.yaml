@@ -19,7 +19,7 @@ tasks:
       python: |
         from lsst.ts.wep.task import EstimateZernikesAiDonutTask
         config.estimateZernikes.retarget(EstimateZernikesAiDonutTask)
-      donutStampSelector.maxSelect: 4
+      donutStampSelector.maxSelect: 8
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.useCustomSnLimit: True
       donutStampSelector.minSignalToNoise: 100
@@ -53,6 +53,7 @@ subsets:
       - plotDonutCwfsTask
       - plotPairingTask
       - plotPsfZernTask
+      - plotDonutFitsTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and

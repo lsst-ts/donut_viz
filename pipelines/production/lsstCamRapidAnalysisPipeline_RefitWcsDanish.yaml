@@ -8,10 +8,6 @@ tasks:
     class: lsst.donut.viz.AggregateDonutTablesCwfsTask
     config:
       connections.donutTables: refitWcsDonutTable
-  plotDonutFitsTask: # donut viz task that applies only to Danish
-    class: lsst.donut.viz.PlotDonutFitsTask
-    config:
-      doRubinTVUpload: True
 
 # Define pipeline steps
 subsets:

@@ -11,6 +11,7 @@ imports:
       - plotPsfZernTask
       - plotDonutCwfsTask
       - plotPairingTask
+      - plotDonutFitsTask
 tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
