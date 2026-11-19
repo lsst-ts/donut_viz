@@ -2,7 +2,10 @@ description: rapid analysis pipeline for LSSTCam
 instrument: lsst.obs.lsst.LsstCam
 imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
-  - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
+  - location: $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
+    exclude:
+      - plotDonutFitsTask
+
 tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
