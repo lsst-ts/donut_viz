@@ -601,13 +601,17 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Get the rotator angle. Allow a missing topic to return an empty
         # DataFrame, which is handled downstream when reading the position.
-        rotData = getEfdData(
-            client=self.efd_client,
-            topic="lsst.sal.MTRotator.rotation",
-            begin=startTime,
-            end=endTime,
-            raiseIfTopicNotInSchema=False,
-        )
+        # Default to no rotator data so that historic test visits (which
+        # predate the EFD) degrade gracefully rather than hitting the EFD.
+        rotData: Any = []
+        if day_obs > 20250101:
+            rotData = getEfdData(
+                client=self.efd_client,
+                topic="lsst.sal.MTRotator.rotation",
+                begin=startTime,
+                end=endTime,
+                raiseIfTopicNotInSchema=False,
+            )
         # Prepare figure
         # number of rafts per column and rows
         ncols_donut = 7  # 7 columns per donut
