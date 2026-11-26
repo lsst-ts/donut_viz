@@ -15,6 +15,51 @@ Version History
 
 .. towncrier release notes start
 
+v4.14.0 (2026-11-26)
+====================
+
+New Features
+------------
+
+- Taught ``PlotDonutFitsTask`` to render aiDonut wavefront estimates.
+  aiDonut records only the per-donut ``fwhm`` in ``aggregateAOSVisitTableRaw``,
+  so the task now detects the ``aidonut`` algorithm and synthesizes the
+  remaining danish model parameters needed to draw the forward model: zeroed
+  centroid offsets and background, a successful-fit flag, and a positive
+  placeholder flux (``aiDonutModelFlux``, default 1.0e6). The drawn model and
+  the data are each normalized to unit sum before plotting, so the placeholder
+  flux only sets an overall scale and cancels in the residual.
+
+  Also made the two drawing branches prepare the plotted data stamps the same
+  way. The precomputed-``model_img`` branch no longer forces an all-ones
+  background mask; like the computed-model branch it now lets ``prepImage``
+  build the donut background mask from the intrinsic Zernikes (in meters, as
+  danish expects). Both branches therefore subtract the background identically,
+  and the danish residuals are cleaner because the previous whole-stamp mask
+  had been over-subtracting the background.
+
+  Added ``tests/test_plot_donut_fits_task.py`` covering the aiDonut model
+  parameter synthesis and the ``aiDonutModelFlux`` config.
+
+  Updated the production pipelines to include ``plotDonutFitsTask`` in the
+  _ingredients/donutVizCwfsPipeline.yaml subset of plotting tasks, so that the
+  task is run for all pipelines that include that ingredient which now includes
+  the aiDonut pipelines. The TIE pipeline excludes the task because TIE results
+  do not contain the metadata needed to draw the model in their current form. (`RSO-942 <https://rubinobs.atlassian.net//browse/RSO-942>`_)
+
+
+v4.13.1 (2026-11-13)
+====================
+
+Other Changes and Additions
+---------------------------
+
+- Enabled Danish ``triangleMode`` in the AuxTel monolith pipeline (``auxtelMonolithBase.yaml``), which selects the ``DonutTriangleFactory`` forward model in place of ``DonutFactory``.
+  Without it a LATISS Z4-Z22 fit is unstable to the sub-ADU ``IsrTaskLSST`` integer dither: over 41 LATISS pairs x 10 forced dither seeds, the per-pair RMS of Z4 is a median 9.44 nm with ``triangleMode`` off against 0.028 nm with it on: a 361x improvement, better on 39 of 41 pairs, where the ts_wep 15.1.0 reference on identical pixels is 1.57 nm RMS.
+  The ISR dither stays at its ``SYMMETRIC`` default and the Noll set stays at the task default of Z4-Z22; with triangle mode enabled, repeatability improves monotonically as terms are added, and truncating the basis instead biases the low-order coefficients (fixing Z>8 at zero moves Z4-Z8 by a median 14-35 nm and biases Z5 by -26 nm).
+  Requires danish >= 1.2. (`RSO-1109 <https://rubinobs.atlassian.net//browse/RSO-1109>`_)
+
+
 v4.13.0 (2026-10-19)
 ====================
 
