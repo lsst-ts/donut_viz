@@ -47,7 +47,7 @@ from lsst.summit.utils.efdUtils import (
 )
 from lsst.ts.wep.estimation import DanishAlgorithm
 from lsst.ts.wep.task import DonutStamp, DonutStamps
-from lsst.ts.wep.utils import getTaskInstrument
+from lsst.ts.wep.utils import WfAlgorithmName, getTaskInstrument
 from lsst.utils.plotting.figures import make_figure
 from lsst.utils.timer import timeMethod
 
@@ -128,6 +128,15 @@ This sets the number of rows per corner in the figure layout.",
     zkYmax: pexConfig.Field = pexConfig.Field(
         dtype=float, doc="Upper limit on Zernike plot (default: +1 micron).", default=1
     )
+    aiDonutModelFlux: pexConfig.Field = pexConfig.Field(
+        dtype=float,
+        doc="Placeholder per-donut flux used when drawing aiDonut models, "
+        "whose metadata records only the fwhm and no fitted flux. The model "
+        "and data images are each normalized to unit sum before plotting, so "
+        "this only needs to be a positive value at a reasonable scale for the "
+        "residuals to be meaningful (default: 1.0e6).",
+        default=1.0e6,
+    )
 
 
 class PlotDonutFitsTask(pipeBase.PipelineTask):
@@ -203,6 +212,43 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 seqNum=seq_num,
                 filename=plotFile,
             )
+
+    def _fillAiDonutModelMeta(self, danish_meta: dict) -> dict:
+        """Fill in the danish model parameters that aiDonut does not record.
+
+        aiDonut stores only the ``fwhm`` in its metadata, so the per-donut
+        centroid offsets and background are set to zero, the fit is flagged
+        as successful so the model is drawn, and a positive placeholder
+        flux (`~PlotDonutFitsTaskConfig.aiDonutModelFlux`) is supplied. The
+        drawn model and the data are each normalized to unit sum before
+        plotting, so the flux only sets an overall scale and cancels in the
+        residual.
+
+        Parameters
+        ----------
+        danish_meta : `dict`
+            Per-donut aiDonut metadata. Must contain ``fwhm``.
+
+        Returns
+        -------
+        danish_meta : `dict`
+            Copy of the input augmented with ``fit_success``, ``model_dx``,
+            ``model_dy``, ``model_flux`` and ``model_bkg``, with ``fwhm``
+            coerced to a scalar.
+        """
+        danish_meta = dict(danish_meta)
+        # aiDonut stores the fwhm per donut as a length-1 array, but the
+        # danish model expects a scalar.
+        danish_meta["fwhm"] = float(np.ravel(danish_meta["fwhm"])[0])
+        danish_meta["fit_success"] = 1
+        # Two donuts per pair, ordered [extra-focal, intra-focal].
+        danish_meta["model_dx"] = np.zeros(2)
+        danish_meta["model_dy"] = np.zeros(2)
+        danish_meta["model_flux"] = np.full(2, self.config.aiDonutModelFlux)
+        # A single zeroed background coefficient per donut gives bkg_order 0
+        # (a flat, zero background) in `getModel`.
+        danish_meta["model_bkg"] = np.zeros((2, 1))
+        return danish_meta
 
     def getModel(
         self,
@@ -555,13 +601,17 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
 
         # Get the rotator angle. Allow a missing topic to return an empty
         # DataFrame, which is handled downstream when reading the position.
-        rotData = getEfdData(
-            client=self.efd_client,
-            topic="lsst.sal.MTRotator.rotation",
-            begin=startTime,
-            end=endTime,
-            raiseIfTopicNotInSchema=False,
-        )
+        # Default to no rotator data so that historic test visits (which
+        # predate the EFD) degrade gracefully rather than hitting the EFD.
+        rotData: Any = []
+        if day_obs > 20250101:
+            rotData = getEfdData(
+                client=self.efd_client,
+                topic="lsst.sal.MTRotator.rotation",
+                begin=startTime,
+                end=endTime,
+                raiseIfTopicNotInSchema=False,
+            )
         # Prepare figure
         # number of rafts per column and rows
         ncols_donut = 7  # 7 columns per donut
@@ -627,7 +677,9 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
         # a single value per donut
         donut_blur = np.zeros(len(aos_raw))
         if "fwhm" in aos_raw.meta["estimatorInfo"].keys():
-            donut_blur = np.array(aos_raw.meta["estimatorInfo"].get("fwhm"))
+            # danish stores one fwhm per row while aiDonut stores a length-1
+            # array per row; take the first value per row for either case.
+            donut_blur = np.asarray(aos_raw.meta["estimatorInfo"].get("fwhm")).reshape(len(aos_raw), -1)[:, 0]
 
         # Proceed raft by raft
         for iraft, raft in enumerate(["R00", "R04", "R40", "R44"]):
@@ -690,17 +742,7 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                 intra_stamp = donutStampsIntraSel[intra_match[0]]
                 extra_stamp = donutStampsExtraSel[extra_match[0]]
 
-                necessary_keys = set(self.danish_model_keys)
-                available_keys = set(row.meta["estimatorInfo"].keys())
-                if available_keys & necessary_keys != necessary_keys:
-                    missing_keys = necessary_keys - available_keys
-                    self.log.warning(
-                        f"No model plot produced for {raft}, donut index: {irow}. "
-                        + "Required metadata for danish model not found in aggregateAOSVisitTableRaw. "
-                        + f"Missing keys: {sorted(missing_keys)}"
-                    )
-                    continue
-                elif (np.isnan(row["zk_deviation_CCS"]).any()) or (np.isnan(row["zk_intrinsic_CCS"]).any()):
+                if (np.isnan(row["zk_deviation_CCS"]).any()) or (np.isnan(row["zk_intrinsic_CCS"]).any()):
                     self.log.warning(
                         f"NaN values found in zk_deviation_CCS or zk_intrinsic_CCS for {raft}, "
                         + f"donut index: {irow}. "
@@ -709,6 +751,23 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                     continue
 
                 danish_meta = {key: value[irow] for key, value in raft_meta.items()}
+
+                # aiDonut records only the fwhm, so synthesize the remaining
+                # danish model parameters needed to draw the model.
+                if str(danish_meta.get("algo", "")) == WfAlgorithmName.AiDonut.value:
+                    danish_meta = self._fillAiDonutModelMeta(danish_meta)
+
+                necessary_keys = set(self.danish_model_keys)
+                available_keys = set(danish_meta.keys())
+                if available_keys & necessary_keys != necessary_keys:
+                    missing_keys = necessary_keys - available_keys
+                    self.log.warning(
+                        f"No model plot produced for {raft}, donut index: {irow}. "
+                        + "Required metadata for danish model not found in aggregateAOSVisitTableRaw. "
+                        + f"Missing keys: {sorted(missing_keys)}"
+                    )
+                    continue
+
                 if "model_img" in danish_meta.keys():
                     self.log.info(f"Using precomputed model images for {raft}, donut index: {irow}")
                     if binning is None:
@@ -720,17 +779,20 @@ class PlotDonutFitsTask(pipeBase.PipelineTask):
                             )
                     self.danish_algo.binning = binning
 
-                    # Accept the whole stamp for plotting, don't try to mask
-                    extra_stamp.wep_im.maskBackground = np.ones(np.shape(extra_stamp.wep_im.image))
-                    intra_stamp.wep_im.maskBackground = np.ones(np.shape(intra_stamp.wep_im.image))
+                    # Prepare the data stamps for plotting the same way the
+                    # getModel path does: let prepImage build its donut
+                    # background mask from the intrinsic Zernikes (in meters,
+                    # as danish expects) rather than forcing a whole-stamp
+                    # mask, so both branches subtract the background
+                    # identically and the plotted stamps look the same.
                     img_extra, backgroundStd_extra = self.danish_algo.prepImage(
                         image=extra_stamp.wep_im,
-                        zkStart=row["zk_intrinsic_CCS"],
+                        zkStart=row["zk_intrinsic_CCS"] * 1e-6,
                         instrument=self.instrument,
                     )
                     img_intra, backgroundStd_intra = self.danish_algo.prepImage(
                         image=intra_stamp.wep_im,
-                        zkStart=row["zk_intrinsic_CCS"],
+                        zkStart=row["zk_intrinsic_CCS"] * 1e-6,
                         instrument=self.instrument,
                     )
                     imgs = [img_extra, img_intra]
