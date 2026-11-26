@@ -1,0 +1,18 @@
+description: USDF reprocessing pipeline for LSSTCam using the blitz corner task
+instrument: lsst.obs.lsst.LsstCam
+tasks:
+  donutBlitzCornerTask:
+    class: lsst.ts.wep.blitz.donutBlitzCorner.DonutBlitzCornerTask
+    config:
+      donutSelector.useCustomMagLimit: True
+      donutSelector.maxFieldDist: 1.725
+      donutSelector.sourceLimit: 40
+      astromRefFilter: "phot_rp_mean"
+      photoRefFilter: "phot_rp_mean"
+      astrometry.referenceSelector.doMagLimit: True
+      astrometry.referenceSelector.magLimit.maximum: 18.0
+      astrometry.referenceSelector.magLimit.fluxField: "phot_rp_mean_flux"
+      astrometry.matcher.maxRefObjects: 2048
+      savePlots: True
+  formatBlitzTask:
+    class: lsst.donut.viz.FormatBlitzTask
