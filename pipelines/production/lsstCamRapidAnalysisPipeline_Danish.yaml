@@ -3,11 +3,6 @@ instrument: lsst.obs.lsst.LsstCam
 imports:
   - $DONUT_VIZ_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
   - $DONUT_VIZ_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
-tasks:
-  plotDonutFitsTask: # donut viz task that applies only to Danish
-    class: lsst.donut.viz.PlotDonutFitsTask
-    config:
-      doRubinTVUpload: True
 
 # Define pipeline steps
 subsets:

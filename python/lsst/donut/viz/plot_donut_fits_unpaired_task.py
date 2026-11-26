@@ -1358,19 +1358,25 @@ class PlotDonutFitsUnpairedTask(pipeBase.PipelineTask):
             raise RuntimeError("Butler record is required for EFD query but was not provided.")
         startTime = record.timespan.begin
         efd_topic = self.config.efdTopic
-        states_val = np.empty(50)
+        # Default to zeros (no applied correction) so that a missing topic or
+        # missing data degrades gracefully rather than plotting garbage.
+        states_val = np.zeros(50)
         visit_logevent: int | str = "unknown"
 
-        if self.config.enableEfdQuery:
-            event = getMostRecentRowWithDataBefore(
-                self.efd_client,
-                efd_topic,
-                timeToLookBefore=Time(startTime, scale="utc"),
-            )
-            for i in range(50):
-                states_val[i] = event[f"aggregatedDoF{i}"]
-            if "visitId" in event.keys():
-                visit_logevent = event["visitId"]
+        # catch test data that may have historic day_obs predating the EFD
+        if self.config.enableEfdQuery and day_obs > 20250101:
+            try:
+                event = getMostRecentRowWithDataBefore(
+                    self.efd_client,
+                    efd_topic,
+                    timeToLookBefore=Time(startTime, scale="utc"),
+                )
+                for i in range(50):
+                    states_val[i] = event[f"aggregatedDoF{i}"]
+                if "visitId" in event.keys():
+                    visit_logevent = event["visitId"]
+            except ValueError as e:
+                self.log.warning(f"Could not get {efd_topic} from EFD, using zeroed corrections: {e}")
 
         # Create figure with 2x4 grid for 8 detectors
         fig = make_figure(figsize=(20, 23))
